@@ -512,7 +512,6 @@ const (
 	PermissionActionCreate             PermissionAction = "create"
 	PermissionActionModify             PermissionAction = "modify"
 	PermissionActionDelete             PermissionAction = "delete"
-	PermissionActionUse                PermissionAction = "use"
 	PermissionActionDelegate           PermissionAction = "delegate"
 	PermissionActionAuthor             PermissionAction = "author"
 	PermissionActionShareAuthored      PermissionAction = "share_authored"

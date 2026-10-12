@@ -26,5 +26,5 @@ async function WorkspaceRolePermissionsContent({
     notFound()
   }
 
-  return <RoleEditor data={data} />
+  return <RoleEditor key={data.role.updatedAt} data={data} />
 }

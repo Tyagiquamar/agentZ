@@ -1,5 +1,5 @@
 {
-  "id": "09e48773-d404-4d8c-a21e-8879c8cb3002",
+  "id": "874fd5b1-2c7c-4d8e-bb7a-e409a7db560e",
   "prevId": "68e94c05-4977-44c6-950c-e860cefc7a87",
   "version": "7",
   "dialect": "postgresql",
@@ -2152,7 +2152,7 @@
       "checkConstraints": {
         "permission_grants_resource_action_ck": {
           "name": "permission_grants_resource_action_ck",
-          "value": "(\"permission_grants\".\"resource\" = 'agent' AND \"permission_grants\".\"action\" IN (\n          'author', 'share_authored', 'share_non_authored', 'use_shared',\n          'read_shared_secret', 'write_shared_secret', 'delete_shared_secret'\n        )) OR (\"permission_grants\".\"resource\" IN ('mcp_connection', 'inference_provider') AND \"permission_grants\".\"action\"::text IN ('use', 'delegate'))\n        OR (\"permission_grants\".\"resource\" <> 'agent' AND \"permission_grants\".\"action\" IN (\n          'read', 'create', 'modify', 'delete'\n        ))"
+          "value": "(\"permission_grants\".\"resource\" = 'agent' AND \"permission_grants\".\"action\" IN (\n          'author', 'share_authored', 'share_non_authored', 'use_shared',\n          'read_shared_secret', 'write_shared_secret', 'delete_shared_secret'\n        )) OR (\"permission_grants\".\"resource\" IN ('mcp_connection', 'inference_provider') AND \"permission_grants\".\"action\"::text = 'delegate' AND \"permission_grants\".\"workspace_id\" IS NOT NULL)\n        OR (\"permission_grants\".\"resource\" <> 'agent' AND \"permission_grants\".\"action\" IN (\n          'read', 'create', 'modify', 'delete'\n        ))"
         }
       },
       "isRLSEnabled": false
@@ -5668,7 +5668,6 @@
         "create",
         "modify",
         "delete",
-        "use",
         "delegate",
         "author",
         "share_authored",

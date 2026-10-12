@@ -12,7 +12,7 @@ import { signInURL } from "@/lib/sign-in-redirect"
  *
  * Server Function POSTs bypass the cookie redirect because a 307 response
  * is handled awkwardly by the fetch layer. Their actions enforce access at
- * the data boundary, while malformed action requests are rejected here.
+ * the data boundary. Next.js validates action IDs against its manifest.
  */
 export function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname
@@ -37,9 +37,8 @@ export function proxy(request: NextRequest) {
     }
     return NextResponse.rewrite(new URL(`${path}${request.nextUrl.search}`, gatewayURL))
   }
-  const actionId = request.headers.get("next-action")
-  if (actionId !== null) {
-    if (request.method !== "POST" || actionId.length !== 42) {
+  if (request.headers.has("next-action")) {
+    if (request.method !== "POST") {
       return new NextResponse("Invalid Server Action request", { status: 400 })
     }
     return NextResponse.next()

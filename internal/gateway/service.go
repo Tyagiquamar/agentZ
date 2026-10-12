@@ -115,6 +115,7 @@ type Service struct {
 	delegationRequests  chan struct{}
 	delegationBodies    *semaphore.Weighted
 	delegationTransport http.RoundTripper
+	delegationTarget    *url.URL
 	ctx                 context.Context
 	resolver            *resolver
 	queries             gatewaydb.Querier
@@ -225,6 +226,7 @@ func Serve(ctx context.Context, cfg Config) error {
 	if cfg.MCPProbeStaleAfter <= 0 {
 		return fmt.Errorf("mcp probe stale after is required")
 	}
+	var delegationTarget *url.URL
 	if cfg.DelegationNamespace != "" {
 		if cfg.DelegationGatewayURL == "" {
 			cfg.DelegationGatewayURL = "http://delegations." + cfg.DelegationNamespace + ".svc.cluster.local:8080"
@@ -233,6 +235,7 @@ func Serve(ctx context.Context, cfg Config) error {
 		if err != nil || target.Host == "" || target.Scheme != "http" {
 			return errors.New("delegation gateway URL must use internal HTTP")
 		}
+		delegationTarget = target
 		missingIdentity := cfg.GatewayServiceAccountName == "" || cfg.GatewayServiceAccountNamespace == ""
 		if missingIdentity {
 			return errors.New("delegation requires gateway service account identity")
@@ -382,6 +385,7 @@ func Serve(ctx context.Context, cfg Config) error {
 		lockDB:             lockDB,
 		controlDB:          controlDB,
 		cfg:                cfg,
+		delegationTarget:   delegationTarget,
 		bao:                baoClient,
 		baoKV:              baoClient.KVv2(cfg.OpenBaoSecretMountPath),
 		k8sClient:          k8sClient,

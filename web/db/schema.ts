@@ -127,7 +127,6 @@ export const permissionAction = pgEnum("permission_action", [
   "create",
   "modify",
   "delete",
-  "use",
   "delegate",
   "author",
   "share_authored",
@@ -470,7 +469,7 @@ export const permissionGrants = pgTable(
       sql`(${table.resource} = 'agent' AND ${table.action} IN (
           'author', 'share_authored', 'share_non_authored', 'use_shared',
           'read_shared_secret', 'write_shared_secret', 'delete_shared_secret'
-        )) OR (${table.resource} IN ('mcp_connection', 'inference_provider') AND ${table.action}::text IN ('use', 'delegate'))
+        )) OR (${table.resource} IN ('mcp_connection', 'inference_provider') AND ${table.action}::text = 'delegate' AND ${table.workspaceId} IS NOT NULL)
         OR (${table.resource} <> 'agent' AND ${table.action} IN (
           'read', 'create', 'modify', 'delete'
         ))`

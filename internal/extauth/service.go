@@ -874,8 +874,8 @@ func (s *delegationServer) Check(ctx context.Context, request *authv3.CheckReque
 		if len(body) == 0 {
 			body = []byte(httpRequest.GetBody())
 		}
-		model, err := inference.ValidateDelegatedRequest(body, responses)
-		if err != nil || model != extensions["agentz.target"] {
+		input, err := inference.ValidateDelegatedRequest(body, responses)
+		if err != nil || input.Model != extensions["agentz.target"] {
 			return denyDecision(codes.PermissionDenied, typev3.StatusCode_Forbidden, "invalid delegated inference request", "delegation_body", slog.LevelWarn).response, nil
 		}
 	}

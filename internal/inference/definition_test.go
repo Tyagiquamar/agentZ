@@ -367,15 +367,23 @@ type delegationInferenceCase struct {
 func TestDelegatedAnthropicRequiresChatCompletions(t *testing.T) {
 	t.Parallel()
 	body := []byte(`{"model":"selected","store":false,"stream":true,"instructions":"Play chess"}`)
+	responses, err := ValidateDelegatedRequest(body, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	chat, err := ValidateDelegatedRequest(body, false)
+	if err != nil {
+		t.Fatal(err)
+	}
 	kinds := []agentzv1alpha1.InferenceProviderKind{
 		agentzv1alpha1.InferenceProviderKindAnthropic,
 		agentzv1alpha1.InferenceProviderKindAnthropicCompatible,
 	}
 	for _, kind := range kinds {
-		if err := ValidateDelegatedProviderRequest(kind, body, true); err == nil {
+		if err := responses.ValidateProvider(kind); err == nil {
 			t.Errorf("%s accepted an unsupported Responses request", kind)
 		}
-		if err := ValidateDelegatedProviderRequest(kind, body, false); err != nil {
+		if err := chat.ValidateProvider(kind); err != nil {
 			t.Errorf("%s rejected Chat Completions: %v", kind, err)
 		}
 	}
@@ -383,24 +391,24 @@ func TestDelegatedAnthropicRequiresChatCompletions(t *testing.T) {
 
 func TestDelegatedCodexRequiresResponsesStreaming(t *testing.T) {
 	cases := []delegationInferenceCase{
-		{"chat completions", `{"model":"selected","stream":true}`, false, false},
-		{"non-streaming responses", `{"model":"selected","instructions":"Be helpful","stream":false}`, true, false},
-		{"missing instructions", `{"model":"selected","stream":true}`, true, false},
-		{"valid responses", `{"model":"selected","instructions":"Be helpful","stream":true}`, true, true},
-		{"case sensitive stream", `{"model":"selected","instructions":"Be helpful","stream":false,"STREAM":true}`, true, false},
-		{"case sensitive instructions", `{"model":"selected","INSTRUCTIONS":"Be helpful","stream":true}`, true, false},
+		{"chat completions", `{"model":"selected","store":false,"stream":true}`, false, false},
+		{"non-streaming responses", `{"model":"selected","store":false,"instructions":"Be helpful","stream":false}`, true, false},
+		{"missing instructions", `{"model":"selected","store":false,"stream":true}`, true, false},
+		{"valid responses", `{"model":"selected","store":false,"instructions":"Be helpful","stream":true}`, true, true},
+		{"case sensitive stream", `{"model":"selected","store":false,"instructions":"Be helpful","stream":false,"STREAM":true}`, true, false},
+		{"case sensitive instructions", `{"model":"selected","store":false,"INSTRUCTIONS":"Be helpful","stream":true}`, true, false},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
-			err := ValidateDelegatedProviderRequest(agentzv1alpha1.InferenceProviderKindOpenAICodex, []byte(test.body), test.responses)
+			input, err := ValidateDelegatedRequest([]byte(test.body), test.responses)
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = input.ValidateProvider(agentzv1alpha1.InferenceProviderKindOpenAICodex)
 			if (err == nil) != test.allowed {
 				t.Fatalf("allowed %v, want %v: %v", err == nil, test.allowed, err)
 			}
-			err = ValidateDelegatedProviderRequest(
-				agentzv1alpha1.InferenceProviderKindOpenAI,
-				[]byte(test.body),
-				test.responses,
-			)
+			err = input.ValidateProvider(agentzv1alpha1.InferenceProviderKindOpenAI)
 			if err != nil {
 				t.Fatalf("Codex constraints applied to an API-key provider: %v", err)
 			}
@@ -438,12 +446,12 @@ func TestDelegatedInferenceRejectsProviderResourceBypasses(t *testing.T) {
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
-			model, err := ValidateDelegatedRequest([]byte(test.body), test.responses)
+			input, err := ValidateDelegatedRequest([]byte(test.body), test.responses)
 			if (err == nil) != test.allowed {
 				t.Fatalf("allowed %v, want %v: %v", err == nil, test.allowed, err)
 			}
-			if test.allowed && model != "selected" {
-				t.Fatalf("model %q", model)
+			if test.allowed && input.Model != "selected" {
+				t.Fatalf("model %q", input.Model)
 			}
 		})
 	}

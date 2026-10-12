@@ -12,7 +12,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/httputil"
-	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -219,16 +218,22 @@ func (s *Service) delegationCatalog(ctx context.Context, userID, organizationID,
 	return catalog, nil
 }
 
-func (s *Service) checkDelegation(ctx context.Context, grant gatewaydb.DelegationGrant, selection gatewayapi.DelegationCatalog) error {
+// delegationResources keeps the same owner objects through validation and projection.
+type delegationResources struct {
+	providers map[ctrlclient.ObjectKey]*agentzv1alpha1.InferenceProvider
+	mcp       map[ctrlclient.ObjectKey]*agentzv1alpha1.MCPConnection
+}
+
+func (s *Service) resolveDelegation(ctx context.Context, grant gatewaydb.DelegationGrant, selection gatewayapi.DelegationCatalog) (*delegationResources, error) {
 	if len(selection.Models) == 0 && len(selection.Mcp) == 0 {
-		return nil
+		return &delegationResources{}, nil
 	}
 	effective, err := authorization.New(s.queries).Resolve(ctx, authorization.Subject{
 		UserID:         grant.UserID,
 		OrganizationID: grant.OrganizationID.String,
 	})
 	if err != nil {
-		return errors.Join(errDelegationLookup, err)
+		return nil, errors.Join(errDelegationLookup, err)
 	}
 	workspaces := make(map[string]bool)
 	// Health affects execution, not consent. Recheck ownership and permissions
@@ -275,17 +280,24 @@ func (s *Service) checkDelegation(ctx context.Context, grant gatewaydb.Delegatio
 		}
 		return nil
 	}
+	resources := &delegationResources{
+		providers: make(map[ctrlclient.ObjectKey]*agentzv1alpha1.InferenceProvider),
+		mcp:       make(map[ctrlclient.ObjectKey]*agentzv1alpha1.MCPConnection),
+	}
 	for _, model := range selection.Models {
 		err := selectedNamespace(model.WorkspaceId, model.Namespace, model.Provider,
 			agentzv1alpha1.OrganizationResourceKindInferenceProvider, gatewaydb.PermissionResourceInferenceProvider)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		provider := &agentzv1alpha1.InferenceProvider{}
 		key := ctrlclient.ObjectKey{Namespace: model.Namespace, Name: model.Provider}
-		err = s.k8sClient.Get(ctx, key, provider)
-		if err != nil {
-			return err
+		provider := resources.providers[key]
+		if provider == nil {
+			provider = &agentzv1alpha1.InferenceProvider{}
+			if err := s.k8sClient.Get(ctx, key, provider); err != nil {
+				return nil, err
+			}
+			resources.providers[key] = provider
 		}
 		identity := model.WorkspaceId + "/" + string(provider.UID) + "/" + model.Model
 		currentModel := slices.ContainsFunc(provider.Spec.Models, func(current agentzv1alpha1.InferenceModel) bool {
@@ -293,81 +305,122 @@ func (s *Service) checkDelegation(ctx context.Context, grant gatewaydb.Delegatio
 		})
 		changed := string(provider.UID) != model.Uid || model.Id != identity || !currentModel
 		if !provider.DeletionTimestamp.IsZero() || changed {
-			return errors.New("model delegation is no longer allowed")
+			return nil, errors.New("model delegation is no longer allowed")
 		}
 		target, err := inference.RenderProviderTarget(provider, model.Model)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if target.Policies.TLS == nil || target.Policies.TLS.InsecureSkipVerify != nil {
-			return errors.New("delegated inference requires verified upstream TLS")
+			return nil, errors.New("delegated inference requires verified upstream TLS")
 		}
 	}
 	for _, selected := range selection.Mcp {
 		err := selectedNamespace(selected.WorkspaceId, selected.Namespace, selected.Connection,
 			agentzv1alpha1.OrganizationResourceKindMCPConnection, gatewaydb.PermissionResourceMcpConnection)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		connection := &agentzv1alpha1.MCPConnection{}
 		key := ctrlclient.ObjectKey{Namespace: selected.Namespace, Name: selected.Connection}
-		err = s.k8sClient.Get(ctx, key, connection)
-		if err != nil {
-			return err
+		connection := resources.mcp[key]
+		if connection == nil {
+			connection = &agentzv1alpha1.MCPConnection{}
+			if err := s.k8sClient.Get(ctx, key, connection); err != nil {
+				return nil, err
+			}
+			resources.mcp[key] = connection
 		}
 		target, err := mcp.ParseTarget(connection)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if !target.Secure || connection.Spec.Endpoint.InsecureSkipVerify {
-			return errors.New("delegated MCP requires verified upstream TLS")
+			return nil, errors.New("delegated MCP requires verified upstream TLS")
 		}
 		identity := sha256.Sum256([]byte(selected.WorkspaceId + "/" + string(connection.UID)))
 		changed := string(connection.UID) != selected.Uid || selected.Id != fmt.Sprintf("mcp-%x", identity[:16])
 		if !connection.DeletionTimestamp.IsZero() || changed {
-			return errors.New("MCP delegation is no longer allowed")
+			return nil, errors.New("MCP delegation is no longer allowed")
 		}
 	}
-	return nil
+	return resources, nil
 }
 
 func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	requestContext := r.Context()
+
 	admissionContext, cancelAdmission := context.WithTimeout(requestContext, 30*time.Second)
 	defer cancelAdmission()
+
 	r = r.WithContext(admissionContext)
 	controller := http.NewResponseController(w)
-	// Deadlines belong to this request, not later requests on its connection.
+	// deadlines belong to this request, not later requests on its connection.
 	defer func() {
 		_ = controller.SetReadDeadline(time.Time{})
 		_ = controller.SetWriteDeadline(time.Time{})
 	}()
+
 	err := controller.SetReadDeadline(time.Now().Add(30 * time.Second))
 	if err != nil && !errors.Is(err, http.ErrNotSupported) {
-		s.delegationError(w, r, http.StatusServiceUnavailable, "service_unavailable", "The gateway is unavailable.")
+		s.delegationError(
+			w,
+			r,
+			http.StatusServiceUnavailable,
+			"service_unavailable",
+			"The gateway is unavailable.",
+		)
 		return
 	}
+
 	mcpRequest := r.URL.Path == "/api/mcp"
 	resourcePath, requiredScope := "/api/inference/v1", "inference:use"
 	if mcpRequest {
 		resourcePath, requiredScope = "/api/mcp", "mcp:use"
 	}
+
 	audience := strings.TrimRight(s.cfg.ExternalJWTIssuer, "/") + resourcePath
 	bearer, err := jwtrequest.BearerExtractor{}.ExtractToken(r)
 	claims := authorization.DelegationClaims{}
 	if err == nil {
-		claims, err = authorization.VerifyDelegationToken(bearer, s.cfg.ExternalJWTIssuer, audience, s.externalJWTKeyfunc)
+		claims, err = authorization.VerifyDelegationToken(
+			bearer,
+			s.cfg.ExternalJWTIssuer,
+			audience,
+			s.externalJWTKeyfunc,
+		)
 	}
 	if err != nil {
-		w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata=%q`, strings.TrimRight(s.cfg.ExternalJWTIssuer, "/")+"/.well-known/oauth-protected-resource"+resourcePath))
-		s.delegationError(w, r, http.StatusUnauthorized, "invalid_token", "A valid AgentZ access token is required.")
+		w.Header().Set(
+			"WWW-Authenticate",
+			fmt.Sprintf(
+				`Bearer resource_metadata=%q`,
+				strings.TrimRight(s.cfg.ExternalJWTIssuer, "/")+"/.well-known/oauth-protected-resource"+resourcePath,
+			),
+		)
+		s.delegationError(
+			w,
+			r,
+			http.StatusUnauthorized,
+			"invalid_token",
+			"A valid AgentZ access token is required.",
+		)
 		return
 	}
+
 	claimedScopes := strings.Fields(claims.Scope)
 	if !slices.Contains(claimedScopes, requiredScope) {
-		w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer error="insufficient_scope", scope=%q`, requiredScope))
-		s.delegationError(w, r, http.StatusForbidden, "insufficient_scope", "The required scope was not granted.")
+		w.Header().Set(
+			"WWW-Authenticate",
+			fmt.Sprintf(`Bearer error="insufficient_scope", scope=%q`, requiredScope),
+		)
+		s.delegationError(
+			w,
+			r,
+			http.StatusForbidden,
+			"insufficient_scope",
+			"The required scope was not granted.",
+		)
 		return
 	}
 	deny := func(err error, unavailable bool) {
@@ -379,7 +432,12 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 		if unavailable {
 			status, code, message = http.StatusServiceUnavailable, "service_unavailable", "Authorization is temporarily unavailable."
 		}
-		slog.WarnContext(r.Context(), "delegated request denied", slog.String("grant", claims.GrantID), slog.Any("error", err))
+		slog.WarnContext(
+			r.Context(),
+			"delegated request denied",
+			slog.String("grant", claims.GrantID),
+			slog.Any("error", err),
+		)
 		s.delegationError(w, r, status, code, message)
 	}
 	if claims.SessionID != "" && !slices.Contains(claimedScopes, "offline_access") {
@@ -422,23 +480,15 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if r.URL.Path == "/api/inference/v1/models" {
-		err := s.checkDelegation(r.Context(), grant, gatewayapi.DelegationCatalog{Models: selection.Models})
+		resources, err := s.resolveDelegation(r.Context(), grant, gatewayapi.DelegationCatalog{Models: selection.Models})
 		if err != nil {
 			deny(err, false)
 			return
 		}
 		models := openAIModels{Object: "list", Data: []openAIModel{}}
 		for _, model := range selection.Models {
-			provider := &agentzv1alpha1.InferenceProvider{}
-			providerKey := ctrlclient.ObjectKey{
-				Namespace: model.Namespace,
-				Name:      model.Provider,
-			}
-			err := s.k8sClient.Get(r.Context(), providerKey, provider)
-			if err != nil {
-				deny(err, false)
-				return
-			}
+			key := ctrlclient.ObjectKey{Namespace: model.Namespace, Name: model.Provider}
+			provider := resources.providers[key]
 			models.Data = append(models.Data, openAIModel{
 				ID:                 model.Id,
 				Object:             "model",
@@ -452,7 +502,7 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if mcpRequest {
-		err := s.checkDelegation(r.Context(), grant, gatewayapi.DelegationCatalog{Mcp: selection.Mcp})
+		_, err := s.resolveDelegation(r.Context(), grant, gatewayapi.DelegationCatalog{Mcp: selection.Mcp})
 		if err != nil {
 			deny(err, false)
 			return
@@ -469,14 +519,26 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 			weight = limit
 		}
 		if weight > limit {
-			s.delegationError(w, r, http.StatusRequestEntityTooLarge, "invalid_request", "The request body exceeds the gateway limit.")
+			s.delegationError(
+				w,
+				r,
+				http.StatusRequestEntityTooLarge,
+				"invalid_request",
+				"The request body exceeds the gateway limit.",
+			)
 			return
 		}
 		// Bound retained request buffers across concurrent streams, including
 		// chunked requests whose size is unknown before reading.
 		if !s.delegationBodies.TryAcquire(weight) {
 			w.Header().Set("Retry-After", "1")
-			s.delegationError(w, r, http.StatusTooManyRequests, "rate_limit_exceeded", "The gateway is busy. Retry shortly.")
+			s.delegationError(
+				w,
+				r,
+				http.StatusTooManyRequests,
+				"rate_limit_exceeded",
+				"The gateway is busy. Retry shortly.",
+			)
 			return
 		}
 		defer s.delegationBodies.Release(weight)
@@ -497,39 +559,42 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 	}
 
 	initializingMCP := false
-	targetURL := s.cfg.DelegationGatewayURL
 	path := "/delegations/" + claims.GrantID + "/mcp"
 	if !mcpRequest {
 		responses := strings.HasSuffix(r.URL.Path, "/responses")
-		model, err := inference.ValidateDelegatedRequest(body, responses)
+		input, err := inference.ValidateDelegatedRequest(body, responses)
 		if err != nil {
 			s.delegationError(w, r, http.StatusBadRequest, "invalid_request_error", err.Error())
 			return
 		}
 		index := slices.IndexFunc(selection.Models, func(selected gatewayapi.DelegationModel) bool {
-			return selected.Id == model
+			return selected.Id == input.Model
 		})
 		if index < 0 {
-			s.delegationError(w, r, http.StatusNotFound, "model_not_found", "The requested model is not available.")
+			s.delegationError(
+				w,
+				r,
+				http.StatusNotFound,
+				"model_not_found",
+				"The requested model is not available.",
+			)
 			return
 		}
 		selected := selection.Models[index]
-		err = s.checkDelegation(r.Context(), grant, gatewayapi.DelegationCatalog{Models: []gatewayapi.DelegationModel{selected}})
+		resources, err := s.resolveDelegation(
+			r.Context(),
+			grant,
+			gatewayapi.DelegationCatalog{
+				Models: []gatewayapi.DelegationModel{selected},
+			},
+		)
 		if err != nil {
 			deny(err, false)
 			return
 		}
-		provider := &agentzv1alpha1.InferenceProvider{}
-		providerKey := ctrlclient.ObjectKey{
-			Namespace: selected.Namespace,
-			Name:      selected.Provider,
-		}
-		err = s.k8sClient.Get(r.Context(), providerKey, provider)
-		if err != nil {
-			deny(err, false)
-			return
-		}
-		err = inference.ValidateDelegatedProviderRequest(provider.Spec.Kind, body, responses)
+		key := ctrlclient.ObjectKey{Namespace: selected.Namespace, Name: selected.Provider}
+		provider := resources.providers[key]
+		err = input.ValidateProvider(provider.Spec.Kind)
 		if err != nil {
 			s.delegationError(w, r, http.StatusBadRequest, "invalid_request_error", err.Error())
 			return
@@ -537,12 +602,24 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 		name := fmt.Sprintf("d-%s-model-%d", grant.ID, index)
 		err = s.delegationReady(r.Context(), grant, selected.Namespace, inference.GatewayName, name)
 		if err != nil {
-			s.delegationError(w, r, http.StatusServiceUnavailable, "service_unavailable", "The delegated inference route is not ready.")
+			s.delegationError(
+				w,
+				r,
+				http.StatusServiceUnavailable,
+				"service_unavailable",
+				"The delegated inference route is not ready.",
+			)
 			return
 		}
 		err = s.delegationReady(r.Context(), grant, s.cfg.DelegationNamespace, "delegations", name)
 		if err != nil {
-			s.delegationError(w, r, http.StatusServiceUnavailable, "service_unavailable", "The delegated inference route is not ready.")
+			s.delegationError(
+				w,
+				r,
+				http.StatusServiceUnavailable,
+				"service_unavailable",
+				"The delegated inference route is not ready.",
+			)
 			return
 		}
 		path = fmt.Sprintf("/delegations/%s/models/%d%s", claims.GrantID, index, strings.TrimPrefix(r.URL.Path, resourcePath))
@@ -553,7 +630,13 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 		}
 		if r.Method != http.MethodPost && r.Method != http.MethodGet && r.Method != http.MethodDelete {
 			w.Header().Set("Allow", "GET, POST, DELETE, OPTIONS")
-			s.delegationError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "Use a supported MCP transport method.")
+			s.delegationError(
+				w,
+				r,
+				http.StatusMethodNotAllowed,
+				"method_not_allowed",
+				"Use a supported MCP transport method.",
+			)
 			return
 		}
 		if r.Method == http.MethodPost {
@@ -561,7 +644,13 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 			strictErrors, decodeErr := kjson.UnmarshalStrict(body, &message, kjson.DisallowDuplicateFields)
 			invalid := decodeErr != nil || len(strictErrors) != 0
 			if invalid || message.JSONRPC != "2.0" || message.Method == "" {
-				s.delegationError(w, r, http.StatusBadRequest, "invalid_request", "Provide a valid MCP JSON-RPC message.")
+				s.delegationError(
+					w,
+					r,
+					http.StatusBadRequest,
+					"invalid_request",
+					"Provide a valid MCP JSON-RPC message.",
+				)
 				return
 			}
 			initializingMCP = message.Method == "initialize"
@@ -599,7 +688,13 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 				return
 			}
 			if !valid {
-				s.delegationError(w, r, http.StatusNotFound, "invalid_session", "The MCP session does not belong to this authorization.")
+				s.delegationError(
+					w,
+					r,
+					http.StatusNotFound,
+					"invalid_session",
+					"The MCP session does not belong to this authorization.",
+				)
 				return
 			}
 		}
@@ -607,38 +702,57 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 			name := fmt.Sprintf("d-%s-mcp-%d", grant.ID, index)
 			err := s.delegationReady(r.Context(), grant, selected.Namespace, mcp.GatewayName, name, name+"-auth")
 			if err != nil {
-				s.delegationError(w, r, http.StatusServiceUnavailable, "service_unavailable", "The delegated MCP route is not ready.")
+				s.delegationError(
+					w,
+					r,
+					http.StatusServiceUnavailable,
+					"service_unavailable",
+					"The delegated MCP route is not ready.",
+				)
 				return
 			}
 		}
 		err := s.delegationReady(r.Context(), grant, s.cfg.DelegationNamespace, "delegations", "d-"+grant.ID+"-mcp")
 		if err != nil {
-			s.delegationError(w, r, http.StatusServiceUnavailable, "service_unavailable", "The delegated MCP route is not ready.")
+			s.delegationError(
+				w,
+				r,
+				http.StatusServiceUnavailable,
+				"service_unavailable",
+				"The delegated MCP route is not ready.",
+			)
 			return
 		}
 	}
 	if err := controller.SetReadDeadline(time.Time{}); err != nil && !errors.Is(err, http.ErrNotSupported) {
-		s.delegationError(w, r, http.StatusServiceUnavailable, "service_unavailable", "The gateway is unavailable.")
+		s.delegationError(
+			w,
+			r,
+			http.StatusServiceUnavailable,
+			"service_unavailable",
+			"The gateway is unavailable.",
+		)
 		return
 	}
 	deadline := time.Now().Add(10 * time.Minute)
 	err = controller.SetWriteDeadline(deadline)
 	if err != nil && !errors.Is(err, http.ErrNotSupported) {
-		s.delegationError(w, r, http.StatusServiceUnavailable, "service_unavailable", "The gateway is unavailable.")
+		s.delegationError(
+			w,
+			r,
+			http.StatusServiceUnavailable,
+			"service_unavailable",
+			"The gateway is unavailable.",
+		)
 		return
 	}
 	ctx, cancel := context.WithDeadline(requestContext, deadline)
 	cancelAdmission()
 	defer cancel()
-	target, err := url.Parse(targetURL)
-	if err != nil || target.Host == "" {
-		s.delegationError(w, r, http.StatusServiceUnavailable, "service_unavailable", "The delegated gateway is unavailable.")
-		return
-	}
 	proxy := &httputil.ReverseProxy{
 		Transport: s.delegationTransport,
 		Rewrite: func(req *httputil.ProxyRequest) {
-			req.SetURL(target)
+			req.SetURL(s.delegationTarget)
 			req.Out.URL.RawQuery = ""
 			req.Out.URL.Path = path
 			req.Out.URL.RawPath = ""
@@ -728,8 +842,20 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 			return nil
 		},
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
-			slog.ErrorContext(r.Context(), "proxy delegated request", slog.String("grant", grant.ID), slog.String("target", target.Host), slog.Any("error", err))
-			s.delegationError(w, r, http.StatusServiceUnavailable, "service_unavailable", "The delegated gateway is unavailable.")
+			slog.ErrorContext(
+				r.Context(),
+				"proxy delegated request",
+				slog.String("grant", grant.ID),
+				slog.String("target", s.delegationTarget.Host),
+				slog.Any("error", err),
+			)
+			s.delegationError(
+				w,
+				r,
+				http.StatusServiceUnavailable,
+				"service_unavailable",
+				"The delegated gateway is unavailable.",
+			)
 		},
 	}
 	proxy.ServeHTTP(w, r.WithContext(ctx))
@@ -775,15 +901,30 @@ func (s *Service) delegationCORS(next http.Handler) http.Handler {
 		allowed, err := s.queries.GatewayCheckDelegationOrigin(ctx, origin)
 		cancel()
 		if err != nil {
-			s.delegationError(w, r, http.StatusServiceUnavailable, "service_unavailable", "Application registration is unavailable.")
+			s.delegationError(
+				w,
+				r,
+				http.StatusServiceUnavailable,
+				"service_unavailable",
+				"Application registration is unavailable.",
+			)
 			return
 		}
 		if !allowed {
-			s.delegationError(w, r, http.StatusForbidden, "access_denied", "This application origin is not registered.")
+			s.delegationError(
+				w,
+				r,
+				http.StatusForbidden,
+				"access_denied",
+				"This application origin is not registered.",
+			)
 			return
 		}
 		w.Header().Set("Access-Control-Allow-Origin", origin)
-		w.Header().Set("Access-Control-Expose-Headers", "MCP-Session-Id, MCP-Protocol-Version, WWW-Authenticate, Retry-After, X-Request-Id")
+		w.Header().Set(
+			"Access-Control-Expose-Headers",
+			"MCP-Session-Id, MCP-Protocol-Version, WWW-Authenticate, Retry-After, X-Request-Id",
+		)
 		if r.Method == http.MethodOptions {
 			methods := []string{http.MethodPost}
 			switch r.URL.Path {
@@ -796,11 +937,17 @@ func (s *Service) delegationCORS(next http.Handler) http.Handler {
 				methods = nil
 			}
 			if !slices.Contains(methods, r.Header.Get("Access-Control-Request-Method")) {
-				s.delegationError(w, r, http.StatusForbidden, "access_denied", "Unsupported CORS method.")
+				s.delegationError(
+					w,
+					r,
+					http.StatusForbidden,
+					"access_denied",
+					"Unsupported CORS method.",
+				)
 				return
 			}
 			headers := []string{"Authorization"}
-			for _, header := range strings.Split(r.Header.Get("Access-Control-Request-Headers"), ",") {
+			for header := range strings.SplitSeq(r.Header.Get("Access-Control-Request-Headers"), ",") {
 				header = strings.TrimSpace(header)
 				if header == "" && r.Header.Get("Access-Control-Request-Headers") == "" {
 					break

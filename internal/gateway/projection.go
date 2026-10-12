@@ -27,7 +27,6 @@ import (
 	"github.com/accuknox/agentz/internal/inference"
 	"github.com/accuknox/agentz/internal/mcp"
 	"github.com/accuknox/agentz/internal/networkpolicy"
-	agentzv1alpha1 "github.com/accuknox/agentz/pkg/apis/agentz/v1alpha1"
 )
 
 func (s *Service) delegationReady(ctx context.Context, grant gatewaydb.DelegationGrant, namespace, gateway, name string, policyNames ...string) error {
@@ -133,10 +132,11 @@ func (s *Service) reconcileDelegations(ctx context.Context) error {
 		if err := json.Unmarshal(row.Selection, &selection); err != nil {
 			continue
 		}
-		if err := s.checkDelegation(ctx, row, selection); err != nil {
+		resources, err := s.resolveDelegation(ctx, row, selection)
+		if err != nil {
 			continue
 		}
-		if err := s.projectDelegation(ctx, row, selection); err != nil {
+		if err := s.projectDelegation(ctx, row, selection, resources); err != nil {
 			slog.ErrorContext(ctx, "project delegation", slog.String("grant", row.ID), slog.Any("error", err))
 		}
 	}
@@ -172,20 +172,13 @@ func (s *Service) reconcileDelegations(ctx context.Context) error {
 	return s.queries.GatewayPruneDelegationTransactions(ctx)
 }
 
-func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.DelegationGrant, selection gatewayapi.DelegationCatalog) error {
+func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.DelegationGrant, selection gatewayapi.DelegationCatalog, resources *delegationResources) error {
 	var objects []ctrlclient.Object
 	ownerEgress := make(map[string][]networkpolicy.Target)
 	var aggregationEgress []ciliumapi.EgressRule
 	for index, selected := range selection.Models {
-		provider := &agentzv1alpha1.InferenceProvider{}
 		key := ctrlclient.ObjectKey{Namespace: selected.Namespace, Name: selected.Provider}
-		err := s.k8sClient.Get(ctx, key, provider)
-		if err != nil {
-			return err
-		}
-		if string(provider.UID) != selected.Uid {
-			return errors.New("provider was replaced")
-		}
+		provider := resources.providers[key]
 		target, err := inference.RenderProviderTarget(provider, selected.Model)
 		if err != nil {
 			return err
@@ -212,16 +205,16 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 					BackendSimple:  target.Policies.BackendSimple,
 					AI:             target.Policies.AI,
 					Transformation: target.Policies.Transformation,
-					ExtAuth:        s.delegatedExtAuth(selected.Id, provider, true),
+					ExtAuth:        delegatedExtAuth(selected.Id, provider, "inference"),
 				},
 			},
 		}
-		route := s.delegationRoute(
+		route := delegationRoute(
 			selected.Namespace,
 			inference.GatewayName,
 			name,
 			fmt.Sprintf("/delegations/%s/models/%d", grant.ID, index),
-			false,
+			gwv1.PathMatchPathPrefix,
 		)
 		objects = append(objects, backend, route)
 		// Keep the owner route intact through the shared private ingress. Only the
@@ -237,12 +230,12 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 				Policies: &agw.BackendFull{BackendSimple: agw.BackendSimple{HTTP: &agw.BackendHTTP{Version: new(agw.HTTPVersion2)}}},
 			},
 		}
-		entry := s.delegationRoute(
+		entry := delegationRoute(
 			s.cfg.DelegationNamespace,
 			"delegations",
 			name,
 			fmt.Sprintf("/delegations/%s/models/%d", grant.ID, index),
-			false,
+			gwv1.PathMatchPathPrefix,
 		)
 		entry.Spec.Rules[0].Filters = nil
 		objects = append(objects, forward, entry)
@@ -260,15 +253,8 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 			}},
 		}
 		for index, selected := range selection.Mcp {
-			connection := &agentzv1alpha1.MCPConnection{}
 			key := ctrlclient.ObjectKey{Namespace: selected.Namespace, Name: selected.Connection}
-			err := s.k8sClient.Get(ctx, key, connection)
-			if err != nil {
-				return err
-			}
-			if string(connection.UID) != selected.Uid {
-				return errors.New("MCP connection was replaced")
-			}
+			connection := resources.mcp[key]
 			target, err := mcp.ParseTarget(connection)
 			if err != nil {
 				return err
@@ -278,9 +264,6 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 				Port: target.Port,
 			})
 			aggregationEgress = append(aggregationEgress, networkpolicy.ServiceEgress(selected.Namespace, mcp.GatewayName, 8080)...)
-			if !target.Secure || connection.Spec.Endpoint.InsecureSkipVerify {
-				return errors.New("delegation requires verified upstream TLS")
-			}
 			transport := &agw.BackendSimple{
 				TLS: &agw.BackendTLS{Sni: &target.Host},
 				HTTP: &agw.BackendHTTP{
@@ -331,11 +314,11 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 						},
 						SectionName: &section,
 					}},
-					Backend: &agw.BackendFull{ExtAuth: s.delegatedExtAuth(selected.Id, connection, false)},
+					Backend: &agw.BackendFull{ExtAuth: delegatedExtAuth(selected.Id, connection, "mcp")},
 				},
 			}
 			path := "/delegations/" + grant.ID + "/mcp/" + selected.Id
-			objects = append(objects, inner, policy, s.delegationRoute(selected.Namespace, mcp.GatewayName, innerName, path, true))
+			objects = append(objects, inner, policy, delegationRoute(selected.Namespace, mcp.GatewayName, innerName, path, gwv1.PathMatchExact))
 			host := mcp.GatewayName + "." + selected.Namespace + ".svc.cluster.local"
 			outer.Spec.MCP.Targets = append(outer.Spec.MCP.Targets, agw.McpTargetSelector{
 				Name: section,
@@ -350,12 +333,12 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 		objects = append(
 			objects,
 			outer,
-			s.delegationRoute(
+			delegationRoute(
 				s.cfg.DelegationNamespace,
 				"delegations",
 				name,
 				"/delegations/"+grant.ID+"/mcp",
-				true,
+				gwv1.PathMatchExact,
 			),
 		)
 	}
@@ -479,7 +462,7 @@ func delegationMCPExpressions(selected gatewayapi.DelegationMCP) ([]agw.CELExpre
 	return expressions, nil
 }
 
-func (s *Service) delegatedExtAuth(target string, owner ctrlclient.Object, inferenceTarget bool) *agw.ExtAuth {
+func delegatedExtAuth(target string, owner ctrlclient.Object, operation string) *agw.ExtAuth {
 	policy := &agw.ExtAuth{
 		BackendRef: &gwv1.BackendObjectReference{
 			Group: new(gwv1.Group("agentgateway.dev")),
@@ -493,19 +476,17 @@ func (s *Service) delegatedExtAuth(target string, owner ctrlclient.Object, infer
 			"agentz.namespace":  owner.GetNamespace(),
 			"agentz.name":       owner.GetName(),
 			"agentz.generation": strconv.FormatInt(owner.GetGeneration(), 10),
-			"agentz.operation":  "mcp",
+			"agentz.operation":  operation,
 		}},
 	}
-	if inferenceTarget {
-		policy.GRPC.ContextExtensions["agentz.operation"] = "inference"
+	if operation == "inference" {
 		limit := resource.MustParse("32Mi")
 		policy.ForwardBody = &agw.ExtAuthBody{MaxSize: agw.ByteSize{Value: &limit}}
 	}
 	return policy
 }
 
-func (s *Service) delegationRoute(namespace, gateway, name, path string, mcpTarget bool) *gwv1.HTTPRoute {
-	matchType := gwv1.PathMatchPathPrefix
+func delegationRoute(namespace, gateway, name, path string, matchType gwv1.PathMatchType) *gwv1.HTTPRoute {
 	filters := []gwv1.HTTPRouteFilter{{
 		Type: gwv1.HTTPRouteFilterURLRewrite,
 		URLRewrite: &gwv1.HTTPURLRewriteFilter{Path: &gwv1.HTTPPathModifier{
@@ -513,8 +494,7 @@ func (s *Service) delegationRoute(namespace, gateway, name, path string, mcpTarg
 			ReplacePrefixMatch: new("/v1"),
 		}},
 	}}
-	if mcpTarget {
-		matchType = gwv1.PathMatchExact
+	if matchType == gwv1.PathMatchExact {
 		filters = nil
 	}
 	return &gwv1.HTTPRoute{

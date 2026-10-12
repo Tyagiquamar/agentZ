@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"slices"
 	"strings"
 	"testing"
@@ -419,11 +420,11 @@ func TestDelegationRechecksResourceIdentityAndPermissions(t *testing.T) {
 		OrganizationID: pgtype.Text{String: testOrganizationID, Valid: true},
 		Selection:      selection,
 	}
-	if err := service.checkDelegation(ctx, queries.grant, catalog); err != nil {
+	if _, err := service.resolveDelegation(ctx, queries.grant, catalog); err != nil {
 		t.Fatal(err)
 	}
 	queries.permissions[0].Superadmin = false
-	if err := service.checkDelegation(ctx, queries.grant, catalog); err == nil {
+	if _, err := service.resolveDelegation(ctx, queries.grant, catalog); err == nil {
 		t.Fatal("permission removal did not invalidate the grant")
 	}
 	queries.permissions[0].Superadmin = true
@@ -435,7 +436,7 @@ func TestDelegationRechecksResourceIdentityAndPermissions(t *testing.T) {
 	if err := service.k8sClient.Create(ctx, provider); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.checkDelegation(ctx, queries.grant, catalog); err == nil {
+	if _, err := service.resolveDelegation(ctx, queries.grant, catalog); err == nil {
 		t.Fatal("replacement provider inherited old consent")
 	}
 }
@@ -566,7 +567,7 @@ func TestDelegatedInferenceUsesPrivateGateway(t *testing.T) {
 	}
 	service.cfg.ExternalJWTIssuer = issuer
 	service.cfg.DelegationNamespace = "private"
-	service.cfg.DelegationGatewayURL = "http://private.example:8080"
+	service.delegationTarget = &url.URL{Scheme: "http", Host: "private.example:8080"}
 	service.delegationBodies = semaphore.NewWeighted(128 << 20)
 	service.externalJWTKeyfunc = func(*jwt.Token) (any, error) { return &key.PublicKey, nil }
 	claims := authorization.DelegationClaims{
@@ -1077,7 +1078,7 @@ func TestDelegatedMCPTransportBoundary(t *testing.T) {
 		}
 	}
 	service.cfg.DelegationNamespace = "private"
-	service.cfg.DelegationGatewayURL = "https://private.example"
+	service.delegationTarget = &url.URL{Scheme: "http", Host: "private.example"}
 	hash := sha256.Sum256(queries.grant.Selection)
 	metadata := metav1.ObjectMeta{
 		Name:        "d-grant-1-mcp",

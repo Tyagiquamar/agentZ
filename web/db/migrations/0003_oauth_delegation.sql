@@ -1,4 +1,3 @@
-ALTER TYPE "public"."permission_action" ADD VALUE 'use' BEFORE 'author';--> statement-breakpoint
 ALTER TYPE "public"."permission_action" ADD VALUE 'delegate' BEFORE 'author';--> statement-breakpoint
 CREATE TABLE "delegation_grants" (
 	"id" text PRIMARY KEY NOT NULL,
@@ -218,7 +217,7 @@ ALTER TABLE "team_members" ADD CONSTRAINT "team_members_membership_key_unique" U
 ALTER TABLE "permission_grants" ADD CONSTRAINT "permission_grants_resource_action_ck" CHECK (("permission_grants"."resource" = 'agent' AND "permission_grants"."action" IN (
           'author', 'share_authored', 'share_non_authored', 'use_shared',
           'read_shared_secret', 'write_shared_secret', 'delete_shared_secret'
-        )) OR ("permission_grants"."resource" IN ('mcp_connection', 'inference_provider') AND "permission_grants"."action"::text IN ('use', 'delegate'))
+        )) OR ("permission_grants"."resource" IN ('mcp_connection', 'inference_provider') AND "permission_grants"."action"::text = 'delegate' AND "permission_grants"."workspace_id" IS NOT NULL)
         OR ("permission_grants"."resource" <> 'agent' AND "permission_grants"."action" IN (
           'read', 'create', 'modify', 'delete'
         )));

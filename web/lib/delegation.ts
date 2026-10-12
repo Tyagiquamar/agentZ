@@ -17,7 +17,7 @@ import { delegationScopes } from "@/data/schema"
 import { getDB, schema } from "@/db"
 import { getEnv } from "@/lib/env"
 import { getDelegationCatalog, type DelegationCatalog } from "@/lib/gateway/client"
-import { createClient, createConfig } from "@/lib/gateway/client/client"
+import { createClient } from "@/lib/gateway/client/client"
 import { GatewayUnauthorizedError } from "@/lib/gateway/errors"
 
 /** assertOAuthOrigin binds browser requests to the registered public client's origins. */
@@ -51,7 +51,7 @@ async function assertOAuthOrigin(origin: string | null, clientId: string) {
 export async function delegationCatalog(
   organizationId: string,
   workspaceId: string,
-  user: { id: string; name: string },
+  user: Pick<typeof schema.users.$inferSelect, "id" | "name">,
   includeUnavailable = false
 ) {
   const { getGatewayAuthToken } = await import("@/lib/gateway/auth")
@@ -67,7 +67,7 @@ export async function delegationCatalog(
     }
   )
   const result = await getDelegationCatalog({
-    client: createClient(createConfig({ baseUrl: serverGatewayBaseURL(), auth: token })),
+    client: createClient({ baseUrl: serverGatewayBaseURL(), auth: token }),
     headers: { "X-AgentZ-Workspace-ID": workspaceId },
     query: { include_unavailable: includeUnavailable },
   })
@@ -86,8 +86,8 @@ export async function delegationCatalog(
 export async function checkDelegationSelection(
   organizationId: string,
   selection: DelegationCatalog,
-  user: { id: string; name: string },
-  includeUnavailable = false
+  user: Pick<typeof schema.users.$inferSelect, "id" | "name">,
+  mode: "consent" | "access"
 ) {
   if (selection.models.length > 256 || selection.mcp.length > 32) {
     throw new Error("Select at most 256 models and 32 MCP connections.")
@@ -140,7 +140,7 @@ export async function checkDelegationSelection(
     [...selection.models, ...selection.mcp].map((item) => item.workspace_id)
   )
   for (const workspaceId of workspaceIds) {
-    const catalog = await delegationCatalog(organizationId, workspaceId, user, includeUnavailable)
+    const catalog = await delegationCatalog(organizationId, workspaceId, user, mode === "access")
     for (const model of selection.models.filter((item) => item.workspace_id === workspaceId)) {
       const current = catalog.models.find((item) => item.id === model.id)
       if (
@@ -163,7 +163,7 @@ export async function checkDelegationSelection(
         current.uid !== connection.uid ||
         current.namespace !== connection.namespace ||
         current.connection !== connection.connection ||
-        (!includeUnavailable &&
+        (mode === "consent" &&
           (!connection.tools.every((name) => current.tools.includes(name)) ||
             !connection.prompts.every((name) => current.prompts.includes(name)) ||
             !connection.resources.every((uri) => current.resources.includes(uri))))
@@ -220,6 +220,32 @@ export async function delegationTransaction(oauthQuery: string, userId: string, 
   return transaction
 }
 
+/** approvedDelegation loads a live snapshot bound to its user and enabled application's scope ceiling. */
+async function approvedDelegation(clientId: string, userId: string, grantId?: string) {
+  const [current] = await getDB()
+    .select({ grant: schema.delegationGrants, user: schema.users })
+    .from(schema.delegationGrants)
+    .innerJoin(schema.users, eq(schema.users.id, schema.delegationGrants.userId))
+    .innerJoin(
+      schema.oauthClients,
+      eq(schema.oauthClients.clientId, schema.delegationGrants.clientId)
+    )
+    .where(
+      and(
+        grantId === undefined ? undefined : eq(schema.delegationGrants.id, grantId),
+        eq(schema.delegationGrants.clientId, clientId),
+        eq(schema.delegationGrants.userId, userId),
+        eq(schema.oauthClients.disabled, false),
+        arrayContains(schema.oauthClients.scopes, schema.delegationGrants.scopes),
+        isNull(schema.delegationGrants.revokedAt),
+        isNotNull(schema.delegationGrants.approvedAt)
+      )
+    )
+    .orderBy(desc(schema.delegationGrants.createdAt))
+    .limit(1)
+  return current
+}
+
 /** agentZOAuthProvider uses native OAuth flows with immutable AgentZ resource grants. */
 export function agentZOAuthProvider(issuer: string) {
   const refreshTokenHash = defineRequestState(() => "")
@@ -234,24 +260,7 @@ export function agentZOAuthProvider(issuer: string) {
   }: Pick<OAuthClaimExtensionInput, "user" | "referenceId" | "scopes" | "resources"> & {
     client: Pick<OAuthClaimExtensionInput["client"], "clientId">
   }) => {
-    const [current] = await getDB()
-      .select({ grant: schema.delegationGrants })
-      .from(schema.delegationGrants)
-      .innerJoin(
-        schema.oauthClients,
-        eq(schema.oauthClients.clientId, schema.delegationGrants.clientId)
-      )
-      .where(
-        and(
-          eq(schema.delegationGrants.id, referenceId ?? ""),
-          eq(schema.delegationGrants.clientId, client.clientId),
-          eq(schema.delegationGrants.userId, user?.id ?? ""),
-          eq(schema.oauthClients.disabled, false),
-          arrayContains(schema.oauthClients.scopes, schema.delegationGrants.scopes),
-          isNull(schema.delegationGrants.revokedAt),
-          isNotNull(schema.delegationGrants.approvedAt)
-        )
-      )
+    const current = await approvedDelegation(client.clientId, user?.id ?? "", referenceId ?? "")
     const grant = current?.grant
     if (
       !grant ||
@@ -263,7 +272,7 @@ export function agentZOAuthProvider(issuer: string) {
     }
     if (grant.organizationId) {
       try {
-        await checkDelegationSelection(grant.organizationId, grant.selection, user, true)
+        await checkDelegationSelection(grant.organizationId, grant.selection, user, "access")
       } catch (error) {
         if (error instanceof APIError && error.body?.error === "access_denied")
           throw new APIError("BAD_REQUEST", { error: "invalid_grant" })
@@ -341,21 +350,15 @@ export function agentZOAuthProvider(issuer: string) {
           const transaction = await delegationTransaction(signedQuery, user.id, session.id)
           if (!transaction) throw new APIError("FORBIDDEN", { error: "access_denied" })
           if (!transaction.grantId) return true
-          const [grant] = await getDB()
-            .select()
-            .from(schema.delegationGrants)
-            .where(
-              and(
-                eq(schema.delegationGrants.id, transaction.grantId),
-                eq(schema.delegationGrants.clientId, transaction.clientId),
-                eq(schema.delegationGrants.userId, user.id),
-                isNull(schema.delegationGrants.revokedAt),
-                isNotNull(schema.delegationGrants.approvedAt)
-              )
-            )
+          const current = await approvedDelegation(
+            transaction.clientId,
+            user.id,
+            transaction.grantId
+          )
+          const grant = current?.grant
           if (!grant) throw new APIError("FORBIDDEN", { error: "access_denied" })
           if (grant.organizationId)
-            await checkDelegationSelection(grant.organizationId, grant.selection, user, true)
+            await checkDelegationSelection(grant.organizationId, grant.selection, user, "access")
           return false
         }
 
@@ -381,29 +384,24 @@ export function agentZOAuthProvider(issuer: string) {
             error_description: "Request the gateway resource with its use scope.",
           })
         }
-        const [previous] = await getDB()
-          .select()
-          .from(schema.delegationGrants)
-          .where(
-            and(
-              eq(schema.delegationGrants.clientId, query.client_id),
-              eq(schema.delegationGrants.userId, user.id),
-              isNull(schema.delegationGrants.revokedAt),
-              isNotNull(schema.delegationGrants.approvedAt)
-            )
-          )
-          .orderBy(desc(schema.delegationGrants.createdAt))
-          .limit(1)
-        let reusable =
-          !params.get("prompt")?.split(" ").includes("consent") &&
-          previous &&
-          scopes.every((scope) => previous.scopes.includes(scope)) &&
-          resources.every((resource) => previous.resources.includes(resource))
-            ? previous
-            : undefined
+        const current = await approvedDelegation(query.client_id, user.id)
+        const previous = current?.grant
+        let reusable = previous
+        if (
+          params.get("prompt")?.split(" ").includes("consent") ||
+          !previous ||
+          !scopes.every((scope) => previous.scopes.includes(scope)) ||
+          !resources.every((resource) => previous.resources.includes(resource))
+        )
+          reusable = undefined
         if (reusable?.organizationId) {
           try {
-            await checkDelegationSelection(reusable.organizationId, reusable.selection, user, true)
+            await checkDelegationSelection(
+              reusable.organizationId,
+              reusable.selection,
+              user,
+              "access"
+            )
           } catch {
             reusable = undefined
           }
@@ -457,18 +455,8 @@ export function agentZOAuthProvider(issuer: string) {
             )
           )
         if (!transaction?.grantId) throw new APIError("FORBIDDEN", { error: "access_denied" })
-        const [grant] = await getDB()
-          .select()
-          .from(schema.delegationGrants)
-          .where(
-            and(
-              eq(schema.delegationGrants.id, transaction.grantId),
-              eq(schema.delegationGrants.clientId, transaction.clientId),
-              eq(schema.delegationGrants.userId, user.id),
-              isNull(schema.delegationGrants.revokedAt),
-              isNotNull(schema.delegationGrants.approvedAt)
-            )
-          )
+        const current = await approvedDelegation(transaction.clientId, user.id, transaction.grantId)
+        const grant = current?.grant
         if (
           !grant ||
           !scopes.every((scope) => grant.scopes.includes(scope)) ||
@@ -477,7 +465,7 @@ export function agentZOAuthProvider(issuer: string) {
           throw new APIError("FORBIDDEN", { error: "access_denied" })
         }
         if (grant.organizationId)
-          await checkDelegationSelection(grant.organizationId, grant.selection, user, true)
+          await checkDelegationSelection(grant.organizationId, grant.selection, user, "access")
         return grant.id
       },
     },
@@ -490,31 +478,17 @@ export function agentZOAuthProvider(issuer: string) {
             const grantId = z.string().parse(jwt.agentz_grant_id)
             const clientId = z.string().parse(jwt.client_id)
             await assertOAuthOrigin(ctx.headers?.get("origin") ?? null, clientId)
-            const [grant] = await getDB()
-              .select({
-                organizationId: schema.delegationGrants.organizationId,
-                selection: schema.delegationGrants.selection,
-              })
-              .from(schema.delegationGrants)
-              .innerJoin(
-                schema.oauthClients,
-                eq(schema.oauthClients.clientId, schema.delegationGrants.clientId)
-              )
-              .where(
-                and(
-                  eq(schema.delegationGrants.id, grantId),
-                  eq(schema.delegationGrants.userId, user.id),
-                  eq(schema.delegationGrants.clientId, clientId),
-                  eq(schema.oauthClients.disabled, false),
-                  arrayContains(schema.oauthClients.scopes, schema.delegationGrants.scopes),
-                  isNotNull(schema.delegationGrants.approvedAt),
-                  isNull(schema.delegationGrants.revokedAt)
-                )
-              )
+            const current = await approvedDelegation(clientId, user.id, grantId)
+            const grant = current?.grant
             if (!grant) throw new APIError("UNAUTHORIZED", { error: "invalid_token" })
             if (grant.organizationId) {
               try {
-                await checkDelegationSelection(grant.organizationId, grant.selection, user, true)
+                await checkDelegationSelection(
+                  grant.organizationId,
+                  grant.selection,
+                  user,
+                  "access"
+                )
               } catch (error) {
                 if (error instanceof APIError && error.body?.error === "access_denied")
                   throw new APIError("UNAUTHORIZED", { error: "invalid_token" })
@@ -617,25 +591,11 @@ export function agentZOAuthProvider(issuer: string) {
                 .where(eq(schema.oauthRefreshTokens.token, hash))
               grantId = refresh?.referenceId ?? undefined
             }
-            const [current] = await getDB()
-              .select({ grant: schema.delegationGrants, user: schema.users })
-              .from(schema.delegationGrants)
-              .innerJoin(schema.users, eq(schema.users.id, schema.delegationGrants.userId))
-              .innerJoin(
-                schema.oauthClients,
-                eq(schema.oauthClients.clientId, schema.delegationGrants.clientId)
-              )
-              .where(
-                and(
-                  eq(schema.delegationGrants.id, grantId ?? ""),
-                  eq(schema.delegationGrants.clientId, payload.client_id ?? ""),
-                  eq(schema.delegationGrants.userId, payload.sub ?? ""),
-                  eq(schema.oauthClients.disabled, false),
-                  arrayContains(schema.oauthClients.scopes, schema.delegationGrants.scopes),
-                  isNotNull(schema.delegationGrants.approvedAt),
-                  isNull(schema.delegationGrants.revokedAt)
-                )
-              )
+            const current = await approvedDelegation(
+              payload.client_id ?? "",
+              payload.sub ?? "",
+              grantId ?? ""
+            )
             if (
               !current ||
               !payload.scope?.split(" ").every((scope) => current.grant.scopes.includes(scope))
@@ -647,7 +607,7 @@ export function agentZOAuthProvider(issuer: string) {
                   current.grant.organizationId,
                   current.grant.selection,
                   current.user,
-                  true
+                  "access"
                 )
               } catch {
                 return ctx.json({ active: false })

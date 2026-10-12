@@ -12,7 +12,9 @@ import (
 	agentzv1alpha1 "github.com/accuknox/agentz/pkg/apis/agentz/v1alpha1"
 )
 
-type inferenceRequest struct {
+// DelegatedRequest contains validated inference input for a delegated model.
+type DelegatedRequest struct {
+	responses          bool
 	Model              string               `json:"model"`
 	Instructions       string               `json:"instructions"`
 	Stream             bool                 `json:"stream"`
@@ -49,11 +51,11 @@ func DelegatedProviderEndpoints(kind agentzv1alpha1.InferenceProviderKind) []str
 	}
 }
 
-// ValidateDelegatedProviderRequest checks constraints of the selected provider
-// before forwarding a request to an upstream whose errors must remain private.
-func ValidateDelegatedProviderRequest(kind agentzv1alpha1.InferenceProviderKind, body []byte, responses bool) error {
+// ValidateProvider checks the selected provider before forwarding a validated
+// request to an upstream whose errors must remain private.
+func (input *DelegatedRequest) ValidateProvider(kind agentzv1alpha1.InferenceProviderKind) error {
 	endpoint := "/chat/completions"
-	if responses {
+	if input.responses {
 		endpoint = "/responses"
 	}
 	endpoints := DelegatedProviderEndpoints(kind)
@@ -65,11 +67,6 @@ func ValidateDelegatedProviderRequest(kind agentzv1alpha1.InferenceProviderKind,
 	}
 	if kind != agentzv1alpha1.InferenceProviderKindOpenAICodex {
 		return nil
-	}
-	var input inferenceRequest
-	strictErrors, err := kjson.UnmarshalStrict(body, &input, kjson.DisallowDuplicateFields)
-	if err != nil || len(strictErrors) != 0 {
-		return errors.New("provide a valid inference request with no duplicate fields")
 	}
 	if !input.Stream {
 		return errors.New("this Codex model requires stream:true")
@@ -104,16 +101,16 @@ type inferenceFile struct {
 // ValidateDelegatedRequest validates the resource-bearing portions of the OpenAI
 // request. Case-sensitive decoding matches the upstream contract, while strict
 // duplicate detection prevents two parsers from authorizing different values.
-func ValidateDelegatedRequest(body []byte, responses bool) (string, error) {
-	var input inferenceRequest
+func ValidateDelegatedRequest(body []byte, responses bool) (*DelegatedRequest, error) {
+	input := DelegatedRequest{responses: responses}
 	strictErrors, err := kjson.UnmarshalStrict(body, &input, kjson.DisallowDuplicateFields)
 	if err != nil || len(strictErrors) != 0 || input.Model == "" {
-		return "", errors.New("provide a valid inference request with a model and no duplicate fields")
+		return nil, errors.New("provide a valid inference request with a model and no duplicate fields")
 	}
 	storedResponse := responses && (input.Store == nil || input.Background || input.PreviousResponseID != "")
 	conversation := len(input.Conversation) != 0 && string(input.Conversation) != "null"
 	if input.Store != nil && *input.Store || storedResponse || responses && conversation {
-		return "", errors.New("use store:false and explicit conversation input; stored and background responses are unavailable")
+		return nil, errors.New("use store:false and explicit conversation input; stored and background responses are unavailable")
 	}
 	// A model grant never authorizes the owner's stored data or hosted tools.
 	storedPrompt := len(input.Prompt) != 0 && string(input.Prompt) != "null"
@@ -122,7 +119,7 @@ func ValidateDelegatedRequest(body []byte, responses bool) (string, error) {
 	})
 	hostedSearch := !responses && len(input.WebSearchOptions) != 0 && string(input.WebSearchOptions) != "null"
 	if storedPrompt || hostedTools || hostedSearch {
-		return "", errors.New("use inline prompts and client-side function tools; provider account resources are unavailable")
+		return nil, errors.New("use inline prompts and client-side function tools; provider account resources are unavailable")
 	}
 	items := input.Messages
 	if responses {
@@ -131,25 +128,25 @@ func ValidateDelegatedRequest(body []byte, responses bool) (string, error) {
 		if len(input.Input) != 0 && input.Input[0] == '[' {
 			strictErrors, err = kjson.UnmarshalStrict(input.Input, &items, kjson.DisallowDuplicateFields)
 			if err != nil || len(strictErrors) != 0 {
-				return "", errors.New("invalid response input")
+				return nil, errors.New("invalid response input")
 			}
 		}
 	}
 	for _, item := range items {
 		if !responses && len(item.Audio) != 0 && string(item.Audio) != "null" {
-			return "", errors.New("stored audio is unavailable; provide inline audio input")
+			return nil, errors.New("stored audio is unavailable; provide inline audio input")
 		}
 		// ItemReference permits omitting its type; explicit messages with IDs
 		// carry type:"message" in the Responses input contract.
 		implicitReference := responses && item.Type == "" && item.ID != ""
 		if item.Type == "item_reference" || implicitReference {
-			return "", errors.New("stored input items are unavailable; provide explicit input")
+			return nil, errors.New("stored input items are unavailable; provide explicit input")
 		}
 		var content []inferenceContentPart
 		if len(item.Content) != 0 && item.Content[0] == '[' {
 			strictErrors, err = kjson.UnmarshalStrict(item.Content, &content, kjson.DisallowDuplicateFields)
 			if err != nil || len(strictErrors) != 0 {
-				return "", errors.New("invalid message content")
+				return nil, errors.New("invalid message content")
 			}
 		}
 		if responses {
@@ -160,7 +157,7 @@ func ValidateDelegatedRequest(body []byte, responses bool) (string, error) {
 					var output []inferenceContentPart
 					strictErrors, err = kjson.UnmarshalStrict(item.Output, &output, kjson.DisallowDuplicateFields)
 					if err != nil || len(strictErrors) != 0 {
-						return "", errors.New("invalid function output")
+						return nil, errors.New("invalid function output")
 					}
 					content = append(content, output...)
 				}
@@ -168,16 +165,16 @@ func ValidateDelegatedRequest(body []byte, responses bool) (string, error) {
 				var screenshot inferenceContentPart
 				strictErrors, err = kjson.UnmarshalStrict(item.Output, &screenshot, kjson.DisallowDuplicateFields)
 				if err != nil || len(strictErrors) != 0 {
-					return "", errors.New("invalid computer output")
+					return nil, errors.New("invalid computer output")
 				}
 				content = append(content, screenshot)
 			}
 		}
 		for _, part := range content {
 			if part.FileID != "" || part.File != nil && part.File.FileID != "" {
-				return "", errors.New("stored provider files are unavailable; provide inline content or a URL")
+				return nil, errors.New("stored provider files are unavailable; provide inline content or a URL")
 			}
 		}
 	}
-	return input.Model, nil
+	return &input, nil
 }

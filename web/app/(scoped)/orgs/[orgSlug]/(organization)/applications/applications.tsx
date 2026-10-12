@@ -343,8 +343,9 @@ export function Applications({
             <FieldLabel htmlFor="resource-delegation">Resource delegation</FieldLabel>
             <FieldDescription id="resource-delegation-description">
               Allow members to grant external apps access to this organization&apos;s models and MCP
-              capabilities. Members require Use and Delegate permissions. Turning this off revokes
-              existing resource access. Turning it back on requires fresh consent.
+              capabilities. Members need the &quot;Use externally&quot; permission in the workspace.
+              Turning this off revokes existing resource access. Turning it back on requires fresh
+              consent.
             </FieldDescription>
           </FieldContent>
           <Switch

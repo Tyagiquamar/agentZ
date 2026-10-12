@@ -2,7 +2,7 @@ import "server-only"
 
 import { randomUUID } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
-import { and, asc, eq, gt, inArray, isNotNull, isNull } from "drizzle-orm"
+import { and, arrayContained, asc, eq, gt, inArray, isNotNull, isNull, not } from "drizzle-orm"
 import { z } from "zod"
 import { getDB, schema } from "@/db"
 import { getAuth, getAuthSession } from "@/lib/auth"
@@ -96,23 +96,16 @@ export async function saveOAuthApplication(
           .values(data.authorizedOrigins.map((origin) => ({ clientId: savedClientId, origin })))
       if (!clientId) return
       // A reduced scope ceiling immediately invalidates grants that exceed it.
-      const grants = await tx
-        .select()
-        .from(schema.delegationGrants)
+      await tx
+        .update(schema.delegationGrants)
+        .set({ revokedAt: new Date() })
         .where(
           and(
             eq(schema.delegationGrants.clientId, savedClientId),
-            isNull(schema.delegationGrants.revokedAt)
+            isNull(schema.delegationGrants.revokedAt),
+            not(arrayContained(schema.delegationGrants.scopes, data.scopes))
           )
         )
-      const revoked = grants
-        .filter((grant) => !grant.scopes.every((scope) => data.scopes.includes(scope)))
-        .map((grant) => grant.id)
-      if (revoked.length)
-        await tx
-          .update(schema.delegationGrants)
-          .set({ revokedAt: new Date() })
-          .where(inArray(schema.delegationGrants.id, revoked))
     })
   } catch (error) {
     if (!clientId)
@@ -179,13 +172,12 @@ export async function changeOAuthApplication(
       await tx
         .delete(schema.delegationTransactions)
         .where(eq(schema.delegationTransactions.clientId, clientId))
-      await tx
-        .delete(schema.oauthRefreshTokens)
-        .where(eq(schema.oauthRefreshTokens.clientId, clientId))
-      await tx
-        .delete(schema.oauthAccessTokens)
-        .where(eq(schema.oauthAccessTokens.clientId, clientId))
-      await tx.delete(schema.oauthConsents).where(eq(schema.oauthConsents.clientId, clientId))
+      for (const table of [
+        schema.oauthRefreshTokens,
+        schema.oauthAccessTokens,
+        schema.oauthConsents,
+      ])
+        await tx.delete(table).where(eq(table.clientId, clientId))
     }
   })
   return {}
@@ -220,13 +212,8 @@ export async function setOrganizationDelegation(organizationId: string, enabled:
     await tx
       .delete(schema.delegationTransactions)
       .where(inArray(schema.delegationTransactions.grantId, ids))
-    await tx
-      .delete(schema.oauthRefreshTokens)
-      .where(inArray(schema.oauthRefreshTokens.referenceId, ids))
-    await tx
-      .delete(schema.oauthAccessTokens)
-      .where(inArray(schema.oauthAccessTokens.referenceId, ids))
-    await tx.delete(schema.oauthConsents).where(inArray(schema.oauthConsents.referenceId, ids))
+    for (const table of [schema.oauthRefreshTokens, schema.oauthAccessTokens, schema.oauthConsents])
+      await tx.delete(table).where(inArray(table.referenceId, ids))
   })
 }
 
@@ -261,27 +248,8 @@ export async function disconnectOAuthApplication(clientId: string) {
           eq(schema.delegationTransactions.userId, userId)
         )
       )
-    await tx
-      .delete(schema.oauthRefreshTokens)
-      .where(
-        and(
-          eq(schema.oauthRefreshTokens.clientId, clientId),
-          eq(schema.oauthRefreshTokens.userId, userId)
-        )
-      )
-    await tx
-      .delete(schema.oauthAccessTokens)
-      .where(
-        and(
-          eq(schema.oauthAccessTokens.clientId, clientId),
-          eq(schema.oauthAccessTokens.userId, userId)
-        )
-      )
-    await tx
-      .delete(schema.oauthConsents)
-      .where(
-        and(eq(schema.oauthConsents.clientId, clientId), eq(schema.oauthConsents.userId, userId))
-      )
+    for (const table of [schema.oauthRefreshTokens, schema.oauthAccessTokens, schema.oauthConsents])
+      await tx.delete(table).where(and(eq(table.clientId, clientId), eq(table.userId, userId)))
   })
 }
 
@@ -306,7 +274,7 @@ export async function approveDelegation(
   if (!selection.models.length && !selection.mcp.length) organizationId = null
   if ((selection.models.length || selection.mcp.length) && !organizationId)
     throw new Error("Select an organization.")
-  if (organizationId) await checkDelegationSelection(organizationId, selection, user)
+  if (organizationId) await checkDelegationSelection(organizationId, selection, user, "consent")
   // Display names and click order do not change authority. Preserve the stored
   // order when reusing a grant because it identifies the projected routes.
   function matchesSelection(previous: DelegationCatalog) {

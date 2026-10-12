@@ -6,7 +6,7 @@ CREATE TYPE "public"."destructive_target" AS ENUM('organization_membership', 'te
 CREATE TYPE "public"."event_trail_actor" AS ENUM('user', 'api_key', 'system');
 CREATE TYPE "public"."event_trail_result" AS ENUM('succeeded', 'denied', 'failed');
 CREATE TYPE "public"."event_trail_target" AS ENUM('organization', 'organization_membership', 'team', 'mcp_connection', 'inference_provider', 'inference_pool', 'role', 'sandbox', 'skill', 'agent', 'api_key', 'workspace_access', 'workspace');
-CREATE TYPE "public"."permission_action" AS ENUM('read', 'create', 'modify', 'delete', 'use', 'delegate', 'author', 'share_authored', 'share_non_authored', 'use_shared', 'read_shared_secret', 'write_shared_secret', 'delete_shared_secret');
+CREATE TYPE "public"."permission_action" AS ENUM('read', 'create', 'modify', 'delete', 'delegate', 'author', 'share_authored', 'share_non_authored', 'use_shared', 'read_shared_secret', 'write_shared_secret', 'delete_shared_secret');
 CREATE TYPE "public"."permission_resource" AS ENUM('mcp_connection', 'skill', 'sandbox', 'inference_provider', 'inference_pool', 'agent', 'api_key', 'observability');
 CREATE TYPE "public"."system_role" AS ENUM('superadmin', 'workspace_admin');
 CREATE TYPE "public"."theme_preference" AS ENUM('system', 'light', 'dark');
@@ -257,7 +257,7 @@ CREATE TABLE "permission_grants" (
 	CONSTRAINT "permission_grants_resource_action_ck" CHECK (("permission_grants"."resource" = 'agent' AND "permission_grants"."action" IN (
           'author', 'share_authored', 'share_non_authored', 'use_shared',
           'read_shared_secret', 'write_shared_secret', 'delete_shared_secret'
-        )) OR ("permission_grants"."resource" IN ('mcp_connection', 'inference_provider') AND "permission_grants"."action"::text IN ('use', 'delegate'))
+        )) OR ("permission_grants"."resource" IN ('mcp_connection', 'inference_provider') AND "permission_grants"."action"::text = 'delegate' AND "permission_grants"."workspace_id" IS NOT NULL)
         OR ("permission_grants"."resource" <> 'agent' AND "permission_grants"."action" IN (
           'read', 'create', 'modify', 'delete'
         )))

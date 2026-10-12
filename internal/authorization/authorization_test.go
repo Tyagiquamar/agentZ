@@ -277,7 +277,7 @@ func TestResolverFailClosedAndSuperadminBypass(t *testing.T) {
 	}
 }
 
-func TestDelegationRequiresUseAndDelegateInSameScope(t *testing.T) {
+func TestDelegationRequiresWorkspaceAuthority(t *testing.T) {
 	t.Parallel()
 
 	resources := []gatewaydb.PermissionResource{
@@ -295,46 +295,40 @@ func TestDelegationRequiresUseAndDelegateInSameScope(t *testing.T) {
 				OrganizationID: "organization-b",
 				WorkspaceID:    "workspace-a",
 			}
-			use := permissionRow(resource, "workspace-a", gatewaydb.PermissionActionUse)
+			read := permissionRow(resource, "workspace-a", gatewaydb.PermissionActionRead)
 			delegate := permissionRow(resource, "workspace-a", gatewaydb.PermissionActionDelegate)
-			both := []gatewaydb.GatewayResolvePermissionsRow{use, delegate}
+			grants := []gatewaydb.GatewayResolvePermissionsRow{delegate}
 			workspaceAdmin := []gatewaydb.GatewayResolvePermissionsRow{{
 				Active:         true,
 				WorkspaceAdmin: true,
 				WorkspaceID:    pgtype.Text{String: "workspace-a", Valid: true},
 			}}
 			superadmin := []gatewaydb.GatewayResolvePermissionsRow{{Active: true, Superadmin: true}}
+			otherResource := gatewaydb.PermissionResourceMcpConnection
+			if resource == otherResource {
+				otherResource = gatewaydb.PermissionResourceInferenceProvider
+			}
 			cases := []delegationPermissionCase{
 				{name: "no grants", scope: scope},
-				{name: "use alone", rows: []gatewaydb.GatewayResolvePermissionsRow{use}, scope: scope},
+				{name: "read alone", rows: []gatewaydb.GatewayResolvePermissionsRow{read}, scope: scope},
 				{
 					name:  "delegate alone",
+					want:  true,
 					rows:  []gatewaydb.GatewayResolvePermissionsRow{delegate},
 					scope: scope,
 				},
-				{name: "role union", rows: both, scope: scope, want: true},
-				{name: "other workspace", rows: both, scope: foreignWorkspace},
-				{name: "other organization", rows: both, scope: foreignOrganization},
-				{
-					name: "actions split across workspaces",
-					rows: []gatewaydb.GatewayResolvePermissionsRow{
-						use,
-						permissionRow(resource, "workspace-b", gatewaydb.PermissionActionDelegate),
-					},
-					scope: scope,
-				},
+				{name: "other workspace", rows: grants, scope: foreignWorkspace},
+				{name: "other organization", rows: grants, scope: foreignOrganization},
 				{
 					name: "other resource",
 					rows: []gatewaydb.GatewayResolvePermissionsRow{
-						permissionRow(gatewaydb.PermissionResourceAgent, "workspace-a", gatewaydb.PermissionActionUse),
-						permissionRow(gatewaydb.PermissionResourceAgent, "workspace-a", gatewaydb.PermissionActionDelegate),
+						permissionRow(otherResource, "workspace-a", gatewaydb.PermissionActionDelegate),
 					},
 					scope: scope,
 				},
 				{
 					name: "organization grants do not imply workspace grants",
 					rows: []gatewaydb.GatewayResolvePermissionsRow{
-						permissionRow(resource, "", gatewaydb.PermissionActionUse),
 						permissionRow(resource, "", gatewaydb.PermissionActionDelegate),
 					},
 					scope: scope,
@@ -342,6 +336,11 @@ func TestDelegationRequiresUseAndDelegateInSameScope(t *testing.T) {
 				{name: "workspace admin", rows: workspaceAdmin, scope: scope, want: true},
 				{name: "workspace admin cannot cross workspace", rows: workspaceAdmin, scope: foreignWorkspace},
 				{name: "superadmin", rows: superadmin, scope: scope, want: true},
+				{
+					name:  "organization delegation is unavailable",
+					rows:  superadmin,
+					scope: authorization.Scope{OrganizationID: "organization-a"},
+				},
 				{name: "superadmin cannot cross organization", rows: superadmin, scope: foreignOrganization},
 				{
 					name:  "inactive superadmin",
