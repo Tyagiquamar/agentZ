@@ -2,7 +2,6 @@ package mcpconn
 
 import (
 	"context"
-	"errors"
 	"slices"
 
 	agw "github.com/agentgateway/agentgateway/controller/api/v1alpha1/agentgateway"
@@ -19,28 +18,36 @@ import (
 	"github.com/accuknox/agentz/internal/mcp"
 )
 
-func (r *ExtAuthRuntimeReconciler) reconcileDelegationRuntime(ctx context.Context, namespace *corev1.Namespace, scope extAuthScope) error {
-	missingIdentity := r.GatewayServiceAccountName == "" || r.GatewayServiceAccountNamespace == ""
-	if missingIdentity {
-		return errors.New("delegation requires gateway service account identity")
-	}
+func (r *ExtAuthRuntimeReconciler) reconcileDelegationRuntime(ctx context.Context, namespace *corev1.Namespace) error {
 	ns := namespace.Name
+	ownerRefs := []metav1.OwnerReference{
+		*metav1.NewControllerRef(namespace, corev1.SchemeGroupVersion.WithKind("Namespace")),
+	}
+	routes := &gwv1.HTTPRouteList{}
+	err := r.List(ctx, routes, client.InNamespace(ns))
+	if err != nil {
+		return err
+	}
+	delegated := slices.ContainsFunc(routes.Items, func(route gwv1.HTTPRoute) bool {
+		_, delegated := route.Labels[authorization.DelegationLabel]
+		return delegated
+	})
 	backend := &agw.AgentgatewayBackend{ObjectMeta: metav1.ObjectMeta{
 		Name:      "delegation-extauth",
 		Namespace: ns,
 	}}
-	_, err := ctrlutil.CreateOrPatch(ctx, r.Client, backend, func() error {
-		backend.OwnerReferences = scope.ownerRefs
-		backend.Spec = agw.AgentgatewayBackendSpec{
-			Static: &agw.StaticBackend{Host: "extauth." + ns + ".svc.cluster.local", Port: 18084},
-		}
-		return nil
-	})
-	if err != nil {
-		return err
+	if delegated {
+		_, err = ctrlutil.CreateOrPatch(ctx, r.Client, backend, func() error {
+			backend.OwnerReferences = ownerRefs
+			backend.Spec = agw.AgentgatewayBackendSpec{
+				Static: &agw.StaticBackend{Host: "extauth." + ns + ".svc.cluster.local", Port: 18084},
+			}
+			return nil
+		})
 	}
-	routes := &gwv1.HTTPRouteList{}
-	err = r.List(ctx, routes, client.InNamespace(ns))
+	if !delegated {
+		err = client.IgnoreNotFound(r.Delete(ctx, backend))
+	}
 	if err != nil {
 		return err
 	}
@@ -60,17 +67,11 @@ func (r *ExtAuthRuntimeReconciler) reconcileDelegationRuntime(ctx context.Contex
 		}
 		gateway := &gwv1.Gateway{ObjectMeta: metav1.ObjectMeta{Name: desired.Name, Namespace: ns}}
 		err := r.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)
-		if apierrors.IsNotFound(err) && !needed {
-			continue
-		}
-		if err != nil && !apierrors.IsNotFound(err) {
+		missing := apierrors.IsNotFound(err)
+		if err != nil && !missing {
 			return err
 		}
 		if !needed {
-			patch := client.MergeFrom(gateway.DeepCopy())
-			gateway.Spec.Listeners = slices.DeleteFunc(gateway.Spec.Listeners, func(listener gwv1.Listener) bool {
-				return listener.Name == "delegation"
-			})
 			if !consumed {
 				if err := client.IgnoreNotFound(r.Delete(ctx, gateway)); err != nil {
 					return err
@@ -84,6 +85,13 @@ func (r *ExtAuthRuntimeReconciler) reconcileDelegationRuntime(ctx context.Contex
 				}
 				continue
 			}
+			if missing {
+				continue
+			}
+			patch := client.MergeFrom(gateway.DeepCopy())
+			gateway.Spec.Listeners = slices.DeleteFunc(gateway.Spec.Listeners, func(listener gwv1.Listener) bool {
+				return listener.Name == "delegation"
+			})
 			if err := r.Patch(ctx, gateway, patch); err != nil {
 				return err
 			}
@@ -94,7 +102,7 @@ func (r *ExtAuthRuntimeReconciler) reconcileDelegationRuntime(ctx context.Contex
 			Namespace: ns,
 		}}
 		_, err = ctrlutil.CreateOrPatch(ctx, r.Client, parameters, func() error {
-			parameters.OwnerReferences = scope.ownerRefs
+			parameters.OwnerReferences = ownerRefs
 			if parameters.CreationTimestamp.IsZero() {
 				parameters.Spec.Service = &agw.KubernetesResourceOverlay{
 					Spec: &apiextensionsv1.JSON{
@@ -111,7 +119,7 @@ func (r *ExtAuthRuntimeReconciler) reconcileDelegationRuntime(ctx context.Contex
 			if gateway.CreationTimestamp.IsZero() {
 				gateway.Spec = desired.Spec
 			}
-			gateway.OwnerReferences = scope.ownerRefs
+			gateway.OwnerReferences = ownerRefs
 			gateway.Spec.Listeners = slices.DeleteFunc(gateway.Spec.Listeners, func(listener gwv1.Listener) bool {
 				return listener.Name == "delegation"
 			})

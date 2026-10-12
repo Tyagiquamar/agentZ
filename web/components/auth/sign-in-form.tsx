@@ -21,10 +21,6 @@ const signInSchema = z.object({
   password: z.string().min(1, "Enter your password."),
 })
 
-const twoFactorRedirectResponseSchema = z.object({
-  twoFactorRedirect: z.literal(true),
-})
-
 type SignInValues = z.infer<typeof signInSchema>
 
 type SignInFormProps = {
@@ -100,19 +96,6 @@ export function SignInForm({
         setPasswordActionError(result.error.message ?? "Sign-in could not be completed. Try again.")
         return
       }
-
-      if (twoFactorRedirectResponseSchema.safeParse(result.data).success) {
-        const search = new URLSearchParams(oauthQuery)
-        if (returnTo) {
-          search.set("returnTo", returnTo)
-        }
-
-        const target = search.size === 0 ? "/signin/two-factor" : `/signin/two-factor?${search}`
-        window.location.replace(target)
-        return
-      }
-
-      window.location.replace(result.data.url ?? returnTo ?? "/")
     })
   }
 
@@ -128,6 +111,8 @@ export function SignInForm({
     routeErrorVisible && routeError && !routeCredentialErrorVisible && !providerErrors
       ? authErrorMessages[routeError]
       : undefined
+  const signUpSearch = new URLSearchParams(oauthQuery)
+  if (returnTo) signUpSearch.set("returnTo", returnTo)
 
   return (
     <div className="flex flex-col gap-7">
@@ -265,7 +250,7 @@ export function SignInForm({
           Don&apos;t have an account?{" "}
           <Link
             className="text-foreground underline underline-offset-4"
-            href={returnTo ? `/signup?returnTo=${encodeURIComponent(returnTo)}` : "/signup"}
+            href={signUpSearch.size ? `/signup?${signUpSearch}` : "/signup"}
           >
             Sign up
           </Link>

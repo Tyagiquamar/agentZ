@@ -52,7 +52,9 @@ async function signInWithProvider(provider: SocialProvider, formData: FormData):
       redirect(`${authPath}?${errorParams.toString()}`)
     }
 
-    redirect(signInURL({ error: "no_callback_url", provider, returnTo }))
+    redirect(
+      signInURL({ error: "no_callback_url", provider, returnTo, oauthQuery: parsed.oauth_query })
+    )
   }
 
   redirect(result.url as Route)

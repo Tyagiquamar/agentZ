@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react"
 import {
   Copy,
+  Download,
   KeyRound,
   Plus,
   Trash2,
@@ -129,10 +130,10 @@ const clientTypes = {
 >
 
 const columnLayout = {
-  name: { minWidth: 224, width: 288, contentMaxWidth: 256 },
+  name: { minWidth: 160, width: 200, contentMaxWidth: 168 },
   type: { minWidth: 248, width: 248, contentMaxWidth: 216 },
-  disabled: { minWidth: 112, width: 112 },
-  scopes: { minWidth: 128, width: 128, contentMaxWidth: 96 },
+  disabled: { minWidth: 104, width: 104 },
+  scopes: { minWidth: 112, width: 112, contentMaxWidth: 80 },
   redirectUris: { minWidth: 200, contentMaxWidth: 320 },
   actions: { minWidth: 64, width: 64, align: "end" },
 } satisfies Record<string, AdminColumnLayout>
@@ -284,8 +285,11 @@ export function Applications({
                           client.clientId,
                           "enable"
                         )
-                        if ("error" in result) toast.error(result.error)
-                        else toast.success("Application enabled")
+                        if ("error" in result) {
+                          toast.error(result.error)
+                          return
+                        }
+                        toast.success("Application enabled")
                       })
                     }}
                   >
@@ -424,7 +428,7 @@ export function Applications({
           <DialogHeader>
             <DialogTitle>Application credentials</DialogTitle>
             <DialogDescription>
-              Copy the secret now. AgentZ stores its hash and cannot show it again.
+              Copy or download the secret now. AgentZ stores its hash and cannot show it again.
             </DialogDescription>
           </DialogHeader>
           <FieldGroup>
@@ -450,6 +454,23 @@ export function Applications({
             </Field>
           </FieldGroup>
           <DialogFooter>
+            {credential ? (
+              <Button variant="outline" asChild>
+                <a
+                  download={`agentz-client-${credential.clientId}.json`}
+                  href={`data:application/json;charset=utf-8,${encodeURIComponent(
+                    JSON.stringify(
+                      { client_id: credential.clientId, client_secret: credential.secret },
+                      null,
+                      2
+                    )
+                  )}`}
+                >
+                  <Download aria-hidden="true" data-icon="inline-start" />
+                  Download
+                </a>
+              </Button>
+            ) : null}
             <Button onClick={() => setCredential(undefined)}>Done</Button>
           </DialogFooter>
         </DialogContent>

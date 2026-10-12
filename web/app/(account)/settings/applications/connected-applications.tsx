@@ -35,7 +35,11 @@ export type ConnectedApplication = {
   name: string
   owner: string | null
   scopes: string[]
-  grants: { organization: string | null; selection: DelegationCatalog }[]
+  access: {
+    organizationId: string | null
+    organization: string | null
+    selection: DelegationCatalog
+  }[]
   createdAt: string
 }
 
@@ -95,19 +99,14 @@ export function ConnectedApplications({
         id: "access",
         header: "Resource access",
         cell: ({ row }) => {
-          const resources = new Map(
-            row.original.grants.flatMap(({ selection }) => [
-              ...selection.models.map(
-                (model) =>
-                  [
-                    model.id,
-                    `${model.provider_display_name || model.provider} / ${model.model_display_name || model.model}`,
-                  ] as const
-              ),
-              ...selection.mcp.map((connection) => [connection.id, connection.connection] as const),
-            ])
-          )
-          return <ApplicationValues values={[...resources.values()]} />
+          const resources = row.original.access.flatMap(({ selection }) => [
+            ...selection.models.map(
+              (model) =>
+                `${model.provider_display_name || model.provider} / ${model.model_display_name || model.model}`
+            ),
+            ...selection.mcp.map((connection) => connection.connection),
+          ])
+          return <ApplicationValues values={resources} />
         },
       },
       {

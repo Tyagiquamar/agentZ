@@ -9,6 +9,7 @@ import { z } from "zod"
 import type { AuthError, SocialProvider } from "@/app/(auth)/shared"
 import { authErrorMessages } from "@/app/(auth)/shared"
 import { authClient } from "@/lib/auth-client"
+import { signInURL } from "@/lib/sign-in-redirect"
 import { passwordFieldDescription, passwordSchema } from "@/lib/password-policy"
 import { Button } from "@/components/ui/button"
 import {
@@ -42,6 +43,7 @@ type SignUpFormProps = {
   actions: Record<SocialProvider, (formData: FormData) => Promise<void>>
   providers: SocialProvider[]
   returnTo?: string
+  oauthQuery?: string
   routeError?: AuthError
   routeProvider?: SocialProvider
 }
@@ -50,6 +52,7 @@ export function SignUpForm({
   actions,
   providers,
   returnTo,
+  oauthQuery,
   routeError,
   routeProvider,
 }: SignUpFormProps) {
@@ -109,7 +112,8 @@ export function SignUpForm({
         return
       }
 
-      window.location.replace(returnTo ?? "/")
+      // The OAuth client follows the provider's redirect after creating the session.
+      if (!oauthQuery) window.location.replace(returnTo ?? "/")
     })
   }
 
@@ -273,6 +277,7 @@ export function SignUpForm({
             errors={providerErrors}
             providers={providers}
             returnTo={returnTo}
+            hiddenFields={{ oauth_query: oauthQuery }}
             submitLabel="Sign up"
             pendingProvider={pendingProvider}
             onPendingChangeAction={(provider) => {
@@ -287,7 +292,7 @@ export function SignUpForm({
         Already have an account?{" "}
         <Link
           className="text-foreground underline underline-offset-4"
-          href={returnTo ? `/signin?returnTo=${encodeURIComponent(returnTo)}` : "/signin"}
+          href={signInURL({ returnTo, oauthQuery })}
         >
           Sign in
         </Link>

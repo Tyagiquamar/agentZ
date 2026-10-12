@@ -22,7 +22,7 @@ import { defaultStatements } from "better-auth/plugins/organization/access"
 import { twoFactor } from "better-auth/plugins/two-factor"
 import { headers } from "next/headers"
 import { z } from "zod"
-import { authErrorMessages } from "@/app/(auth)/shared"
+import { authErrorMessages, authSearchParamsSchema } from "@/app/(auth)/shared"
 import { getDB, schema } from "@/db"
 import { agentAPIKeyConfigID, webhookAPIKeyConfigID } from "@/lib/api-key-config"
 import { getEnv } from "@/lib/env"
@@ -888,6 +888,24 @@ async function createSocialAdmissionMembership(
     })
     return { kind: "accepted" as const, slug: organization.slug }
   })
+}
+
+/** authPageParameters verifies the OAuth continuation shared by authentication pages. */
+export async function authPageParameters(search: Awaited<PageProps<"/signin">["searchParams"]>) {
+  const query = new URLSearchParams()
+  for (const [key, values] of Object.entries(search)) {
+    for (const value of [values].flat()) if (value !== undefined) query.append(key, value)
+  }
+  const signedParameters = new Set([...query.getAll("ba_param"), "sig"])
+  const oauthQuery = query.has("sig")
+    ? new URLSearchParams([...query].filter(([key]) => signedParameters.has(key))).toString()
+    : undefined
+  return {
+    ...authSearchParamsSchema.parse(search),
+    oauthQuery,
+    expired:
+      !!oauthQuery && !(await verifyOAuthQueryParams(oauthQuery, getEnv().BETTER_AUTH_SECRET)),
+  }
 }
 
 export type Auth = BetterAuthInstance<ReturnType<typeof buildAuthOptions>>

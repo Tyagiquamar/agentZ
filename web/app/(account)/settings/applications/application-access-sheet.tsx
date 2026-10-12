@@ -38,9 +38,6 @@ export function ApplicationAccessSheet({
   workspaces: Record<string, string>
   onClose: () => void
 }) {
-  const grants = application.grants.filter(
-    ({ selection }) => selection.models.length || selection.mcp.length
-  )
   const accountScopes = application.scopes.filter(
     (scope) => scope !== "inference:use" && scope !== "mcp:use"
   )
@@ -121,15 +118,15 @@ export function ApplicationAccessSheet({
             <h3 id="application-resources" className="px-4 font-medium">
               Resource access
             </h3>
-            {grants.length ? (
-              grants.map((grant, index) => (
-                <section key={index} className="flex min-w-0 flex-col gap-2">
+            {application.access.length ? (
+              application.access.map((access) => (
+                <section key={access.organizationId} className="flex min-w-0 flex-col gap-2">
                   <h4 className="flex items-center gap-2 px-4 text-xs font-medium break-words text-muted-foreground">
                     <Building2 aria-hidden="true" className="size-4 shrink-0" />
-                    {grant.organization ?? "Organization unavailable"}
+                    {access.organization ?? "Organization unavailable"}
                   </h4>
                   <Table
-                    aria-label={`Resource access in ${grant.organization ?? "unavailable organization"}`}
+                    aria-label={`Resource access in ${access.organization ?? "unavailable organization"}`}
                     className="w-full table-fixed"
                   >
                     <TableHeader>
@@ -140,7 +137,7 @@ export function ApplicationAccessSheet({
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {grant.selection.models.map((model) => (
+                      {access.selection.models.map((model) => (
                         <TableRow key={model.id}>
                           <TableCell className="px-4 py-3 align-top whitespace-normal">
                             <div className="break-words">
@@ -158,7 +155,7 @@ export function ApplicationAccessSheet({
                           </TableCell>
                         </TableRow>
                       ))}
-                      {grant.selection.mcp.map((connection) => (
+                      {access.selection.mcp.map((connection) => (
                         <TableRow key={connection.id}>
                           <TableCell className="px-4 py-3 align-top break-all whitespace-normal">
                             {connection.connection}

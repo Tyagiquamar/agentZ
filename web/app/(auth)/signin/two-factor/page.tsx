@@ -1,24 +1,15 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
-import * as z from "zod"
 import { headers } from "next/headers"
 import { redirect } from "next/navigation"
-import { verifyOAuthQueryParams } from "@better-auth/oauth-provider"
 import { AuthorizationState } from "@/app/oauth/authorize/authorization-state"
-import { getAuth } from "@/lib/auth"
-import { getEnv } from "@/lib/env"
-import { searchParamStringSchema } from "@/lib/search-params"
+import { authPageParameters, getAuth } from "@/lib/auth"
 import { signInReturnTo } from "@/lib/sign-in-redirect"
 import { TwoFactorChallenge } from "./two-factor-challenge"
 
 export const metadata: Metadata = {
   title: "Verify Sign In",
 }
-
-const twoFactorSearchParamsSchema = z.object({
-  returnTo: searchParamStringSchema,
-  sig: searchParamStringSchema,
-})
 
 export default function TwoFactorPage({ searchParams }: PageProps<"/signin/two-factor">) {
   return (
@@ -33,17 +24,9 @@ async function TwoFactorGate({
 }: Pick<PageProps<"/signin/two-factor">, "searchParams">) {
   const requestHeaders = await headers()
   const auth = getAuth()
-  const search = await searchParams
-  const params = twoFactorSearchParamsSchema.parse(search)
-  const query = new URLSearchParams()
-  for (const [key, values] of Object.entries(search)) {
-    for (const value of [values].flat()) if (value !== undefined) query.append(key, value)
-  }
-  const signedParameters = new Set([...query.getAll("ba_param"), "sig"])
-  const oauthQuery = params.sig
-    ? new URLSearchParams([...query].filter(([key]) => signedParameters.has(key))).toString()
-    : undefined
-  if (oauthQuery && !(await verifyOAuthQueryParams(oauthQuery, getEnv().BETTER_AUTH_SECRET)))
+  const params = await authPageParameters(await searchParams)
+  const { oauthQuery } = params
+  if (params.expired)
     return (
       <AuthorizationState
         title="This connection request expired"

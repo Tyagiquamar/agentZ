@@ -77,14 +77,12 @@ type extAuthScope struct {
 // namespace that has MCP or subscription-inference consumers.
 type ExtAuthRuntimeReconciler struct {
 	client.Client
-	Bao                            *baoapi.Client
-	ControllerImage                string
-	OpenBaoAddr                    string
-	OpenBaoSecretMountPath         string
-	OpenBaoK8sAuthMountPath        string
-	DelegationNamespace            string
-	GatewayServiceAccountName      string
-	GatewayServiceAccountNamespace string
+	Bao                     *baoapi.Client
+	ControllerImage         string
+	OpenBaoAddr             string
+	OpenBaoSecretMountPath  string
+	OpenBaoK8sAuthMountPath string
+	DelegationNamespace     string
 }
 
 // The runtime controller deletes obsolete scope-reader RBAC objects explicitly
@@ -171,6 +169,12 @@ func (r *ExtAuthRuntimeReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, err
 	}
 	if !needed {
+		if r.DelegationNamespace != "" {
+			err := r.reconcileDelegationRuntime(ctx, ns)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+		}
 		return ctrl.Result{}, r.deleteExtAuthRuntime(ctx, ns.Name)
 	}
 	if strings.TrimSpace(r.ControllerImage) == "" {
@@ -210,7 +214,7 @@ func (r *ExtAuthRuntimeReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, err
 	}
 	if r.DelegationNamespace != "" {
-		if err := r.reconcileDelegationRuntime(ctx, ns, scope); err != nil {
+		if err := r.reconcileDelegationRuntime(ctx, ns); err != nil {
 			return ctrl.Result{}, err
 		}
 	}

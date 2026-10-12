@@ -1458,15 +1458,13 @@ var managerCmd = &cli.Command{
 			os.Exit(1)
 		}
 		extAuthRuntimeReconciler := &mcpconn.ExtAuthRuntimeReconciler{
-			Bao:                            baoClient,
-			Client:                         mgr.GetClient(),
-			ControllerImage:                controllerImage,
-			OpenBaoAddr:                    openBaoAddr,
-			OpenBaoSecretMountPath:         openBaoSecretMountPath,
-			OpenBaoK8sAuthMountPath:        openBaoK8sAuthMountPath,
-			DelegationNamespace:            delegationNamespace,
-			GatewayServiceAccountName:      gatewayServiceAccountName,
-			GatewayServiceAccountNamespace: gatewayServiceAccountNamespace,
+			Bao:                     baoClient,
+			Client:                  mgr.GetClient(),
+			ControllerImage:         controllerImage,
+			OpenBaoAddr:             openBaoAddr,
+			OpenBaoSecretMountPath:  openBaoSecretMountPath,
+			OpenBaoK8sAuthMountPath: openBaoK8sAuthMountPath,
+			DelegationNamespace:     delegationNamespace,
 		}
 		if err := extAuthRuntimeReconciler.SetupWithManager(mgr); err != nil {
 			setupLog.ErrorContext(ctx,

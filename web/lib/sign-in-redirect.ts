@@ -22,12 +22,14 @@ export function signInURL({
   error,
   provider,
   returnTo,
+  oauthQuery,
 }: {
   error?: string
   provider?: string
   returnTo?: string
+  oauthQuery?: string
 } = {}): Route {
-  const params = new URLSearchParams()
+  const params = new URLSearchParams(oauthQuery)
   if (error) {
     params.set("error", error)
   }
