@@ -518,8 +518,9 @@ func (r *Reconciler) buildDeployment(agt *agentzv1alpha1.Agent, hash string, env
 					AutomountServiceAccountToken: new(false),
 					Resources:                    podResources,
 					SecurityContext: &corev1.PodSecurityContext{
-						RunAsNonRoot: new(true),
-						FSGroup:      new(agentRuntimeGID),
+						RunAsNonRoot:        new(true),
+						FSGroup:             new(agentRuntimeGID),
+						FSGroupChangePolicy: new(corev1.FSGroupChangeOnRootMismatch),
 						SeccompProfile: &corev1.SeccompProfile{
 							Type: corev1.SeccompProfileTypeRuntimeDefault,
 						},
