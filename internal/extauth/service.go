@@ -361,15 +361,32 @@ func (s *Service) mcpCredentials(ctx context.Context, connection *agentzv1alpha1
 	}
 	headers = append(headers, injection.headers...)
 	return &authv3.OkHttpResponse{
-		Headers:              headers,
-		HeadersToRemove:      append(injection.headersToRemove, "authorization", "cookie", "api-key", "x-api-key", "openai-organization", "openai-project", "chatgpt-account-id"),
+		Headers: headers,
+		HeadersToRemove: append(
+			injection.headersToRemove,
+			"authorization",
+			"cookie",
+			"api-key",
+			"x-api-key",
+			"openai-organization",
+			"openai-project",
+			"chatgpt-account-id",
+		),
 		QueryParametersToSet: injection.queryParameters,
 	}, nil
 }
 
 func (s *Service) inferenceCredentials(ctx context.Context, provider *agentzv1alpha1.InferenceProvider) (*authv3.OkHttpResponse, error) {
 	response := &authv3.OkHttpResponse{
-		HeadersToRemove: []string{"authorization", "cookie", "api-key", "x-api-key", "openai-organization", "openai-project", "chatgpt-account-id"},
+		HeadersToRemove: []string{
+			"authorization",
+			"cookie",
+			"api-key",
+			"x-api-key",
+			"openai-organization",
+			"openai-project",
+			"chatgpt-account-id",
+		},
 	}
 	if provider.Spec.Kind != agentzv1alpha1.InferenceProviderKindOpenAICodex {
 		return response, nil
@@ -388,7 +405,13 @@ func (s *Service) inferenceCredentials(ctx context.Context, provider *agentzv1al
 // Check authorizes one gateway request and supplies upstream credentials.
 func (s *Service) Check(ctx context.Context, req *authv3.CheckRequest) (*authv3.CheckResponse, error) {
 	if req.GetAttributes().GetContextExtensions()["agentz.operation"] != "" {
-		return denyDecision(codes.PermissionDenied, typev3.StatusCode_Forbidden, "delegation requires the private authorization listener", "delegation_listener", slog.LevelWarn).response, nil
+		return denyDecision(
+			codes.PermissionDenied,
+			typev3.StatusCode_Forbidden,
+			"delegation requires the private authorization listener",
+			"delegation_listener",
+			slog.LevelWarn,
+		).response, nil
 	}
 	decision, attrs := s.evaluate(ctx, req)
 
@@ -889,7 +912,13 @@ func (s *delegationServer) Check(ctx context.Context, request *authv3.CheckReque
 	}
 	if err != nil {
 		slog.ErrorContext(ctx, "owner delegation credentials unavailable", slog.Any("error", err))
-		return denyDecision(codes.Unavailable, typev3.StatusCode_ServiceUnavailable, "delegated credentials unavailable", "delegation_credentials", slog.LevelError).response, nil
+		return denyDecision(
+			codes.Unavailable,
+			typev3.StatusCode_ServiceUnavailable,
+			"delegated credentials unavailable",
+			"delegation_credentials",
+			slog.LevelError,
+		).response, nil
 	}
 	return &authv3.CheckResponse{
 		Status:       &statuspb.Status{Code: int32(codes.OK)},

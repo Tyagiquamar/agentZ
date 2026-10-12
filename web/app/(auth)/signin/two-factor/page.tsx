@@ -3,7 +3,10 @@ import { Suspense } from "react"
 import * as z from "zod"
 import { headers } from "next/headers"
 import { redirect } from "next/navigation"
+import { verifyOAuthQueryParams } from "@better-auth/oauth-provider"
+import { AuthorizationState } from "@/app/oauth/authorize/authorization-state"
 import { getAuth } from "@/lib/auth"
+import { getEnv } from "@/lib/env"
 import { searchParamStringSchema } from "@/lib/search-params"
 import { signInReturnTo } from "@/lib/sign-in-redirect"
 import { TwoFactorChallenge } from "./two-factor-challenge"
@@ -30,19 +33,35 @@ async function TwoFactorGate({
 }: Pick<PageProps<"/signin/two-factor">, "searchParams">) {
   const requestHeaders = await headers()
   const auth = getAuth()
-  const params = twoFactorSearchParamsSchema.parse(await searchParams)
+  const search = await searchParams
+  const params = twoFactorSearchParamsSchema.parse(search)
+  const query = new URLSearchParams()
+  for (const [key, values] of Object.entries(search)) {
+    for (const value of [values].flat()) if (value !== undefined) query.append(key, value)
+  }
+  const signedParameters = new Set([...query.getAll("ba_param"), "sig"])
+  const oauthQuery = params.sig
+    ? new URLSearchParams([...query].filter(([key]) => signedParameters.has(key))).toString()
+    : undefined
+  if (oauthQuery && !(await verifyOAuthQueryParams(oauthQuery, getEnv().BETTER_AUTH_SECRET)))
+    return (
+      <AuthorizationState
+        title="This connection request expired"
+        description="Return to the app you were connecting and reattempt sign in."
+      />
+    )
   const returnTo = signInReturnTo(params.returnTo) ?? "/"
   const session = await auth.api.getSession({
     headers: requestHeaders,
   })
 
-  if (session && !params.sig) {
+  if (session && !oauthQuery) {
     redirect(returnTo)
   }
 
   return (
     <div className="flex min-h-svh w-full justify-center px-6 py-10 md:px-10 md:py-14">
-      <TwoFactorChallenge returnTo={returnTo} oauth={!!params.sig} />
+      <TwoFactorChallenge returnTo={returnTo} oauth={!!oauthQuery} />
     </div>
   )
 }

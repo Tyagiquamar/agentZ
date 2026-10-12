@@ -13,6 +13,7 @@ import { APIError, BASE_ERROR_CODES } from "@better-auth/core/error"
 import { nextCookies } from "better-auth/next-js"
 import { deleteSessionCookie, expireCookie } from "better-auth/cookies"
 import { apiKey } from "@better-auth/api-key"
+import { verifyOAuthQueryParams } from "@better-auth/oauth-provider"
 import { drizzleAdapter } from "better-auth/adapters/drizzle"
 import { jwt } from "better-auth/plugins/jwt"
 import { organization } from "better-auth/plugins/organization"
@@ -446,17 +447,28 @@ function buildAuthOptions() {
         await ctx.context.internalAdapter.deleteSession(newSession.session.token)
         ctx.context.setNewSession(null)
 
+        const oauthQuery = z.string().optional().parse(state?.agentzOAuthQuery)
+        if (oauthQuery && !(await verifyOAuthQueryParams(oauthQuery, ctx.context.secret))) {
+          throw ctx.redirect("/signin?error=session_expired")
+        }
+
         const twoFactorCookieMaxAge =
           plugin?.options?.twoFactorCookieMaxAge ?? defaultTwoFactorCookieMaxAge
         const twoFactorCookie = ctx.context.createAuthCookie(twoFactorCookieName, {
           maxAge: twoFactorCookieMaxAge,
         })
         const twoFactorIdentifier = `2fa-${randomUUID()}`
+        const expiresAt = dayjs().add(twoFactorCookieMaxAge, "seconds").toDate()
 
         await ctx.context.internalAdapter.createVerificationValue({
           value: newSession.user.id,
           identifier: twoFactorIdentifier,
-          expiresAt: dayjs().add(twoFactorCookieMaxAge, "seconds").toDate(),
+          expiresAt,
+        })
+        await ctx.context.internalAdapter.createVerificationValue({
+          value: "0",
+          identifier: `2fa-attempts-${twoFactorIdentifier}`,
+          expiresAt,
         })
         await ctx.setSignedCookie(
           twoFactorCookie.name,
@@ -465,9 +477,8 @@ function buildAuthOptions() {
           twoFactorCookie.attributes
         )
 
-        const oauthState = await getOAuthState()
-        const returnTo = signInReturnTo(oauthState?.callbackURL)
-        const search = new URLSearchParams()
+        const returnTo = signInReturnTo(state?.callbackURL)
+        const search = new URLSearchParams(oauthQuery)
         if (returnTo) {
           search.set("returnTo", returnTo)
         }

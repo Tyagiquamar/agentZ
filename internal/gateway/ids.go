@@ -155,14 +155,10 @@ func decodeOptionalTraceCursor(w http.ResponseWriter, r *http.Request, raw strin
 	return validTraceID(w, r, raw)
 }
 
-func maxTime() time.Time {
-	return time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC)
-}
-
 func decodeObservabilityQuery(w http.ResponseWriter, r *http.Request, query observabilityQuery) (observabilityFilter, bool) {
 	filter := observabilityFilter{
 		after:  time.Unix(0, 0).UTC(),
-		before: maxTime(),
+		before: time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC),
 	}
 	if query.after != nil {
 		filter.after = (*query.after).UTC()

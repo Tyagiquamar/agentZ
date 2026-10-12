@@ -396,7 +396,12 @@ func TestDelegatedCodexRequiresResponsesStreaming(t *testing.T) {
 			if (err == nil) != test.allowed {
 				t.Fatalf("allowed %v, want %v: %v", err == nil, test.allowed, err)
 			}
-			if err := ValidateDelegatedProviderRequest(agentzv1alpha1.InferenceProviderKindOpenAI, []byte(test.body), test.responses); err != nil {
+			err = ValidateDelegatedProviderRequest(
+				agentzv1alpha1.InferenceProviderKindOpenAI,
+				[]byte(test.body),
+				test.responses,
+			)
+			if err != nil {
 				t.Fatalf("Codex constraints applied to an API-key provider: %v", err)
 			}
 		})

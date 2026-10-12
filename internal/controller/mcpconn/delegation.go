@@ -96,7 +96,11 @@ func (r *ExtAuthRuntimeReconciler) reconcileDelegationRuntime(ctx context.Contex
 		_, err = ctrlutil.CreateOrPatch(ctx, r.Client, parameters, func() error {
 			parameters.OwnerReferences = scope.ownerRefs
 			if parameters.CreationTimestamp.IsZero() {
-				parameters.Spec.Service = &agw.KubernetesResourceOverlay{Spec: &apiextensionsv1.JSON{Raw: []byte(`{"type":"ClusterIP"}`)}}
+				parameters.Spec.Service = &agw.KubernetesResourceOverlay{
+					Spec: &apiextensionsv1.JSON{
+						Raw: []byte(`{"type":"ClusterIP"}`),
+					},
+				}
 			}
 			return nil
 		})

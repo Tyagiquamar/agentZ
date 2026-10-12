@@ -22,11 +22,7 @@ async function signInWithProvider(provider: SocialProvider, formData: FormData):
   const parsed = providerSignInFormSchema.parse(Object.fromEntries(formData))
   const returnTo = signInReturnTo(parsed.returnTo)
   const authPath = parsed.authPath
-  const errorParams = new URLSearchParams()
-  if (parsed.oauth_query) {
-    for (const [key, value] of new URLSearchParams(parsed.oauth_query))
-      errorParams.append(key, value)
-  }
+  const errorParams = new URLSearchParams(parsed.oauth_query)
   errorParams.set("provider", provider)
   if (returnTo) {
     errorParams.set("returnTo", returnTo)
@@ -38,6 +34,7 @@ async function signInWithProvider(provider: SocialProvider, formData: FormData):
         // Social authentication creates an account when none exists, regardless
         // of whether the user entered through the sign-in or sign-up page.
         agentzEnrollment: "direct",
+        ...(parsed.oauth_query && { agentzOAuthQuery: parsed.oauth_query }),
       },
       callbackURL: returnTo ?? "/",
       disableRedirect: true,

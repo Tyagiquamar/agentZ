@@ -64,36 +64,41 @@ var gatewayServeCmd = &cli.Command{
 			},
 		},
 		&cli.StringFlag{
-			Name:  "postgres-dsn",
-			Usage: "PostgreSQL DSN for session history and agent listing",
+			Name:     "postgres-dsn",
+			Usage:    "PostgreSQL DSN for session history and agent listing",
+			Required: true,
 			Config: cli.StringConfig{
 				TrimSpace: true,
 			},
 		},
 		&cli.StringFlag{
-			Name:  "external-jwt-jwks-url",
-			Usage: "JWKS URL for external Better Auth bearer tokens",
+			Name:     "external-jwt-jwks-url",
+			Usage:    "JWKS URL for external Better Auth bearer tokens",
+			Required: true,
 			Config: cli.StringConfig{
 				TrimSpace: true,
 			},
 		},
 		&cli.StringFlag{
-			Name:  "external-jwt-issuer",
-			Usage: "JWT issuer for external Better Auth bearer tokens",
+			Name:     "external-jwt-issuer",
+			Usage:    "JWT issuer for external Better Auth bearer tokens",
+			Required: true,
 			Config: cli.StringConfig{
 				TrimSpace: true,
 			},
 		},
 		&cli.StringFlag{
-			Name:  "external-jwt-audience",
-			Usage: "JWT audience for external Better Auth bearer tokens",
+			Name:     "external-jwt-audience",
+			Usage:    "JWT audience for external Better Auth bearer tokens",
+			Required: true,
 			Config: cli.StringConfig{
 				TrimSpace: true,
 			},
 		},
 		&cli.StringFlag{
-			Name:  "internal-k8s-token-audience",
-			Usage: "Audience required on internal Kubernetes service account bearer tokens",
+			Name:     "internal-k8s-token-audience",
+			Usage:    "Audience required on internal Kubernetes service account bearer tokens",
+			Required: true,
 			Config: cli.StringConfig{
 				TrimSpace: true,
 			},
@@ -120,29 +125,33 @@ var gatewayServeCmd = &cli.Command{
 			},
 		},
 		&cli.StringFlag{
-			Name:  "agent-trace-endpoint",
-			Usage: "OTLP/gRPC trace endpoint for gateway-created Agents",
+			Name:     "agent-trace-endpoint",
+			Usage:    "OTLP/gRPC trace endpoint for gateway-created Agents",
+			Required: true,
 			Config: cli.StringConfig{
 				TrimSpace: true,
 			},
 		},
 		&cli.StringFlag{
-			Name:  "openbao-addr",
-			Usage: "OpenBao server address (e.g. http://openbao:8200)",
+			Name:     "openbao-addr",
+			Usage:    "OpenBao server address (e.g. http://openbao:8200)",
+			Required: true,
 			Config: cli.StringConfig{
 				TrimSpace: true,
 			},
 		},
 		&cli.StringFlag{
-			Name:  "openbao-secret-mount-path",
-			Usage: "OpenBao KV v2 secret engine mount path",
+			Name:     "openbao-secret-mount-path",
+			Usage:    "OpenBao KV v2 secret engine mount path",
+			Required: true,
 			Config: cli.StringConfig{
 				TrimSpace: true,
 			},
 		},
 		&cli.StringFlag{
-			Name:  "openbao-k8s-auth-role",
-			Usage: "OpenBao Kubernetes auth role name",
+			Name:     "openbao-k8s-auth-role",
+			Usage:    "OpenBao Kubernetes auth role name",
+			Required: true,
 			Config: cli.StringConfig{
 				TrimSpace: true,
 			},
@@ -169,13 +178,15 @@ var gatewayServeCmd = &cli.Command{
 			Value: gateway.DefaultMCPProbeStaleAfter,
 		},
 		&cli.StringSliceFlag{
-			Name:  "allowed-web-origin",
-			Usage: "Web origin allowed to call the gateway; repeat for multiple origins",
+			Name:     "allowed-web-origin",
+			Usage:    "Web origin allowed to call the gateway; repeat for multiple origins",
+			Required: true,
 		},
 		&cli.StringFlag{
-			Name:   "skills-s3-endpoint",
-			Usage:  "S3-compatible endpoint for immutable skill storage",
-			Config: cli.StringConfig{TrimSpace: true},
+			Name:     "skills-s3-endpoint",
+			Usage:    "S3-compatible endpoint for immutable skill storage",
+			Required: true,
+			Config:   cli.StringConfig{TrimSpace: true},
 		},
 		&cli.StringFlag{
 			Name:   "skills-s3-region",
@@ -184,9 +195,10 @@ var gatewayServeCmd = &cli.Command{
 			Config: cli.StringConfig{TrimSpace: true},
 		},
 		&cli.StringFlag{
-			Name:   "skills-s3-bucket",
-			Usage:  "S3 bucket for immutable skill storage",
-			Config: cli.StringConfig{TrimSpace: true},
+			Name:     "skills-s3-bucket",
+			Usage:    "S3 bucket for immutable skill storage",
+			Required: true,
+			Config:   cli.StringConfig{TrimSpace: true},
 		},
 	},
 	Action: func(ctx context.Context, c *cli.Command) error {
