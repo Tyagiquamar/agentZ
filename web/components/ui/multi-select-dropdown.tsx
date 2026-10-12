@@ -9,6 +9,7 @@ import {
   type ComponentType,
   type ComponentProps,
   type ReactElement,
+  type ReactNode,
   type SVGProps,
 } from "react"
 import { ChevronDownIcon, PlusIcon } from "lucide-react"
@@ -64,6 +65,7 @@ function MultiSelectDropdown({
   contentClassName,
   disabled,
   emptyMessage = "No options found.",
+  footer,
   id,
   invalid = false,
   onBlurAction,
@@ -81,6 +83,7 @@ function MultiSelectDropdown({
   contentClassName?: string
   disabled?: boolean
   emptyMessage?: string
+  footer?: ReactNode
   id?: string
   invalid?: boolean
   onBlurAction?: () => void
@@ -255,6 +258,7 @@ function MultiSelectDropdown({
             ))}
           </CommandList>
         </Command>
+        {footer}
       </PopoverContent>
     </Popover>
   )
