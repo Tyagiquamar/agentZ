@@ -545,7 +545,7 @@ var managerCmd = &cli.Command{
 		},
 		&cli.StringFlag{
 			Name:        "inference-secret-store-name",
-			Usage:       "Namespace SecretStore used for inference provider credentials",
+			Usage:       "ClusterSecretStore used for inference provider credentials",
 			Value:       "agentz-inference",
 			Destination: &inferenceSecretStoreName,
 			Config: cli.StringConfig{
@@ -1248,11 +1248,9 @@ var managerCmd = &cli.Command{
 			Scheme:   mgr.GetScheme(),
 			Recorder: mgr.GetEventRecorder("inference-provider"),
 			Config: inferenceprovidercontroller.ReconcilerConfig{
-				StoreName:               inferenceSecretStoreName,
-				RefreshInterval:         inferenceSecretRefreshInterval,
-				OpenBaoSecretMountPath:  openBaoSecretMountPath,
-				OpenBaoAddr:             openBaoAddr,
-				OpenBaoK8sAuthMountPath: openBaoK8sAuthMountPath,
+				StoreName:              inferenceSecretStoreName,
+				RefreshInterval:        inferenceSecretRefreshInterval,
+				OpenBaoSecretMountPath: openBaoSecretMountPath,
 			},
 		}
 		if err := inferenceProviderReconciler.SetupWithManager(mgr); err != nil {

@@ -43,6 +43,21 @@ manager:
       enabled: true
       storeName: ""
       refreshInterval: 1m
+      serviceAccount:
+        name: ""
+        namespace: ""
+        annotations: {}
+        audiences:
+        - https://kubernetes.default.svc
+      openBao:
+        server: http://openbao.openbao.svc.cluster.local:8200
+        kvMount: kv
+        kubernetesAuthMount: kubernetes
+        role: agentz-inference-external-secrets
+        caBundle: ""
+        caProvider: {}
+      managedNamespaceSelector:
+        app.kubernetes.io/managed-by: agentz
 
   # Enable the AgentZ controller manager subchart.
   enabled: true

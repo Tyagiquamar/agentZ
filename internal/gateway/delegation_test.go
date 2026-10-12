@@ -655,10 +655,11 @@ func TestDelegatedInferenceUsesPrivateGateway(t *testing.T) {
 	if upstream.request.URL.Host != "private.example:8080" || upstream.request.URL.Path != "/delegations/grant-1/models/0/chat/completions" {
 		t.Fatalf("inference bypassed the configured private gateway: %s", upstream.request.URL)
 	}
-	if err := service.k8sClient.Delete(t.Context(), &gwv1.HTTPRoute{ObjectMeta: metav1.ObjectMeta{
+	route := &gwv1.HTTPRoute{ObjectMeta: metav1.ObjectMeta{
 		Name:      "d-grant-1-model-0",
 		Namespace: "private",
-	}}); err != nil {
+	}}
+	if err := service.k8sClient.Delete(t.Context(), route); err != nil {
 		t.Fatal(err)
 	}
 	upstream.request = nil
