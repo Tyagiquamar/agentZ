@@ -66,10 +66,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 	if len(issues) > 0 {
 		err := fmt.Errorf("pool configuration is invalid: %s", issues[0].Message)
-		if cleanupErr := r.reconcileCredentialProjections(ctx, pool, inference.PoolDefinition{}); cleanupErr != nil {
+		cleanupErr := r.reconcileCredentialProjections(ctx, pool, inference.PoolDefinition{})
+		if cleanupErr != nil {
 			return ctrl.Result{}, errors.Join(err, cleanupErr, r.updateStatus(ctx, pool, definition, nil, err))
 		}
-		if cleanupErr := r.reconcileAuthPolicies(ctx, pool, inference.PoolDefinition{}); cleanupErr != nil {
+		cleanupErr = r.reconcileAuthPolicies(ctx, pool, inference.PoolDefinition{})
+		if cleanupErr != nil {
 			return ctrl.Result{}, errors.Join(err, cleanupErr, r.updateStatus(ctx, pool, definition, nil, err))
 		}
 		backend := &agentgatewayv1alpha1.AgentgatewayBackend{}

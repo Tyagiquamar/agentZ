@@ -503,6 +503,7 @@ func RenderProviderTarget(provider *agentzv1alpha1.InferenceProvider, model stri
 			auth.SecretRef = secretRef
 			auth.Location = headerLocation("api-key", "")
 		default:
+			target.AdditionalHosts = []string{"login.microsoftonline.com"}
 			target.secretKeys[credentialClientID] = credentialClientID
 			target.secretKeys[credentialTenantID] = credentialTenantID
 			target.secretKeys[credentialClientSecret] = credentialClientSecret

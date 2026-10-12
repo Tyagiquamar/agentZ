@@ -507,20 +507,12 @@ export function Consent({
   )
 }
 
-export function ResumeAuthorization({
-  oauthQuery,
-  consent = false,
-}: {
-  oauthQuery: string
-  consent?: boolean
-}) {
+export function ResumeAuthorization({ oauthQuery }: { oauthQuery: string }) {
   const [error, setError] = useState<string>()
   useEffect(() => {
     let active = true
-    const continuation = consent
-      ? authClient.oauth2.consent({ oauth_query: oauthQuery, accept: true })
-      : authClient.oauth2.continue({ oauth_query: oauthQuery, selected: true })
-    void continuation
+    void authClient.oauth2
+      .consent({ oauth_query: oauthQuery, accept: true })
       .then((result) => {
         if (!active) return
         if (result.error) {
@@ -539,7 +531,7 @@ export function ResumeAuthorization({
     return () => {
       active = false
     }
-  }, [oauthQuery, consent])
+  }, [oauthQuery])
   return (
     <AuthorizationState
       title={error ? "We couldn't connect this app" : "Connecting to your app"}

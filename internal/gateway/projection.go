@@ -141,7 +141,12 @@ func (s *Service) reconcileDelegations(ctx context.Context) error {
 		}
 	}
 	// Grant routes are written by the gateway, never by external applications.
-	lists := []ctrlclient.ObjectList{&gwv1.HTTPRouteList{}, &agw.AgentgatewayBackendList{}, &agw.AgentgatewayPolicyList{}, &ciliumv2.CiliumNetworkPolicyList{}}
+	lists := []ctrlclient.ObjectList{
+		&gwv1.HTTPRouteList{},
+		&agw.AgentgatewayBackendList{},
+		&agw.AgentgatewayPolicyList{},
+		&ciliumv2.CiliumNetworkPolicyList{},
+	}
 	for _, list := range lists {
 		err := s.k8sClient.List(ctx, list, ctrlclient.HasLabels{authorization.DelegationLabel})
 		if err != nil {
@@ -192,6 +197,12 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 			Host: target.LLM.Host,
 			Port: target.LLM.Port,
 		})
+		for _, host := range target.AdditionalHosts {
+			ownerEgress[selected.Namespace] = append(ownerEgress[selected.Namespace], networkpolicy.Target{
+				Host: host,
+				Port: 443,
+			})
+		}
 		backend := &agw.AgentgatewayBackend{
 			TypeMeta:   metav1.TypeMeta{APIVersion: agw.GroupVersion.String(), Kind: "AgentgatewayBackend"},
 			ObjectMeta: metav1.ObjectMeta{Namespace: selected.Namespace, Name: name},
@@ -205,7 +216,13 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 				},
 			},
 		}
-		route := s.delegationRoute(selected.Namespace, inference.GatewayName, name, fmt.Sprintf("/delegations/%s/models/%d", grant.ID, index), false)
+		route := s.delegationRoute(
+			selected.Namespace,
+			inference.GatewayName,
+			name,
+			fmt.Sprintf("/delegations/%s/models/%d", grant.ID, index),
+			false,
+		)
 		objects = append(objects, backend, route)
 		// Keep the owner route intact through the shared private ingress. Only the
 		// owner gateway rewrites it to the provider's API and injects credentials.
@@ -220,7 +237,13 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 				Policies: &agw.BackendFull{BackendSimple: agw.BackendSimple{HTTP: &agw.BackendHTTP{Version: new(agw.HTTPVersion2)}}},
 			},
 		}
-		entry := s.delegationRoute(s.cfg.DelegationNamespace, "delegations", name, fmt.Sprintf("/delegations/%s/models/%d", grant.ID, index), false)
+		entry := s.delegationRoute(
+			s.cfg.DelegationNamespace,
+			"delegations",
+			name,
+			fmt.Sprintf("/delegations/%s/models/%d", grant.ID, index),
+			false,
+		)
 		entry.Spec.Rules[0].Filters = nil
 		objects = append(objects, forward, entry)
 		aggregationEgress = append(aggregationEgress, networkpolicy.ServiceEgress(selected.Namespace, inference.GatewayName, 8080)...)
@@ -324,15 +347,29 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 				},
 			})
 		}
-		objects = append(objects, outer, s.delegationRoute(s.cfg.DelegationNamespace, "delegations", name, "/delegations/"+grant.ID+"/mcp", true))
+		objects = append(
+			objects,
+			outer,
+			s.delegationRoute(
+				s.cfg.DelegationNamespace,
+				"delegations",
+				name,
+				"/delegations/"+grant.ID+"/mcp",
+				true,
+			),
+		)
 	}
 	if len(aggregationEgress) > 0 {
 		objects = append(objects, &ciliumv2.CiliumNetworkPolicy{
 			TypeMeta:   metav1.TypeMeta{APIVersion: "cilium.io/v2", Kind: "CiliumNetworkPolicy"},
 			ObjectMeta: metav1.ObjectMeta{Name: "d-" + grant.ID, Namespace: s.cfg.DelegationNamespace},
 			Spec: &ciliumapi.Rule{
-				EndpointSelector: ciliumapi.NewESFromLabels(ciliumlabels.NewLabel("gateway.networking.k8s.io/gateway-name", "delegations", ciliumlabels.LabelSourceK8s)),
-				Egress:           aggregationEgress,
+				EndpointSelector: ciliumapi.NewESFromLabels(ciliumlabels.NewLabel(
+					"gateway.networking.k8s.io/gateway-name",
+					"delegations",
+					ciliumlabels.LabelSourceK8s,
+				)),
+				Egress: aggregationEgress,
 			},
 		})
 	}
@@ -342,12 +379,24 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 			TypeMeta:   metav1.TypeMeta{APIVersion: "cilium.io/v2", Kind: "CiliumNetworkPolicy"},
 			ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: "d-" + grant.ID},
 			Spec: &ciliumapi.Rule{
-				EndpointSelector: ciliumapi.NewESFromLabels(ciliumlabels.NewLabel("gateway.networking.k8s.io/gateway-name", inference.GatewayName, ciliumlabels.LabelSourceK8s)),
+				EndpointSelector: ciliumapi.NewESFromLabels(ciliumlabels.NewLabel(
+					"gateway.networking.k8s.io/gateway-name",
+					inference.GatewayName,
+					ciliumlabels.LabelSourceK8s,
+				)),
 				Ingress: []ciliumapi.IngressRule{{
 					IngressCommonRule: ciliumapi.IngressCommonRule{FromEndpoints: []ciliumapi.EndpointSelector{
 						ciliumapi.NewESFromLabels(
-							ciliumlabels.NewLabel("io.cilium.k8s.policy.serviceaccount", s.cfg.GatewayServiceAccountName, ciliumlabels.LabelSourceK8s),
-							ciliumlabels.NewLabel("io.kubernetes.pod.namespace", s.cfg.GatewayServiceAccountNamespace, ciliumlabels.LabelSourceK8s),
+							ciliumlabels.NewLabel(
+								"io.cilium.k8s.policy.serviceaccount",
+								s.cfg.GatewayServiceAccountName,
+								ciliumlabels.LabelSourceK8s,
+							),
+							ciliumlabels.NewLabel(
+								"io.kubernetes.pod.namespace",
+								s.cfg.GatewayServiceAccountNamespace,
+								ciliumlabels.LabelSourceK8s,
+							),
 						),
 						ciliumapi.NewESFromLabels(
 							ciliumlabels.NewLabel("gateway.networking.k8s.io/gateway-name", "delegations", ciliumlabels.LabelSourceK8s),
@@ -367,7 +416,11 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 		policy.Spec.Egress = append(policy.Spec.Egress, networkpolicy.ServiceEgress("agentgateway-system", "agentgateway", 9978)...)
 		mcpPolicy := policy.DeepCopy()
 		mcpPolicy.Name += "-mcp"
-		mcpPolicy.Spec.EndpointSelector = ciliumapi.NewESFromLabels(ciliumlabels.NewLabel("gateway.networking.k8s.io/gateway-name", mcp.GatewayName, ciliumlabels.LabelSourceK8s))
+		mcpPolicy.Spec.EndpointSelector = ciliumapi.NewESFromLabels(ciliumlabels.NewLabel(
+			"gateway.networking.k8s.io/gateway-name",
+			mcp.GatewayName,
+			ciliumlabels.LabelSourceK8s,
+		))
 		mcpPolicy.Spec.Ingress[0].FromEndpoints = mcpPolicy.Spec.Ingress[0].FromEndpoints[1:]
 		objects = append(objects, policy, mcpPolicy)
 	}

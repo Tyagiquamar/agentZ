@@ -31,6 +31,7 @@ type SignInFormProps = {
   actions: Record<SocialProvider, (formData: FormData) => Promise<void>>
   providers: SocialProvider[]
   returnTo?: string
+  oauthQuery?: string
   routeError?: AuthError
   routeProvider?: SocialProvider
   showPasswordAuth: boolean
@@ -42,6 +43,7 @@ export function SignInForm({
   actions,
   providers,
   returnTo,
+  oauthQuery,
   routeError,
   routeProvider,
   showPasswordAuth,
@@ -100,7 +102,7 @@ export function SignInForm({
       }
 
       if (twoFactorRedirectResponseSchema.safeParse(result.data).success) {
-        const search = new URLSearchParams()
+        const search = new URLSearchParams(oauthQuery)
         if (returnTo) {
           search.set("returnTo", returnTo)
         }
@@ -110,7 +112,7 @@ export function SignInForm({
         return
       }
 
-      window.location.replace(returnTo ?? "/")
+      window.location.replace(result.data.url ?? returnTo ?? "/")
     })
   }
 
@@ -247,6 +249,7 @@ export function SignInForm({
             errors={providerErrors}
             providers={providers}
             returnTo={returnTo}
+            hiddenFields={{ oauth_query: oauthQuery }}
             submitLabel="Sign in"
             pendingProvider={pendingProvider}
             onPendingChangeAction={(provider) => {

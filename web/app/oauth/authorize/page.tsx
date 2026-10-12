@@ -48,10 +48,7 @@ async function AuthorizeContent({ searchParams }: PageProps<"/oauth/authorize">)
   if (!(await verifyOAuthQueryParams(oauthQuery, getEnv().BETTER_AUTH_SECRET)))
     return expiredRequest
   const session = await getAuthSession()
-  if (!session) redirect(`/signin?returnTo=${encodeURIComponent(`/oauth/authorize?${oauthQuery}`)}`)
-  if (!params.has("agentz_tx")) {
-    return <ResumeAuthorization oauthQuery={oauthQuery} />
-  }
+  if (!session || !params.has("agentz_tx")) redirect(`/signin?${oauthQuery}`)
   const transaction = await delegationTransaction(
     oauthQuery,
     session.session.user.id,
@@ -74,7 +71,7 @@ async function AuthorizeContent({ searchParams }: PageProps<"/oauth/authorize">)
         description="This application can no longer connect to AgentZ. Contact the app owner for help."
       />
     )
-  if (transaction.grantId) return <ResumeAuthorization oauthQuery={oauthQuery} consent />
+  if (transaction.grantId) return <ResumeAuthorization oauthQuery={oauthQuery} />
   const organizations = await getDB()
     .select({ id: schema.organizations.id, name: schema.organizations.name })
     .from(schema.members)

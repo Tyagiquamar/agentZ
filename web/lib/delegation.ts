@@ -9,6 +9,7 @@ import {
   oauthProvider,
   verifyOAuthQueryParams,
   type OAuthClaimExtensionInput,
+  type OAuthAuthorizationQuery,
   type OAuthRefreshToken,
 } from "@better-auth/oauth-provider"
 import { z } from "zod"
@@ -272,7 +273,7 @@ export function agentZOAuthProvider(issuer: string) {
     return { agentz_grant_id: grant.id }
   }
   const provider = oauthProvider({
-    loginPage: "/oauth/authorize",
+    loginPage: "/signin",
     consentPage: "/oauth/authorize",
     scopes: delegationScopes,
     grantTypes: ["authorization_code", "refresh_token"],
@@ -358,12 +359,18 @@ export function agentZOAuthProvider(issuer: string) {
           return false
         }
 
-        const query = z
-          .object({
-            client_id: z.string(),
-            resource: z.union([z.string(), z.array(z.string())]).optional(),
-          })
-          .parse(ctx.query)
+        // Better Auth has validated this query and applied the client's defaults.
+        const query: OAuthAuthorizationQuery = ctx.query
+        const authorizationQuery = new URLSearchParams()
+        for (const [key, values] of Object.entries(query)) {
+          if (values === undefined) continue
+          for (const value of [values].flat()) {
+            authorizationQuery.append(
+              key,
+              key === "claims" ? JSON.stringify(value) : value.toString()
+            )
+          }
+        }
         const resources = query.resource ? [query.resource].flat() : []
         if (
           (scopes.includes("inference:use") && !resources.includes(inferenceResource)) ||
@@ -409,7 +416,7 @@ export function agentZOAuthProvider(issuer: string) {
             clientId: query.client_id,
             userId: user.id,
             sessionId: session.id,
-            authorizationQuery: state?.query ?? "",
+            authorizationQuery: authorizationQuery.toString(),
             scopes,
             resources,
             grantId: reusable?.id ?? null,

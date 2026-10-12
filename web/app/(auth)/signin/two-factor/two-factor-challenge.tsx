@@ -18,6 +18,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 type TwoFactorChallengeProps = {
   returnTo: string
+  oauth: boolean
 }
 
 type ChallengeMode = "totp" | "backup"
@@ -45,7 +46,7 @@ const challengeSchemas = {
 
 type TwoFactorChallengeValues = z.infer<(typeof challengeSchemas)["totp"]>
 
-export function TwoFactorChallenge({ returnTo }: TwoFactorChallengeProps) {
+export function TwoFactorChallenge({ returnTo, oauth }: TwoFactorChallengeProps) {
   const [mode, setMode] = React.useState<ChallengeMode>("totp")
   const [pending, setPending] = React.useState(false)
   const [redirecting, setRedirecting] = React.useState(false)
@@ -92,7 +93,11 @@ export function TwoFactorChallenge({ returnTo }: TwoFactorChallengeProps) {
         if (invalidChallengeMessages.has(message)) {
           redirected = true
           setRedirecting(true)
-          window.location.replace(signInURL({ error: "session_expired", returnTo }))
+          window.location.replace(
+            oauth
+              ? `/signin${window.location.search}&error=session_expired`
+              : signInURL({ error: "session_expired", returnTo })
+          )
           return
         }
 
@@ -105,7 +110,7 @@ export function TwoFactorChallenge({ returnTo }: TwoFactorChallengeProps) {
 
       redirected = true
       setRedirecting(true)
-      window.location.replace(returnTo)
+      if (!oauth) window.location.replace(returnTo)
     } catch {
       form.setError("code", {
         type: "server",
@@ -223,7 +228,9 @@ export function TwoFactorChallenge({ returnTo }: TwoFactorChallengeProps) {
               disabled={locked}
               onClick={() => {
                 setRedirecting(true)
-                window.location.replace(signInURL({ returnTo }))
+                window.location.replace(
+                  oauth ? `/signin${window.location.search}` : signInURL({ returnTo })
+                )
               }}
             >
               Back
