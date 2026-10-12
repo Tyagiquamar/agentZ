@@ -1,10 +1,9 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
-import * as z from "zod"
 import { headers } from "next/headers"
 import { redirect } from "next/navigation"
-import { getAuth } from "@/lib/auth"
-import { searchParamStringSchema, type SearchParamStringInput } from "@/lib/search-params"
+import { AuthorizationState } from "@/app/oauth/authorize/authorization-state"
+import { authPageParameters, getAuth } from "@/lib/auth"
 import { signInReturnTo } from "@/lib/sign-in-redirect"
 import { TwoFactorChallenge } from "./two-factor-challenge"
 
@@ -12,19 +11,7 @@ export const metadata: Metadata = {
   title: "Verify Sign In",
 }
 
-const twoFactorSearchParamsSchema = z.object({
-  returnTo: searchParamStringSchema,
-})
-
-type TwoFactorPageSearchParams = {
-  returnTo?: SearchParamStringInput
-}
-
-export default async function TwoFactorPage({
-  searchParams,
-}: {
-  searchParams: Promise<TwoFactorPageSearchParams>
-}) {
+export default function TwoFactorPage({ searchParams }: PageProps<"/signin/two-factor">) {
   return (
     <Suspense fallback={<TwoFactorChallengeFallback />}>
       <TwoFactorGate searchParams={searchParams} />
@@ -34,24 +21,30 @@ export default async function TwoFactorPage({
 
 async function TwoFactorGate({
   searchParams,
-}: {
-  searchParams: Promise<TwoFactorPageSearchParams>
-}) {
+}: Pick<PageProps<"/signin/two-factor">, "searchParams">) {
   const requestHeaders = await headers()
   const auth = getAuth()
-  const params = twoFactorSearchParamsSchema.parse(await searchParams)
+  const params = await authPageParameters(await searchParams)
+  const { oauthQuery } = params
+  if (params.expired)
+    return (
+      <AuthorizationState
+        title="This connection request expired"
+        description="Return to the app you were connecting and reattempt sign in."
+      />
+    )
   const returnTo = signInReturnTo(params.returnTo) ?? "/"
   const session = await auth.api.getSession({
     headers: requestHeaders,
   })
 
-  if (session) {
+  if (session && !oauthQuery) {
     redirect(returnTo)
   }
 
   return (
     <div className="flex min-h-svh w-full justify-center px-6 py-10 md:px-10 md:py-14">
-      <TwoFactorChallenge returnTo={returnTo} />
+      <TwoFactorChallenge returnTo={returnTo} oauth={!!oauthQuery} />
     </div>
   )
 }

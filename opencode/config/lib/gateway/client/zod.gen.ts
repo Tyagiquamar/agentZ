@@ -2,6 +2,33 @@
 
 import * as z from "zod"
 
+export const zDelegationModel = z.object({
+  id: z.string().min(1),
+  workspace_id: z.string().min(1),
+  namespace: z.string().min(1),
+  provider: z.string().min(1),
+  provider_display_name: z.string(),
+  uid: z.string().min(1),
+  model: z.string().min(1),
+  model_display_name: z.string(),
+})
+
+export const zDelegationMcp = z.object({
+  id: z.string().min(1),
+  workspace_id: z.string().min(1),
+  namespace: z.string().min(1),
+  connection: z.string().min(1),
+  uid: z.string().min(1),
+  tools: z.array(z.string().min(1)),
+  prompts: z.array(z.string().min(1)),
+  resources: z.array(z.string().min(1)),
+})
+
+export const zDelegationCatalog = z.object({
+  models: z.array(zDelegationModel),
+  mcp: z.array(zDelegationMcp),
+})
+
 export const zChatSessionKind = z.enum(["chat", "workflow_run"])
 
 export const zChatSessionStatus = z.enum(["idle", "busy", "retry"])
@@ -3798,6 +3825,19 @@ export const zDashboardWidgetNamePath = zDashboardWidgetName
  * Stable publish call identifier.
  */
 export const zIdempotencyKeyHeader = z.string().min(1).max(128)
+
+export const zGetDelegationCatalogHeaders = z.object({
+  "X-AgentZ-Workspace-ID": z.string().min(1).max(128).optional(),
+})
+
+export const zGetDelegationCatalogQuery = z.object({
+  include_unavailable: z.boolean().optional().default(false),
+})
+
+/**
+ * Exact selectable capabilities.
+ */
+export const zGetDelegationCatalogResponse = zDelegationCatalog
 
 /**
  * The actor's projects.

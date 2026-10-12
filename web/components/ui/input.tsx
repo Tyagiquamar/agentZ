@@ -28,7 +28,7 @@ const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
   }
 
   return (
-    <div className="relative">
+    <div className="relative w-full min-w-0">
       <input
         ref={ref}
         type={revealed ? "text" : "password"}

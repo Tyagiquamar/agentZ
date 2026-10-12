@@ -34,7 +34,7 @@ type ptyWebSocketCase struct {
 // TestPTYWebSocketAuthentication keeps browser bearers out of upstream protocols.
 func TestPTYWebSocketAuthentication(t *testing.T) {
 	service := &Service{cfg: Config{AllowedWebOrigins: []string{"https://app.example.com"}}}
-	for _, test := range []ptyWebSocketCase{
+	cases := []ptyWebSocketCase{
 		{
 			"allowed origin",
 			"https://app.example.com",
@@ -48,7 +48,8 @@ func TestPTYWebSocketAuthentication(t *testing.T) {
 			http.StatusForbidden,
 		},
 		{"missing origin", "", "agentz.pty, agentz.bearer.test-token", http.StatusForbidden},
-	} {
+	}
+	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
 			request := httptest.NewRequest(http.MethodGet, "/api/opencode/test/pty/pty_test/connect", nil)
 			request.Header.Set("Upgrade", "websocket")
@@ -96,14 +97,16 @@ func TestPTYProxyOrigins(t *testing.T) {
 	s := &Service{
 		cfg: Config{AllowedWebOrigins: []string{"https://app.example.com"}},
 		resolver: &resolver{
-			agents: listersv1alpha1.NewAgentLister(index), targetOverride: upstream.URL,
+			agents:         listersv1alpha1.NewAgentLister(index),
+			targetOverride: upstream.URL,
 		},
 	}
 	router := chi.NewRouter()
 	router.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := context.WithValue(r.Context(), authContextKey{}, requestAuth{
-				actorType: requestActorSystem, tenantNamespace: "workspace",
+				actorType:       requestActorSystem,
+				tenantNamespace: "workspace",
 			})
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
@@ -115,7 +118,8 @@ func TestPTYProxyOrigins(t *testing.T) {
 		"null",
 		"https://app.example.com.attacker.example",
 	}
-	for _, prefix := range []string{"/pty", "/api/pty"} {
+	prefixes := []string{"/pty", "/api/pty"}
+	for _, prefix := range prefixes {
 		for _, origin := range origins {
 			t.Run(prefix+"/"+origin, func(t *testing.T) {
 				req := httptest.NewRequest(http.MethodPost,
@@ -147,11 +151,12 @@ type openCodeStreamCase struct {
 
 // TestOpenCodeEventTransport exercises native envelopes and large multiline frames.
 func TestOpenCodeEventTransport(t *testing.T) {
-	for _, test := range []openCodeStreamCase{
+	cases := []openCodeStreamCase{
 		{name: "coding global", coding: true, global: true, upstream: "/event"},
 		{name: "coding scoped", coding: true, upstream: "/event"},
 		{name: "general global", global: true, upstream: "/global/event"},
-	} {
+	}
+	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
 			delta := gatewayapi.OpencodeEventMessagePartDelta{
 				Id:   "evt_test",
@@ -256,8 +261,11 @@ func TestAPIKeyPromptIdentity(t *testing.T) {
 		strings.NewReader(`{"parts":[{"type":"text","text":"hello"}]}`),
 	)
 	auth := requestAuth{
-		actorType: requestActorAPIKey, actorID: "key_test", actorName: "Terminal key",
-		userID: "user_test", userName: "Terminal user",
+		actorType: requestActorAPIKey,
+		actorID:   "key_test",
+		actorName: "Terminal key",
+		userID:    "user_test",
+		userName:  "Terminal user",
 	}
 	route := &opencodeRouteMatch{ID: "session.prompt"}
 	if err := attributeOpenCodePrompt(req, route, auth); err != nil {
@@ -295,7 +303,7 @@ type codingModelCase struct {
 // TestCodingSuggestionModels exercises model precedence across the OpenCode
 // boundary, including scoped sandbox access and session cleanup on failure.
 func TestCodingSuggestionModels(t *testing.T) {
-	for _, test := range []codingModelCase{
+	cases := []codingModelCase{
 		{name: "small", small: true},
 		{name: "thread"},
 		{name: "default", noParent: true},
@@ -306,7 +314,8 @@ func TestCodingSuggestionModels(t *testing.T) {
 		{name: "model failure", small: true, failure: true},
 		{name: "branch output", small: true, purpose: gatewayapi.CodingTextBranch},
 		{name: "PR output", small: true, purpose: gatewayapi.CodingTextPR},
-	} {
+	}
+	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			purpose := test.purpose
@@ -324,7 +333,8 @@ func TestCodingSuggestionModels(t *testing.T) {
 				agentzv1alpha1.ResourceScopeOrganisation, "org",
 			)
 			ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
-				Name: "workspace", Labels: map[string]string{
+				Name: "workspace",
+				Labels: map[string]string{
 					agentzv1alpha1.WorkspaceNameLabel:        "workspace",
 					agentzv1alpha1.TenantOrganizationIDLabel: org,
 				},
@@ -341,7 +351,8 @@ func TestCodingSuggestionModels(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "agent", Namespace: ns.Name},
 			}
 			agent.Spec.SandboxRef = agentzv1alpha1.ResourceReference{
-				Name: "sandbox", Scope: agentzv1alpha1.ResourceScopeWorkspace,
+				Name:  "sandbox",
+				Scope: agentzv1alpha1.ResourceScopeWorkspace,
 			}
 			sandbox := &agentzv1alpha1.Sandbox{
 				ObjectMeta: metav1.ObjectMeta{Name: "sandbox", Namespace: ns.Name},
@@ -352,8 +363,9 @@ func TestCodingSuggestionModels(t *testing.T) {
 			}
 			if test.small {
 				sandbox.Spec.Inference.SmallModel = &agentzv1alpha1.InferenceModelRef{
-					Provider: "small-provider", Model: "family/small",
-					Scope: agentzv1alpha1.ResourceScopeWorkspace,
+					Provider: "small-provider",
+					Model:    "family/small",
+					Scope:    agentzv1alpha1.ResourceScopeWorkspace,
 				}
 			}
 			k8s := fake.NewClientBuilder().
@@ -370,7 +382,9 @@ func TestCodingSuggestionModels(t *testing.T) {
 				t.Fatal(err)
 			}
 			parent := &gatewayapi.OpencodeModelRef{
-				ProviderID: "thread-provider", Id: "thread", Variant: new("high"),
+				ProviderID: "thread-provider",
+				Id:         "thread",
+				Variant:    new("high"),
 			}
 			if test.noParent {
 				parent = nil
@@ -378,7 +392,8 @@ func TestCodingSuggestionModels(t *testing.T) {
 			want := parent
 			if test.small {
 				want = &gatewayapi.OpencodeModelRef{
-					ProviderID: "small-provider", Id: "family/small",
+					ProviderID: "small-provider",
+					Id:         "family/small",
 				}
 			}
 			calls := make(chan string, 10)
@@ -453,7 +468,8 @@ func TestCodingSuggestionModels(t *testing.T) {
 			}))
 			defer server.Close()
 			svc := &Service{
-				k8sClient: k8s, outboundHTTP: server.Client(),
+				k8sClient:    k8s,
+				outboundHTTP: server.Client(),
 				cfg: Config{
 					FilesystemTargetOverride: strings.TrimPrefix(server.URL, "http://"),
 				},
@@ -491,7 +507,8 @@ func TestCodingSuggestionModels(t *testing.T) {
 				}
 				if purpose == gatewayapi.CodingTextPR {
 					want := gatewayapi.CodingPullRequestText{
-						Title: "Fix behavior", Body: "Explain the change",
+						Title: "Fix behavior",
+						Body:  "Explain the change",
 					}
 					if result.PullRequest == nil || *result.PullRequest != want {
 						t.Fatalf("PR = %+v, want %+v", result.PullRequest, want)
@@ -559,14 +576,16 @@ type admissionCase struct {
 // TestChatInputAdmissionRecovery checks that retry cannot release an uncertain
 // provider request, while a confirmed missing input becomes editable again.
 func TestChatInputAdmissionRecovery(t *testing.T) {
-	for _, tt := range []admissionCase{
+	cases := []admissionCase{
 		{
-			name: "admitted", messages: []int{http.StatusOK},
-			want: gatewayapi.ChatInputStateDelivered,
+			name:     "admitted",
+			messages: []int{http.StatusOK},
+			want:     gatewayapi.ChatInputStateDelivered,
 		},
 		{
-			name: "late admission", messages: []int{http.StatusNotFound, http.StatusOK},
-			want: gatewayapi.ChatInputStateDelivered,
+			name:     "late admission",
+			messages: []int{http.StatusNotFound, http.StatusOK},
+			want:     gatewayapi.ChatInputStateDelivered,
 		},
 		{
 			name:     "never admitted",
@@ -580,18 +599,22 @@ func TestChatInputAdmissionRecovery(t *testing.T) {
 			want:     gatewayapi.ChatInputStateFailed,
 		},
 		{
-			name: "busy", messages: []int{http.StatusNotFound},
-			status: `{"ses_test":{"type":"busy"}}`,
-			want:   gatewayapi.ChatInputStateSending,
+			name:     "busy",
+			messages: []int{http.StatusNotFound},
+			status:   `{"ses_test":{"type":"busy"}}`,
+			want:     gatewayapi.ChatInputStateSending,
 		},
 		{
-			name: "retrying", messages: []int{http.StatusNotFound},
-			status: `{"ses_test":{"type":"retry","attempt":1,"message":"retry","next":1}}`,
-			want:   gatewayapi.ChatInputStateSending,
+			name:     "retrying",
+			messages: []int{http.StatusNotFound},
+			status:   `{"ses_test":{"type":"retry","attempt":1,"message":"retry","next":1}}`,
+			want:     gatewayapi.ChatInputStateSending,
 		},
 		{
-			name: "execution lease", messages: []int{http.StatusNotFound},
-			active: true, want: gatewayapi.ChatInputStateSending,
+			name:     "execution lease",
+			messages: []int{http.StatusNotFound},
+			active:   true,
+			want:     gatewayapi.ChatInputStateSending,
 		},
 		{name: "provider error", messages: []int{http.StatusServiceUnavailable}, wantErr: true},
 		{name: "forbidden", messages: []int{http.StatusForbidden}, wantErr: true},
@@ -602,16 +625,22 @@ func TestChatInputAdmissionRecovery(t *testing.T) {
 			wantErr:  true,
 		},
 		{
-			name: "invalid status", messages: []int{http.StatusNotFound},
-			status: `invalid`, wantErr: true,
+			name:     "invalid status",
+			messages: []int{http.StatusNotFound},
+			status:   `invalid`,
+			wantErr:  true,
 		},
-	} {
+	}
+	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
 			row := gatewaydb.ChatInput{
-				WorkspaceID: "workspace", AgentName: "agent",
-				SessionID: "ses_test", MessageID: "msg_test", Revision: 1,
-				State:     string(gatewayapi.ChatInputStateSending),
-				UpdatedAt: time.Now().Add(-2 * time.Minute),
+				WorkspaceID: "workspace",
+				AgentName:   "agent",
+				SessionID:   "ses_test",
+				MessageID:   "msg_test",
+				Revision:    1,
+				State:       string(gatewayapi.ChatInputStateSending),
+				UpdatedAt:   time.Now().Add(-2 * time.Minute),
 			}
 			if tt.failed {
 				row.State = string(gatewayapi.ChatInputStateFailed)

@@ -3,9 +3,7 @@ package inference
 import (
 	"context"
 	"testing"
-	"time"
 
-	agentgatewayv1alpha1 "github.com/agentgateway/agentgateway/controller/api/v1alpha1/agentgateway"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -18,12 +16,6 @@ type validateProviderCase struct {
 	name  string
 	spec  agentzv1alpha1.InferenceProviderSpec
 	valid bool
-}
-
-type renderRuntimeCompatibleFormatCase struct {
-	name     string
-	kind     agentzv1alpha1.InferenceProviderKind
-	expected []agentgatewayv1alpha1.ProviderFormat
 }
 
 func TestValidateProvider(t *testing.T) {
@@ -62,7 +54,8 @@ func TestValidateProvider(t *testing.T) {
 				spec := providerSpec(agentzv1alpha1.InferenceProviderKindOpenAICompatible)
 				spec.OpenAICompatible.AllowPrivateEndpoint = true
 				spec.OpenAICompatible.Headers = []agentzv1alpha1.InferenceProviderHeader{{
-					Name: "x-api-key", Value: "not-secret",
+					Name:  "x-api-key",
+					Value: "not-secret",
 				}}
 				return spec
 			}(),
@@ -92,7 +85,8 @@ func TestValidateProvider(t *testing.T) {
 				spec := providerSpec(agentzv1alpha1.InferenceProviderKindOpenAICompatible)
 				spec.OpenAICompatible.AllowPrivateEndpoint = true
 				spec.OpenAICompatible.Headers = []agentzv1alpha1.InferenceProviderHeader{{
-					Name: "x-environment", Value: "safe\r\nforwarded: injected",
+					Name:  "x-environment",
+					Value: "safe\r\nforwarded: injected",
 				}}
 				return spec
 			}(),
@@ -149,7 +143,8 @@ func TestCredentials(t *testing.T) {
 	record, changed, err := CredentialsForUpdate(
 		bedrock,
 		CredentialValues{
-			AccessKey: "access", SecretKey: "secret",
+			AccessKey: "access",
+			SecretKey: "secret",
 		},
 	)
 	if err != nil || !changed {
@@ -180,56 +175,12 @@ func TestCredentials(t *testing.T) {
 	_, _, err = CredentialsForUpdate(
 		bedrock,
 		CredentialValues{
-			AccessKey: "access", SecretKey: "secret",
+			AccessKey: "access",
+			SecretKey: "secret",
 		},
 	)
 	if err == nil {
 		t.Fatal("CredentialsForUpdate() accepted access keys in bearer-token mode")
-	}
-}
-
-func TestRenderRuntimeCompatibleFormats(t *testing.T) {
-	t.Parallel()
-
-	tests := []renderRuntimeCompatibleFormatCase{
-		{
-			name:     "openai compatible",
-			kind:     agentzv1alpha1.InferenceProviderKindOpenAICompatible,
-			expected: []agentgatewayv1alpha1.ProviderFormat{agentgatewayv1alpha1.ProviderFormatCompletions},
-		},
-		{
-			name: "anthropic compatible",
-			kind: agentzv1alpha1.InferenceProviderKindAnthropicCompatible,
-			expected: []agentgatewayv1alpha1.ProviderFormat{
-				agentgatewayv1alpha1.ProviderFormatMessages,
-				agentgatewayv1alpha1.ProviderFormatAnthropicTokenCount,
-			},
-		},
-	}
-	for _, test := range tests {
-		t.Run(
-			test.name,
-			func(t *testing.T) {
-				t.Parallel()
-				provider := &agentzv1alpha1.InferenceProvider{
-					ObjectMeta: metav1.ObjectMeta{Name: "provider", Namespace: "default"},
-					Spec:       providerSpec(test.kind),
-				}
-				runtime, err := RenderRuntime(provider, "openbao", time.Hour)
-				if err != nil {
-					t.Fatalf("RenderRuntime() error = %v", err)
-				}
-				formats := runtime.Backend.Spec.AI.LLM.Custom.Formats
-				if len(formats) != len(test.expected) {
-					t.Fatalf("RenderRuntime() formats = %#v, want %#v", formats, test.expected)
-				}
-				for i, expected := range test.expected {
-					if formats[i].Type != expected {
-						t.Fatalf("RenderRuntime() format %d = %q, want %q", i, formats[i].Type, expected)
-					}
-				}
-			},
-		)
 	}
 }
 
@@ -315,7 +266,9 @@ func TestValidateModelRemovalRejectsPoolReference(t *testing.T) {
 	pool := &agentzv1alpha1.InferencePool{
 		ObjectMeta: metav1.ObjectMeta{Name: "pool", Namespace: "default"},
 		Spec: agentzv1alpha1.InferencePoolSpec{Members: []agentzv1alpha1.InferencePoolMember{{
-			Scope: agentzv1alpha1.ResourceScopeOrganisation, Provider: current.Name, Model: "model",
+			Scope:    agentzv1alpha1.ResourceScopeOrganisation,
+			Provider: current.Name,
+			Model:    "model",
 		}}},
 	}
 	scheme := runtime.NewScheme()
@@ -380,7 +333,8 @@ func providerSpec(providerKind agentzv1alpha1.InferenceProviderKind) agentzv1alp
 	case agentzv1alpha1.InferenceProviderKindBedrock:
 		spec.CatalogProvider = "amazon-bedrock"
 		spec.Bedrock = &agentzv1alpha1.BedrockProviderConfig{
-			Region: "us-east-1", AuthMode: agentzv1alpha1.BedrockAuthModeAccessKey,
+			Region:   "us-east-1",
+			AuthMode: agentzv1alpha1.BedrockAuthModeAccessKey,
 		}
 	case agentzv1alpha1.InferenceProviderKindOpenAICompatible:
 		spec.CatalogProvider = "custom"
@@ -402,4 +356,103 @@ func providerSpec(providerKind agentzv1alpha1.InferenceProviderKind) agentzv1alp
 		}
 	}
 	return spec
+}
+
+type delegationInferenceCase struct {
+	name, body string
+	responses  bool
+	allowed    bool
+}
+
+func TestDelegatedAnthropicRequiresChatCompletions(t *testing.T) {
+	t.Parallel()
+	body := []byte(`{"model":"selected","store":false,"stream":true,"instructions":"Play chess"}`)
+	responses, err := ValidateDelegatedRequest(body, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	chat, err := ValidateDelegatedRequest(body, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kinds := []agentzv1alpha1.InferenceProviderKind{
+		agentzv1alpha1.InferenceProviderKindAnthropic,
+		agentzv1alpha1.InferenceProviderKindAnthropicCompatible,
+	}
+	for _, kind := range kinds {
+		if err := responses.ValidateProvider(kind); err == nil {
+			t.Errorf("%s accepted an unsupported Responses request", kind)
+		}
+		if err := chat.ValidateProvider(kind); err != nil {
+			t.Errorf("%s rejected Chat Completions: %v", kind, err)
+		}
+	}
+}
+
+func TestDelegatedCodexRequiresResponsesStreaming(t *testing.T) {
+	cases := []delegationInferenceCase{
+		{"chat completions", `{"model":"selected","store":false,"stream":true}`, false, false},
+		{"non-streaming responses", `{"model":"selected","store":false,"instructions":"Be helpful","stream":false}`, true, false},
+		{"missing instructions", `{"model":"selected","store":false,"stream":true}`, true, false},
+		{"valid responses", `{"model":"selected","store":false,"instructions":"Be helpful","stream":true}`, true, true},
+		{"case sensitive stream", `{"model":"selected","store":false,"instructions":"Be helpful","stream":false,"STREAM":true}`, true, false},
+		{"case sensitive instructions", `{"model":"selected","store":false,"INSTRUCTIONS":"Be helpful","stream":true}`, true, false},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			input, err := ValidateDelegatedRequest([]byte(test.body), test.responses)
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = input.ValidateProvider(agentzv1alpha1.InferenceProviderKindOpenAICodex)
+			if (err == nil) != test.allowed {
+				t.Fatalf("allowed %v, want %v: %v", err == nil, test.allowed, err)
+			}
+			err = input.ValidateProvider(agentzv1alpha1.InferenceProviderKindOpenAI)
+			if err != nil {
+				t.Fatalf("Codex constraints applied to an API-key provider: %v", err)
+			}
+		})
+	}
+}
+
+func TestDelegatedInferenceRejectsProviderResourceBypasses(t *testing.T) {
+	cases := []delegationInferenceCase{
+		{"chat", `{"model":"selected","messages":[{"role":"user","content":"hi"}]}`, false, true},
+		{"responses", `{"model":"selected","store":false,"input":"hi"}`, true, true},
+		{"explicit previous message", `{"model":"selected","store":false,"input":[{"type":"message","id":"msg-inline","role":"assistant","content":[{"type":"output_text","text":"hi"}]}]}`, true, true},
+		{"implicit item reference", `{"model":"selected","store":false,"input":[{"id":"msg-private"}]}`, true, false},
+		{"case sensitive implicit reference", `{"model":"selected","store":false,"input":[{"id":"msg-private","ID":""}]}`, true, false},
+		{"inline audio", `{"model":"selected","messages":[{"role":"user","content":[{"type":"input_audio","input_audio":{"data":"YQ==","format":"wav"}}]}],"audio":{"voice":"alloy","format":"wav"}}`, false, true},
+		{"hosted chat search", `{"model":"selected","web_search_options":{}}`, false, false},
+		{"case sensitive hosted search", `{"model":"selected","web_search_options":{},"WEB_SEARCH_OPTIONS":null}`, false, false},
+		{"stored chat audio", `{"model":"selected","messages":[{"role":"assistant","audio":{"id":"audio-private"}}]}`, false, false},
+		{"case sensitive stored audio", `{"model":"selected","messages":[{"role":"assistant","audio":{"id":"audio-private"},"AUDIO":null}]}`, false, false},
+		{"inline function file", `{"model":"selected","store":false,"input":[{"type":"function_call_output","call_id":"call","output":[{"type":"input_file","file_data":"data:application/pdf;base64,YQ=="}]}]}`, true, true},
+		{"case sensitive store", `{"model":"selected","store":true,"STORE":false}`, false, false},
+		{"case sensitive background", `{"model":"selected","store":false,"background":true,"BACKGROUND":false}`, true, false},
+		{"duplicate store", `{"model":"selected","store":true,"store":false}`, false, false},
+		{"escaped duplicate store", `{"model":"selected","store":true,"\u0073tore":false}`, false, false},
+		{"case sensitive hosted tool", `{"model":"selected","tools":[{"type":"file_search","TYPE":"function"}]}`, false, false},
+		{"chat unrelated input", `{"model":"selected","messages":[{"content":[{"type":"file","file":{"file_id":"file-private"}}]}],"input":[]}`, false, false},
+		{"case sensitive message content", `{"model":"selected","messages":[{"content":[{"file":{"file_id":"file-private","FILE_ID":""}}],"CONTENT":"ignored"}]}`, false, false},
+		{"duplicate nested file", `{"model":"selected","messages":[{"content":[{"file":{"file_id":"file-private","file_id":""}}]}]}`, false, false},
+		{"duplicate response content", `{"model":"selected","store":false,"input":[{"content":[{"file_id":"file-private"}],"content":[]}]}`, true, false},
+		{"response function file", `{"model":"selected","store":false,"input":[{"type":"function_call_output","call_id":"call","output":[{"type":"input_file","file_id":"file-private"}]}]}`, true, false},
+		{"response function image", `{"model":"selected","store":false,"input":[{"type":"function_call_output","call_id":"call","output":[{"type":"input_image","file_id":"file-private"}]}]}`, true, false},
+		{"response screenshot", `{"model":"selected","store":false,"input":[{"type":"computer_call_output","output":{"type":"computer_screenshot","file_id":"file-private"}}]}`, true, false},
+		{"case sensitive reference", `{"model":"selected","store":false,"input":[{"type":"item_reference","TYPE":"message","id":"msg-private"}]}`, true, false},
+		{"duplicate response input", `{"model":"selected","store":false,"input":[{"type":"item_reference","id":"msg-private"}],"input":[]}`, true, false},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			input, err := ValidateDelegatedRequest([]byte(test.body), test.responses)
+			if (err == nil) != test.allowed {
+				t.Fatalf("allowed %v, want %v: %v", err == nil, test.allowed, err)
+			}
+			if test.allowed && input.Model != "selected" {
+				t.Fatalf("model %q", input.Model)
+			}
+		})
+	}
 }

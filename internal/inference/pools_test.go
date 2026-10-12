@@ -27,7 +27,10 @@ func TestResolvePoolContract(t *testing.T) {
 	input := int32(64000)
 	primary := poolProvider("openai", agentzv1alpha1.InferenceProviderKindOpenAI)
 	primary.Spec.Models[0].Capabilities = agentzv1alpha1.InferenceModelCapabilities{
-		Attachment: true, Reasoning: true, Temperature: true, ToolCall: true,
+		Attachment:  true,
+		Reasoning:   true,
+		Temperature: true,
+		ToolCall:    true,
 	}
 	primary.Spec.Models[0].Modalities.Input = []agentzv1alpha1.InferenceModelModality{
 		agentzv1alpha1.InferenceModelModalityText,
@@ -111,39 +114,6 @@ func TestResolvePoolContract(t *testing.T) {
 	wrongInput := limits.Input == nil || *limits.Input != 64000
 	if limits.Context != 100000 || wrongInput || limits.Output != 4096 {
 		t.Fatalf("limits = %#v, want context=100000 input=64000 output=4096", definition.Contract.Limits)
-	}
-}
-
-func TestResolvePoolResponsesAPI(t *testing.T) {
-	t.Parallel()
-
-	primary := poolProvider("primary", agentzv1alpha1.InferenceProviderKindOpenAICodex)
-	secondary := poolProvider("secondary", agentzv1alpha1.InferenceProviderKindOpenAICodex)
-	api := agentzv1alpha1.InferenceModelAPIResponses
-	primary.Spec.Models[0].API = &api
-	secondary.Spec.Models[0].API = &api
-
-	scheme := runtime.NewScheme()
-	if err := agentzv1alpha1.AddToScheme(scheme); err != nil {
-		t.Fatal(err)
-	}
-	reader := poolTestReader(t, scheme, primary, secondary)
-	pool := &agentzv1alpha1.InferencePool{
-		ObjectMeta: metav1.ObjectMeta{Name: "pool", Namespace: "default"},
-		Spec: agentzv1alpha1.InferencePoolSpec{Members: []agentzv1alpha1.InferencePoolMember{
-			{Scope: agentzv1alpha1.ResourceScopeOrganisation, Provider: primary.Name, Model: "model"},
-			{Scope: agentzv1alpha1.ResourceScopeOrganisation, Provider: secondary.Name, Model: "model"},
-		}},
-	}
-	definition, issues, err := ResolvePool(context.Background(), reader, pool)
-	if err != nil {
-		t.Fatalf("ResolvePool() error = %v", err)
-	}
-	if len(issues) > 0 {
-		t.Fatalf("ResolvePool() issues = %v", issues)
-	}
-	if definition.Contract.API != agentzv1alpha1.InferenceModelAPIResponses {
-		t.Fatalf("API = %q, want Responses", definition.Contract.API)
 	}
 }
 
@@ -365,8 +335,11 @@ func TestRenderSandboxPoolTarget(t *testing.T) {
 		"default",
 		"sandbox",
 		SandboxTarget{
-			Name: "pool", Backend: "pool", Path: SandboxPoolPath("sandbox", "pool"),
-			Models: []string{"pool"}, Labels: map[string]string{PoolLabel: "pool"},
+			Name:    "pool",
+			Backend: "pool",
+			Path:    SandboxPoolPath("sandbox", "pool"),
+			Models:  []string{"pool"},
+			Labels:  map[string]string{PoolLabel: "pool"},
 			Retries: 1,
 		},
 	)

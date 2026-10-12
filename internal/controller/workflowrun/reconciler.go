@@ -752,7 +752,10 @@ func buildPromptRequest(run *agentzv1alpha1.WorkflowRun) (gatewayapi.SessionProm
 		definition = string(run.Spec.Definition.Raw)
 	}
 	if run.Spec.Model != nil {
-		body.Model = &gatewayapi.OpencodePromptModel{ProviderID: run.Spec.Model.ProviderID, ModelID: run.Spec.Model.ModelID}
+		body.Model = &gatewayapi.OpencodePromptModel{
+			ProviderID: run.Spec.Model.ProviderID,
+			ModelID:    run.Spec.Model.ModelID,
+		}
 		if run.Spec.Model.Variant != "" {
 			body.Variant = &run.Spec.Model.Variant
 		}

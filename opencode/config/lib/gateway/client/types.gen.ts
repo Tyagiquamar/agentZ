@@ -4,6 +4,33 @@ export type ClientOptions = {
   baseUrl: `${string}://${string}` | (string & {})
 }
 
+export type DelegationModel = {
+  id: string
+  workspace_id: string
+  namespace: string
+  provider: string
+  provider_display_name: string
+  uid: string
+  model: string
+  model_display_name: string
+}
+
+export type DelegationMcp = {
+  id: string
+  workspace_id: string
+  namespace: string
+  connection: string
+  uid: string
+  tools: Array<string>
+  prompts: Array<string>
+  resources: Array<string>
+}
+
+export type DelegationCatalog = {
+  models: Array<DelegationModel>
+  mcp: Array<DelegationMcp>
+}
+
 export type ChatSessionKind = "chat" | "workflow_run"
 
 export type ChatSessionStatus = "idle" | "busy" | "retry"
@@ -3503,6 +3530,44 @@ export type DashboardWidgetNamePath = DashboardWidgetName
  * Stable publish call identifier.
  */
 export type IdempotencyKeyHeader = string
+
+export type GetDelegationCatalogData = {
+  body?: never
+  headers?: {
+    /**
+     * Stable Workspace ID selecting Workspace scope. Omit for Organisation scope.
+     *
+     */
+    "X-AgentZ-Workspace-ID"?: string
+  }
+  path?: never
+  query?: {
+    /**
+     * Include unhealthy resources when rechecking an existing grant's permissions. New consent must use the healthy catalog.
+     */
+    include_unavailable?: boolean
+  }
+  url: "/api/delegations/catalog"
+}
+
+export type GetDelegationCatalogErrors = {
+  /**
+   * Request validation failed.
+   */
+  default: Error
+}
+
+export type GetDelegationCatalogError = GetDelegationCatalogErrors[keyof GetDelegationCatalogErrors]
+
+export type GetDelegationCatalogResponses = {
+  /**
+   * Exact selectable capabilities.
+   */
+  200: DelegationCatalog
+}
+
+export type GetDelegationCatalogResponse =
+  GetDelegationCatalogResponses[keyof GetDelegationCatalogResponses]
 
 export type ListCodingProjectsData = {
   body?: never

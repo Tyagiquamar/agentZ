@@ -11,6 +11,7 @@ import (
 
 	agentgatewayv1alpha1 "github.com/agentgateway/agentgateway/controller/api/v1alpha1/agentgateway"
 	externalsecretsv1 "github.com/external-secrets/external-secrets/apis/externalsecrets/v1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -37,7 +38,7 @@ type Reconciler struct {
 // +kubebuilder:rbac:groups=agentz.accuknox.com,resources=inferencepools,verbs=get;list;watch;patch
 // +kubebuilder:rbac:groups=agentz.accuknox.com,resources=inferencepools/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=agentz.accuknox.com,resources=inferencepools/finalizers,verbs=update
-// +kubebuilder:rbac:groups=agentz.accuknox.com,resources=inferenceproviders;sandboxes,verbs=get;list;watch
+// +kubebuilder:rbac:groups=agentz.accuknox.com,resources=inferenceproviders;sandboxes;workspaces,verbs=get;list;watch
 // +kubebuilder:rbac:groups=agentgateway.dev,resources=agentgatewaybackends,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=agentgateway.dev,resources=agentgatewaypolicies,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=external-secrets.io,resources=externalsecrets,verbs=get;list;watch;create;update;patch;delete
@@ -65,6 +66,24 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 	if len(issues) > 0 {
 		err := fmt.Errorf("pool configuration is invalid: %s", issues[0].Message)
+		cleanupErr := r.reconcileCredentialProjections(ctx, pool, inference.PoolDefinition{})
+		if cleanupErr != nil {
+			return ctrl.Result{}, errors.Join(err, cleanupErr, r.updateStatus(ctx, pool, definition, nil, err))
+		}
+		cleanupErr = r.reconcileAuthPolicies(ctx, pool, inference.PoolDefinition{})
+		if cleanupErr != nil {
+			return ctrl.Result{}, errors.Join(err, cleanupErr, r.updateStatus(ctx, pool, definition, nil, err))
+		}
+		backend := &agentgatewayv1alpha1.AgentgatewayBackend{}
+		key := client.ObjectKeyFromObject(pool)
+		if cleanupErr := r.Get(ctx, key, backend); cleanupErr != nil && !apierrors.IsNotFound(cleanupErr) {
+			return ctrl.Result{}, cleanupErr
+		}
+		if metav1.IsControlledBy(backend, pool) {
+			if cleanupErr := r.Delete(ctx, backend); cleanupErr != nil && !apierrors.IsNotFound(cleanupErr) {
+				return ctrl.Result{}, cleanupErr
+			}
+		}
 		return ctrl.Result{}, r.updateStatus(ctx, pool, definition, nil, err)
 	}
 	if err := r.reconcileCredentialProjections(ctx, pool, definition); err != nil {
@@ -107,6 +126,8 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 			&agentzv1alpha1.InferenceProvider{},
 			handler.EnqueueRequestsFromMapFunc(r.poolsForProvider),
 		).
+		Watches(&externalsecretsv1.ExternalSecret{}, handler.EnqueueRequestsFromMapFunc(r.poolsForProvider)).
+		Watches(&agentzv1alpha1.Workspace{}, handler.EnqueueRequestsFromMapFunc(r.poolsForWorkspace)).
 		Owns(&agentgatewayv1alpha1.AgentgatewayBackend{}).
 		Owns(&agentgatewayv1alpha1.AgentgatewayPolicy{}).
 		Owns(&externalsecretsv1.ExternalSecret{}).
@@ -121,14 +142,19 @@ func (r *Reconciler) reconcileCredentialProjections(ctx context.Context, pool *a
 		if member.Ref.Scope != agentzv1alpha1.ResourceScopeOrganisation {
 			continue
 		}
-		source := &externalsecretsv1.ExternalSecret{}
-		key := client.ObjectKey{
-			Name: member.Provider.Name, Namespace: member.Provider.Namespace,
+		target, err := inference.RenderProviderTarget(member.Provider, "")
+		if err != nil {
+			return err
 		}
-		err := r.Get(ctx, key, source)
-		if apierrors.IsNotFound(err) {
+		if target.Policies.Auth == nil {
 			continue
 		}
+		source := &externalsecretsv1.ExternalSecret{}
+		key := client.ObjectKey{
+			Name:      member.Provider.Name,
+			Namespace: member.Provider.Namespace,
+		}
+		err = r.Get(ctx, key, source)
 		if err != nil {
 			return fmt.Errorf("get inherited provider credentials %q: %w", member.Provider.Name, err)
 		}
@@ -176,6 +202,19 @@ func (r *Reconciler) reconcileCredentialProjections(ctx context.Context, pool *a
 		}
 	}
 	return nil
+}
+
+func (r *Reconciler) poolsForWorkspace(ctx context.Context, obj client.Object) []reconcile.Request {
+	pools := &agentzv1alpha1.InferencePoolList{}
+	if err := r.List(ctx, pools, client.InNamespace(obj.GetName())); err != nil {
+		slog.ErrorContext(ctx, "list pools for Workspace", slog.Any("err", err))
+		return nil
+	}
+	requests := make([]reconcile.Request, 0, len(pools.Items))
+	for _, pool := range pools.Items {
+		requests = append(requests, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&pool)})
+	}
+	return requests
 }
 
 func (r *Reconciler) reconcileAuthPolicies(ctx context.Context, pool *agentzv1alpha1.InferencePool, definition inference.PoolDefinition) error {
@@ -350,14 +389,13 @@ func (r *Reconciler) updateStatus(ctx context.Context, pool *agentzv1alpha1.Infe
 			var readyMembers int
 			for _, member := range definition.Members {
 				ready := member.Provider.Status.State == agentzv1alpha1.InferenceProviderStateReady
-				reason := "ProviderReady"
-				message := "provider is ready"
+				reason := "ProviderNotReady"
+				message := "provider is not ready"
 				if ready {
-					readyMembers++
+					reason = "ProviderReady"
+					message = "provider is ready"
 				}
 				if !ready {
-					reason = "ProviderNotReady"
-					message = "provider is not ready"
 					for _, condition := range member.Provider.Status.Conditions {
 						if condition.Type == string(agentzv1alpha1.InferenceProviderConditionReady) {
 							reason = condition.Reason
@@ -365,6 +403,33 @@ func (r *Reconciler) updateStatus(ctx context.Context, pool *agentzv1alpha1.Infe
 							break
 						}
 					}
+				}
+				if ready && member.Provider.Namespace != pool.Namespace {
+					target, err := inference.RenderProviderTarget(member.Provider, "")
+					if err != nil {
+						return err
+					}
+					if target.Policies.Auth != nil {
+						name := inference.PoolProviderSecretName(pool.Name, member.Provider.Name)
+						key := client.ObjectKey{Name: name, Namespace: pool.Namespace}
+						projection := &externalsecretsv1.ExternalSecret{}
+						if err := r.Get(ctx, key, projection); err != nil && !apierrors.IsNotFound(err) {
+							return err
+						}
+						ready = false
+						for _, condition := range projection.Status.Conditions {
+							if condition.Type == externalsecretsv1.ExternalSecretReady {
+								ready = condition.Status == corev1.ConditionTrue
+							}
+						}
+						if !ready {
+							reason = "CredentialsNotReady"
+							message = "inherited provider credentials are not ready"
+						}
+					}
+				}
+				if ready {
+					readyMembers++
 				}
 				status.Members = append(
 					status.Members,
@@ -413,8 +478,10 @@ func (r *Reconciler) updateStatus(ctx context.Context, pool *agentzv1alpha1.Infe
 			meta.SetStatusCondition(
 				&status.Conditions,
 				metav1.Condition{
-					Type: string(agentzv1alpha1.InferencePoolConditionAccepted), Status: acceptedStatus,
-					Reason: acceptedReason, Message: acceptedMessage,
+					Type:               string(agentzv1alpha1.InferencePoolConditionAccepted),
+					Status:             acceptedStatus,
+					Reason:             acceptedReason,
+					Message:            acceptedMessage,
 					ObservedGeneration: current.Generation,
 				},
 			)
@@ -433,8 +500,10 @@ func (r *Reconciler) updateStatus(ctx context.Context, pool *agentzv1alpha1.Infe
 			meta.SetStatusCondition(
 				&status.Conditions,
 				metav1.Condition{
-					Type: string(agentzv1alpha1.InferencePoolConditionBackendReady), Status: backendStatus,
-					Reason: backendReason, Message: backendMessage,
+					Type:               string(agentzv1alpha1.InferencePoolConditionBackendReady),
+					Status:             backendStatus,
+					Reason:             backendReason,
+					Message:            backendMessage,
 					ObservedGeneration: current.Generation,
 				},
 			)
@@ -449,8 +518,10 @@ func (r *Reconciler) updateStatus(ctx context.Context, pool *agentzv1alpha1.Infe
 			meta.SetStatusCondition(
 				&status.Conditions,
 				metav1.Condition{
-					Type: string(agentzv1alpha1.InferencePoolConditionMembersReady), Status: membersStatus,
-					Reason: membersReason, Message: membersMessage,
+					Type:               string(agentzv1alpha1.InferencePoolConditionMembersReady),
+					Status:             membersStatus,
+					Reason:             membersReason,
+					Message:            membersMessage,
 					ObservedGeneration: current.Generation,
 				},
 			)
@@ -462,8 +533,10 @@ func (r *Reconciler) updateStatus(ctx context.Context, pool *agentzv1alpha1.Infe
 			meta.SetStatusCondition(
 				&status.Conditions,
 				metav1.Condition{
-					Type: string(agentzv1alpha1.InferencePoolConditionReady), Status: readyStatus,
-					Reason: string(status.State), Message: "pool state is " + string(status.State),
+					Type:               string(agentzv1alpha1.InferencePoolConditionReady),
+					Status:             readyStatus,
+					Reason:             string(status.State),
+					Message:            "pool state is " + string(status.State),
 					ObservedGeneration: current.Generation,
 				},
 			)

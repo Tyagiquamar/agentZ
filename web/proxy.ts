@@ -12,12 +12,33 @@ import { signInURL } from "@/lib/sign-in-redirect"
  *
  * Server Function POSTs bypass the cookie redirect because a 307 response
  * is handled awkwardly by the fetch layer. Their actions enforce access at
- * the data boundary, while malformed action requests are rejected here.
+ * the data boundary. Next.js validates action IDs against its manifest.
  */
 export function proxy(request: NextRequest) {
-  const actionId = request.headers.get("next-action")
-  if (actionId !== null) {
-    if (request.method !== "POST" || actionId.length !== 42) {
+  const path = request.nextUrl.pathname
+  if (
+    path === "/api/mcp" ||
+    path === "/api/inference/v1" ||
+    path.startsWith("/api/inference/v1/")
+  ) {
+    const gatewayURL = process.env.INTERNAL_GATEWAY_BASE_URL ?? process.env.GATEWAY_BASE_URL
+    if (!gatewayURL) {
+      return NextResponse.json(
+        {
+          error: {
+            message: "Delegated access is unavailable.",
+            type: "service_unavailable",
+            param: null,
+            code: "service_unavailable",
+          },
+        },
+        { status: 503 }
+      )
+    }
+    return NextResponse.rewrite(new URL(`${path}${request.nextUrl.search}`, gatewayURL))
+  }
+  if (request.headers.has("next-action")) {
+    if (request.method !== "POST") {
       return new NextResponse("Invalid Server Action request", { status: 400 })
     }
     return NextResponse.next()
@@ -35,10 +56,12 @@ export function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
+    "/api/mcp",
+    "/api/inference/v1/:path*",
     {
       source: "/((?!_next/static|_next/image|.*\\..*).*)",
       has: [{ type: "header", key: "next-action" }],
     },
-    "/((?!join|signin|signup|api/auth|_next/static|_next/image|.*\\..*).*)",
+    "/((?!join|signin|signup|oauth/authorize|api/auth|api/mcp|api/inference|_next/static|_next/image|.*\\..*).*)",
   ],
 }

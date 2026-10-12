@@ -21,6 +21,7 @@ import (
 	ctrlutil "sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	gwv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	"github.com/accuknox/agentz/internal/authorization"
 	"github.com/accuknox/agentz/internal/inference"
 	"github.com/accuknox/agentz/internal/mcp"
 	"github.com/accuknox/agentz/internal/networkpolicy"
@@ -202,7 +203,8 @@ func (r *Reconciler) reconcileInference(ctx context.Context, sandbox *agentzv1al
 		}
 		currentRoute := &gwv1.HTTPRoute{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: runtime.Route.Name, Namespace: runtime.Route.Namespace,
+				Name:      runtime.Route.Name,
+				Namespace: runtime.Route.Namespace,
 			},
 		}
 		_, err := ctrlutil.CreateOrPatch(
@@ -224,7 +226,8 @@ func (r *Reconciler) reconcileInference(ctx context.Context, sandbox *agentzv1al
 		ready = ready && inferenceRouteReady(currentRoute)
 		currentPolicy := &agentgatewayv1alpha1.AgentgatewayPolicy{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: runtime.Policy.Name, Namespace: runtime.Policy.Namespace,
+				Name:      runtime.Policy.Name,
+				Namespace: runtime.Policy.Namespace,
 			},
 		}
 		_, err = ctrlutil.CreateOrPatch(
@@ -306,6 +309,19 @@ func (r *Reconciler) reconcileInferenceGateway(ctx context.Context, namespace st
 			return strings.Compare(a.Name, b.Name)
 		},
 	)
+	grants := &gwv1.HTTPRouteList{}
+	err := r.List(ctx, grants, client.InNamespace(namespace), client.HasLabels{authorization.DelegationLabel})
+	if err != nil {
+		return err
+	}
+	delegated := slices.ContainsFunc(grants.Items, func(route gwv1.HTTPRoute) bool {
+		return slices.ContainsFunc(route.Spec.ParentRefs, func(parent gwv1.ParentReference) bool {
+			return parent.Name == gwv1.ObjectName(inference.GatewayName)
+		})
+	})
+	if len(owners) == 0 && delegated {
+		return nil
+	}
 	if len(owners) == 0 {
 		gateway := &gwv1.Gateway{
 			ObjectMeta: metav1.ObjectMeta{Name: inference.GatewayName, Namespace: namespace},
@@ -330,7 +346,7 @@ func (r *Reconciler) reconcileInferenceGateway(ctx context.Context, namespace st
 		}
 		return r.deleteAgentgatewayParameters(ctx, namespace, inference.ParametersName)
 	}
-	err := r.reconcileTraceBackend(ctx, namespace, inferenceTraceBackendName, owners)
+	err = r.reconcileTraceBackend(ctx, namespace, inferenceTraceBackendName, owners)
 	if err != nil {
 		return err
 	}
@@ -370,8 +386,15 @@ func (r *Reconciler) reconcileInferenceGateway(ctx context.Context, namespace st
 		gateway,
 		func() error {
 			desired := inference.Gateway(namespace)
+			for _, listener := range gateway.Spec.Listeners {
+				if listener.Name == "delegation" {
+					desired.Spec.Listeners = append(desired.Spec.Listeners, listener)
+				}
+			}
 			gateway.Spec = desired.Spec
-			gateway.OwnerReferences = sandboxOwnerReferences(owners)
+			if !delegated {
+				gateway.OwnerReferences = sandboxOwnerReferences(owners)
+			}
 			return nil
 		},
 	)
@@ -516,7 +539,8 @@ func (r *Reconciler) reconcileInferenceGateway(ctx context.Context, namespace st
 							},
 							ToPorts: []ciliumapi.PortRule{{
 								Ports: []ciliumapi.PortProtocol{{
-									Port: "80", Protocol: ciliumapi.ProtoTCP,
+									Port:     "80",
+									Protocol: ciliumapi.ProtoTCP,
 								}},
 								Rules: &ciliumapi.L7Rules{
 									HTTP: ciliumapi.PortRulesHTTP{

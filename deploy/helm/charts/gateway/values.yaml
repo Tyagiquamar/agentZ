@@ -1,4 +1,6 @@
 global:
+  agentz:
+    delegationEnabled: true
   # Operator-managed application credentials in the release namespace.
   secretName: agentz
 

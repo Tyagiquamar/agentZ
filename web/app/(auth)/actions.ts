@@ -9,6 +9,7 @@ import { getAuth } from "@/lib/auth"
 import { signInReturnTo, signInURL } from "@/lib/sign-in-redirect"
 
 const providerSignInFormSchema = z.object({
+  oauth_query: z.string().optional(),
   returnTo: z.string({ error: "Return URL must be text" }).optional().catch(undefined),
   authPath: z
     .enum(["/signin", "/signup"], { error: "Authentication path is invalid" })
@@ -21,7 +22,7 @@ async function signInWithProvider(provider: SocialProvider, formData: FormData):
   const parsed = providerSignInFormSchema.parse(Object.fromEntries(formData))
   const returnTo = signInReturnTo(parsed.returnTo)
   const authPath = parsed.authPath
-  const errorParams = new URLSearchParams()
+  const errorParams = new URLSearchParams(parsed.oauth_query)
   errorParams.set("provider", provider)
   if (returnTo) {
     errorParams.set("returnTo", returnTo)
@@ -33,11 +34,13 @@ async function signInWithProvider(provider: SocialProvider, formData: FormData):
         // Social authentication creates an account when none exists, regardless
         // of whether the user entered through the sign-in or sign-up page.
         agentzEnrollment: "direct",
+        ...(parsed.oauth_query && { agentzOAuthQuery: parsed.oauth_query }),
       },
       callbackURL: returnTo ?? "/",
       disableRedirect: true,
       errorCallbackURL,
       provider,
+      ...(parsed.oauth_query && { oauth_query: parsed.oauth_query }),
       requestSignUp: true,
     },
     headers: requestHeaders,
@@ -49,7 +52,9 @@ async function signInWithProvider(provider: SocialProvider, formData: FormData):
       redirect(`${authPath}?${errorParams.toString()}`)
     }
 
-    redirect(signInURL({ error: "no_callback_url", provider, returnTo }))
+    redirect(
+      signInURL({ error: "no_callback_url", provider, returnTo, oauthQuery: parsed.oauth_query })
+    )
   }
 
   redirect(result.url as Route)

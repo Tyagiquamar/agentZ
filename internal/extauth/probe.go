@@ -31,6 +31,8 @@ type mcpProbeOutcome struct {
 	reason        string
 	message       string
 	tools         []agentzv1alpha1.MCPConnectionTool
+	prompts       []string
+	resources     []string
 }
 
 const (
@@ -38,6 +40,8 @@ const (
 	mcpProbeBackoffStart  = 100 * time.Millisecond
 	mcpProbeBackoffFactor = 2.0
 	maxProbeHTTPBodyBytes = 1 << 20
+	maxProbeCatalogItems  = 4096
+	maxProbeCatalogBytes  = 256 << 10
 )
 
 type probeRoundTripper struct {
@@ -80,30 +84,16 @@ func (s *Service) runProbeQueue(ctx context.Context) {
 			return
 		}
 
-		_, err, _ := s.sf.Do(
-			"probe:"+name,
-			func() (any, error) {
-				conn, getErr := s.mcpConnections.Get(name)
-				if getErr != nil {
-					return nil, ctrlclient.IgnoreNotFound(getErr)
-				}
-				if !conn.DeletionTimestamp.IsZero() {
-					return nil, nil
-				}
-				outcome := s.probeMCPConnection(ctx, conn)
-				s.probeTimesMu.Lock()
-				s.probeTimes[name] = outcome.lastProbeTime.Time
-				s.probeTimesMu.Unlock()
-				return nil, s.writeMCPProbeStatus(
-					ctx,
-					conn.Namespace,
-					conn.Name,
-					outcome,
-				)
-			},
-		)
+		conn, err := s.mcpConnections.Get(name)
+		if err == nil && conn.DeletionTimestamp.IsZero() {
+			outcome := s.probeMCPConnection(ctx, conn)
+			s.probeTimesMu.Lock()
+			s.probeTimes[name] = outcome.lastProbeTime.Time
+			s.probeTimesMu.Unlock()
+			err = s.writeMCPProbeStatus(ctx, conn, outcome)
+		}
 		s.probeQueue.Done(name)
-		if err == nil {
+		if ctrlclient.IgnoreNotFound(err) == nil {
 			continue
 		}
 
@@ -143,7 +133,7 @@ func (s *Service) probeMCPConnections(ctx context.Context) error {
 		s.probeTimesMu.Lock()
 		s.probeTimes[conn.Name] = outcome.lastProbeTime.Time
 		s.probeTimesMu.Unlock()
-		if err := s.writeMCPProbeStatus(ctx, conn.Namespace, conn.Name, outcome); err != nil {
+		if err := s.writeMCPProbeStatus(ctx, &conn, outcome); err != nil {
 			slog.ErrorContext(
 				ctx,
 				"write mcp probe status failed",
@@ -260,26 +250,63 @@ func (s *Service) probeMCPConnectionOnce(ctx context.Context, conn *agentzv1alph
 		}
 	}()
 
-	tools, err := session.ListTools(reqCtx, nil)
-	if err != nil {
-		outcome.reason = classifyProbeError(err, rt.lastStatus)
-		outcome.message = "MCP tools request failed"
-		rt.logHTTPExchange(
-			ctx,
-			slog.LevelWarn,
-			"mcp list_tools http exchange",
-			slog.String("probe_reason", outcome.reason),
-		)
-		return outcome
+	catalogBytes := 0
+	capabilities := session.InitializeResult().Capabilities
+	if capabilities.Tools != nil {
+		for tool, err := range session.Tools(reqCtx, nil) {
+			if err != nil {
+				outcome.reason = classifyProbeError(err, rt.lastStatus)
+				outcome.message = "MCP tool discovery failed"
+				rt.logHTTPExchange(ctx, slog.LevelWarn, "mcp list_tools http exchange", slog.String("probe_reason", outcome.reason))
+				return outcome
+			}
+			if len(outcome.tools) == maxProbeCatalogItems {
+				outcome.message = "MCP tool catalog exceeds the discovery limit"
+				return outcome
+			}
+			catalogBytes += len(tool.Name)
+			if catalogBytes > maxProbeCatalogBytes {
+				outcome.message = "MCP catalog exceeds the discovery size limit"
+				return outcome
+			}
+			outcome.tools = append(outcome.tools, agentzv1alpha1.MCPConnectionTool{Name: tool.Name})
+		}
 	}
-	outcome.tools = make([]agentzv1alpha1.MCPConnectionTool, 0, len(tools.Tools))
-	for _, tool := range tools.Tools {
-		outcome.tools = append(
-			outcome.tools,
-			agentzv1alpha1.MCPConnectionTool{
-				Name: strings.TrimSpace(tool.Name),
-			},
-		)
+	if capabilities.Prompts != nil {
+		for prompt, err := range session.Prompts(reqCtx, nil) {
+			if err != nil {
+				outcome.message = "MCP prompt discovery failed"
+				return outcome
+			}
+			if len(outcome.prompts) == maxProbeCatalogItems {
+				outcome.message = "MCP prompt catalog exceeds the discovery limit"
+				return outcome
+			}
+			catalogBytes += len(prompt.Name)
+			if catalogBytes > maxProbeCatalogBytes {
+				outcome.message = "MCP catalog exceeds the discovery size limit"
+				return outcome
+			}
+			outcome.prompts = append(outcome.prompts, prompt.Name)
+		}
+	}
+	if capabilities.Resources != nil {
+		for resource, err := range session.Resources(reqCtx, nil) {
+			if err != nil {
+				outcome.message = "MCP resource discovery failed"
+				return outcome
+			}
+			if len(outcome.resources) == maxProbeCatalogItems {
+				outcome.message = "MCP resource catalog exceeds the discovery limit"
+				return outcome
+			}
+			catalogBytes += len(resource.URI)
+			if catalogBytes > maxProbeCatalogBytes {
+				outcome.message = "MCP catalog exceeds the discovery size limit"
+				return outcome
+			}
+			outcome.resources = append(outcome.resources, resource.URI)
+		}
 	}
 
 	outcome.healthy = true
@@ -390,19 +417,28 @@ func isReachabilityError(err error) bool {
 	return ok
 }
 
-func (s *Service) writeMCPProbeStatus(ctx context.Context, namespace, name string, outcome mcpProbeOutcome) error {
+func (s *Service) writeMCPProbeStatus(ctx context.Context, probed *agentzv1alpha1.MCPConnection, outcome mcpProbeOutcome) error {
 	return retry.RetryOnConflict(
 		retry.DefaultRetry,
 		func() error {
 			conn := &agentzv1alpha1.MCPConnection{}
-			key := ctrlclient.ObjectKey{Namespace: namespace, Name: name}
+			key := ctrlclient.ObjectKeyFromObject(probed)
 			if err := s.kube.Get(ctx, key, conn); err != nil {
 				return ctrlclient.IgnoreNotFound(err)
 			}
 
+			changed := conn.UID != probed.UID || conn.Generation != probed.Generation
+			if changed || !conn.DeletionTimestamp.IsZero() {
+				return nil
+			}
+			if conn.Status.LastProbeTime != nil && conn.Status.LastProbeTime.After(outcome.lastProbeTime.Time) {
+				return nil
+			}
 			conn.Status.LastProbeTime = &outcome.lastProbeTime
 			conn.Status.ToolCatalogReady = outcome.healthy
 			conn.Status.Tools = outcome.tools
+			conn.Status.Prompts = outcome.prompts
+			conn.Status.Resources = outcome.resources
 			status := metav1.ConditionFalse
 			if outcome.healthy {
 				status = metav1.ConditionTrue

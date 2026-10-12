@@ -18,6 +18,9 @@ import (
 	"time"
 
 	keyfunc "github.com/MicahParks/keyfunc/v3"
+	agw "github.com/agentgateway/agentgateway/controller/api/v1alpha1/agentgateway"
+	ciliumv2 "github.com/cilium/cilium/pkg/k8s/apis/cilium.io/v2"
+	esv1 "github.com/external-secrets/external-secrets/apis/externalsecrets/v1"
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3filter"
 	"github.com/go-chi/chi/v5"
@@ -36,6 +39,9 @@ import (
 	ctrlcache "sigs.k8s.io/controller-runtime/pkg/cache"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlconfig "sigs.k8s.io/controller-runtime/pkg/client/config"
+	gwv1 "sigs.k8s.io/gateway-api/apis/v1"
+
+	"golang.org/x/sync/semaphore"
 
 	"github.com/accuknox/agentz/internal/gateway/apiutil"
 	dashboarddb "github.com/accuknox/agentz/internal/gateway/dashboard/db"
@@ -76,55 +82,63 @@ const cleanupMaxAttempts = 8
 
 // Config describes how to start the gateway.
 type Config struct {
-	CodingGitHubClientID      string
-	CodingGitHubClientSecret  string
-	CodingGitHubEncryptionKey string
-	Addr                      string
-	PostgresDSN               string
-	ExternalJWTJWKSURL        string
-	ExternalJWTIssuer         string
-	ExternalJWTAudience       string
-	InternalK8sTokenAudience  string
-	TargetOverride            string
-	FilesystemTargetOverride  string
-	AgentImage                string
-	AgentTraceEndpoint        string
-	OpenBaoAddr               string
-	OpenBaoSecretMountPath    string
-	OpenBaoK8sAuthRole        string
-	OpenBaoK8sAuthMountPath   string
-	OpenBaoK8sAuthTokenPath   string
-	MCPProbeStaleAfter        time.Duration
-	AllowedWebOrigins         []string
-	SkillStore                skill.Config
+	CodingGitHubClientID           string
+	CodingGitHubClientSecret       string
+	CodingGitHubEncryptionKey      string
+	DelegationNamespace            string
+	GatewayServiceAccountName      string
+	GatewayServiceAccountNamespace string
+	DelegationGatewayURL           string
+	Addr                           string
+	PostgresDSN                    string
+	ExternalJWTJWKSURL             string
+	ExternalJWTIssuer              string
+	ExternalJWTAudience            string
+	InternalK8sTokenAudience       string
+	TargetOverride                 string
+	FilesystemTargetOverride       string
+	AgentImage                     string
+	AgentTraceEndpoint             string
+	OpenBaoAddr                    string
+	OpenBaoSecretMountPath         string
+	OpenBaoK8sAuthRole             string
+	OpenBaoK8sAuthMountPath        string
+	OpenBaoK8sAuthTokenPath        string
+	MCPProbeStaleAfter             time.Duration
+	AllowedWebOrigins              []string
+	SkillStore                     skill.Config
 }
 
 // Service implements the agent gateway HTTP API.
 type Service struct {
 	gatewayapi.Unimplemented
-	ctx                context.Context
-	resolver           *resolver
-	queries            gatewaydb.Querier
-	dashboards         dashboarddb.Querier
-	db                 *pgxpool.Pool
-	lockDB             *pgxpool.Pool
-	controlDB          *pgxpool.Pool
-	cfg                Config
-	bao                *baoapi.Client
-	baoKV              *baoapi.KVv2
-	k8sClient          ctrlclient.Client
-	usageReader        ctrlclient.Reader
-	k8s                kubernetes.Interface
-	agentz             agentzclient.Interface
-	externalJWTKeyfunc jwt.Keyfunc
-	skillStore         *skill.Client
-	skillImports       chan struct{}
-	chatSessionEvents  chatSessionEvents
-	chatInputWake      chan struct{}
-	codingEvents       chatSessionEvents
-	catalog            *inference.Catalog
-	openAPI            *openapi3.T
-	outboundHTTP       *http.Client
+	delegationRequests  chan struct{}
+	delegationBodies    *semaphore.Weighted
+	delegationTransport http.RoundTripper
+	delegationTarget    *url.URL
+	ctx                 context.Context
+	resolver            *resolver
+	queries             gatewaydb.Querier
+	dashboards          dashboarddb.Querier
+	db                  *pgxpool.Pool
+	lockDB              *pgxpool.Pool
+	controlDB           *pgxpool.Pool
+	cfg                 Config
+	bao                 *baoapi.Client
+	baoKV               *baoapi.KVv2
+	k8sClient           ctrlclient.Client
+	usageReader         ctrlclient.Reader
+	k8s                 kubernetes.Interface
+	agentz              agentzclient.Interface
+	externalJWTKeyfunc  jwt.Keyfunc
+	skillStore          *skill.Client
+	skillImports        chan struct{}
+	chatSessionEvents   chatSessionEvents
+	chatInputWake       chan struct{}
+	codingEvents        chatSessionEvents
+	catalog             *inference.Catalog
+	openAPI             *openapi3.T
+	outboundHTTP        *http.Client
 }
 
 type statusRecorder struct {
@@ -212,6 +226,21 @@ func Serve(ctx context.Context, cfg Config) error {
 	if cfg.MCPProbeStaleAfter <= 0 {
 		return fmt.Errorf("mcp probe stale after is required")
 	}
+	var delegationTarget *url.URL
+	if cfg.DelegationNamespace != "" {
+		if cfg.DelegationGatewayURL == "" {
+			cfg.DelegationGatewayURL = "http://delegations." + cfg.DelegationNamespace + ".svc.cluster.local:8080"
+		}
+		target, err := url.Parse(cfg.DelegationGatewayURL)
+		if err != nil || target.Host == "" || target.Scheme != "http" {
+			return errors.New("delegation gateway URL must use internal HTTP")
+		}
+		delegationTarget = target
+		missingIdentity := cfg.GatewayServiceAccountName == "" || cfg.GatewayServiceAccountNamespace == ""
+		if missingIdentity {
+			return errors.New("delegation requires gateway service account identity")
+		}
+	}
 	allowedWebOrigins, err := validateWebOrigins(cfg.AllowedWebOrigins)
 	if err != nil {
 		return err
@@ -233,6 +262,18 @@ func Serve(ctx context.Context, cfg Config) error {
 	}
 	if err := agentzv1alpha1.AddToScheme(scheme); err != nil {
 		return fmt.Errorf("add agentz scheme: %w", err)
+	}
+	if err := agw.Install(scheme); err != nil {
+		return fmt.Errorf("add agentgateway scheme: %w", err)
+	}
+	if err := gwv1.Install(scheme); err != nil {
+		return fmt.Errorf("add gateway API scheme: %w", err)
+	}
+	if err := esv1.AddToScheme(scheme); err != nil {
+		return fmt.Errorf("add external secrets scheme: %w", err)
+	}
+	if err := ciliumv2.AddToScheme(scheme); err != nil {
+		return fmt.Errorf("add Cilium scheme: %w", err)
 	}
 	kubeCfg, err := ctrlconfig.GetConfig()
 	if err != nil {
@@ -344,6 +385,7 @@ func Serve(ctx context.Context, cfg Config) error {
 		lockDB:             lockDB,
 		controlDB:          controlDB,
 		cfg:                cfg,
+		delegationTarget:   delegationTarget,
 		bao:                baoClient,
 		baoKV:              baoClient.KVv2(cfg.OpenBaoSecretMountPath),
 		k8sClient:          k8sClient,
@@ -388,7 +430,8 @@ func Serve(ctx context.Context, cfg Config) error {
 	}()
 	// Reserve a cleanup worker so judge requests cannot delay deletion.
 	var evaluations sync.WaitGroup
-	for _, cleanup := range []bool{false, true} {
+	cleanupModes := []bool{false, true}
+	for _, cleanup := range cleanupModes {
 		evaluations.Go(func() { svc.runEvaluations(runCtx, cleanup) })
 	}
 	cleanupDone := make(chan struct{})
@@ -401,6 +444,19 @@ func Serve(ctx context.Context, cfg Config) error {
 		defer close(chatSessionNotificationsDone)
 		svc.runChatSessionNotifications(runCtx)
 	}()
+
+	var delegationWorkers sync.WaitGroup
+	if cfg.DelegationNamespace != "" {
+		transport := http.DefaultTransport.(*http.Transport).Clone()
+		transport.Proxy = nil
+		transport.Protocols = new(http.Protocols)
+		transport.Protocols.SetUnencryptedHTTP2(true)
+		defer transport.CloseIdleConnections()
+		svc.delegationTransport = transport
+		svc.delegationRequests = make(chan struct{}, 64)
+		svc.delegationBodies = semaphore.NewWeighted(128 << 20)
+		delegationWorkers.Go(func() { svc.runDelegationRuntime(runCtx) })
+	}
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,
@@ -457,6 +513,7 @@ func Serve(ctx context.Context, cfg Config) error {
 	evaluations.Wait()
 	<-cleanupDone
 	<-eventTrailRetentionDone
+	delegationWorkers.Wait()
 
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return fmt.Errorf("serve http: %w", err)
@@ -747,7 +804,8 @@ func (s *Service) processWorkspaceCleanup(ctx context.Context, job gatewaydb.Cle
 	workspace, err := s.queries.GatewayGetWorkspace(
 		ctx,
 		gatewaydb.GatewayGetWorkspaceParams{
-			ID: payload.WorkspaceID, OrganizationID: job.OrganizationID,
+			ID:             payload.WorkspaceID,
+			OrganizationID: job.OrganizationID,
 		},
 	)
 	if err != nil {
@@ -790,24 +848,47 @@ func (s *Service) routes() http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	})
-	r.Use(cors.Handler(cors.Options{
+	managementCORS := cors.Handler(cors.Options{
 		AllowedOrigins:   s.cfg.AllowedWebOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"*"},
 		ExposedHeaders:   []string{"X-Next-Cursor"},
 		AllowCredentials: false,
 		MaxAge:           300,
-	}))
-	r.With(s.ptyWebsocketAuth, requireTenantRequest(s)).HandleFunc(
+	})
+	r.With(managementCORS, s.ptyWebsocketAuth, requireTenantRequest(s)).HandleFunc(
 		opencodePrefix+"/{agentName}",
 		s.handleOpenCodeProxy,
 	)
-	r.With(s.ptyWebsocketAuth, requireTenantRequest(s)).HandleFunc(
+	r.With(managementCORS, s.ptyWebsocketAuth, requireTenantRequest(s)).HandleFunc(
 		opencodePrefix+"/{agentName}/*",
 		s.handleOpenCodeProxy,
 	)
 
+	if s.cfg.DelegationNamespace != "" {
+		r.Route("/api/inference/v1", func(r chi.Router) {
+			r.Use(s.delegationCORS)
+			r.Get("/models", s.handleDelegatedRequest)
+			r.Post("/chat/completions", s.handleDelegatedRequest)
+			r.Post("/responses", s.handleDelegatedRequest)
+			paths := []string{"/models", "/chat/completions", "/responses"}
+			for _, path := range paths {
+				r.Options(path, func(w http.ResponseWriter, _ *http.Request) {
+					w.WriteHeader(http.StatusNoContent)
+				})
+			}
+			r.NotFound(func(w http.ResponseWriter, r *http.Request) {
+				s.delegationError(w, r, http.StatusNotFound, "not_found", "This inference endpoint is unavailable.")
+			})
+			r.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
+				s.delegationError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "Use the supported HTTP method for this endpoint.")
+			})
+		})
+		r.With(s.delegationCORS).HandleFunc("/api/mcp", s.handleDelegatedRequest)
+	}
+
 	apiRouter := chi.NewRouter()
+	apiRouter.Use(managementCORS)
 	apiRouter.Use(nethttpmiddleware.OapiRequestValidatorWithOptions(
 		s.openAPI,
 		&nethttpmiddleware.Options{

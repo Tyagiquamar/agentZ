@@ -81,8 +81,6 @@ export const authSearchParamsSchema = z.object({
   returnTo: searchParamStringSchema,
 })
 
-export type AuthSearchParams = z.input<typeof authSearchParamsSchema>
-
 export function socialProviders(): SocialProvider[] {
   const env = getEnv()
   const providers: SocialProvider[] = []

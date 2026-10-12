@@ -225,7 +225,14 @@
         "webhookSecretName": { "type": "string" }
       }
     },
-    "extraArgs": { "type": "array", "items": { "type": "string" } }
+    "extraArgs": { "type": "array", "items": { "type": "string" } },
+    "delegation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "namespace": { "type": "string" }
+      }
+    }
   },
   "definitions": {
     "image": {

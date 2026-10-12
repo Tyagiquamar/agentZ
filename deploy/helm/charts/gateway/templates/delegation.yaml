@@ -1,0 +1,80 @@
+{{- if and .Values.enabled (dig "agentz" "delegationEnabled" false (.Values.global | default dict)) }}
+{{- $name := include "gateway.fullname" . }}
+{{- $account := include "gateway.serviceAccountName" . }}
+{{- $namespace := printf "%s-delegations" $name | trunc 63 | trimSuffix "-" }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $namespace }}
+  labels:
+    app.kubernetes.io/managed-by: agentz
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: private-delegations
+  namespace: {{ $namespace }}
+spec:
+  endpointSelector: {}
+  enableDefaultDeny: {ingress: true, egress: true}
+  ingress:
+    - fromEntities: [host]
+      toPorts:
+        - ports: [{port: "15021", protocol: TCP}]
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: {{ .Release.Namespace }}
+            k8s:io.cilium.k8s.policy.serviceaccount: {{ $account }}
+      toPorts:
+        - ports: [{port: "8080", protocol: TCP}]
+  egress:
+    - toServices:
+        - k8sService:
+            serviceName: agentgateway
+            namespace: agentgateway-system
+      toPorts:
+        - ports: [{port: "9978", protocol: TCP}]
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s:k8s-app: kube-dns
+      toPorts:
+        - ports: [{port: "53", protocol: UDP}, {port: "53", protocol: TCP}]
+          rules:
+            dns:
+              - matchName: agentgateway.agentgateway-system.svc.cluster.local
+---
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayParameters
+metadata:
+  name: delegations
+  namespace: {{ $namespace }}
+spec:
+  deployment:
+    spec:
+      template:
+        spec:
+          automountServiceAccountToken: false
+          dnsConfig:
+            options: [{name: ndots, value: "1"}]
+  service:
+    spec:
+      type: ClusterIP
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: delegations
+  namespace: {{ $namespace }}
+spec:
+  gatewayClassName: agentgateway
+  infrastructure:
+    parametersRef:
+      group: agentgateway.dev
+      kind: AgentgatewayParameters
+      name: delegations
+  listeners:
+    - name: delegation
+      protocol: HTTP
+      port: 8080
+{{- end }}

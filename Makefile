@@ -20,6 +20,10 @@ SKILLS_S3_BUCKET ?= agentz
 SKILLS_S3_ACCESS_KEY_ID ?= admin
 SKILLS_S3_SECRET_ACCESS_KEY ?= admin
 
+# Host development uses the same gateway for management and delegated requests.
+DELEGATION_NAMESPACE ?= agentz-delegations
+DELEGATION_GATEWAY_URL ?= http://localhost:8080
+
 KUBECTL ?= kubectl
 KUSTOMIZE ?= kustomize
 CONTROLLER_GEN ?= controller-gen
@@ -79,6 +83,8 @@ run-gateway:
 	@AGENTZ_SKILLS_S3_ACCESS_KEY_ID=$(SKILLS_S3_ACCESS_KEY_ID) \
 	AGENTZ_SKILLS_S3_SECRET_ACCESS_KEY=$(SKILLS_S3_SECRET_ACCESS_KEY) \
 		go run ./cmd/agentz gateway serve \
+		--gateway-service-account-name=default \
+		--gateway-service-account-namespace=$(K8S_NAMESPACE) \
 		--coding-github-client-id=$(CODING_GITHUB_CLIENT_ID) \
 		--coding-github-client-secret=$(CODING_GITHUB_CLIENT_SECRET) \
 		--coding-github-encryption-key=$(CODING_GITHUB_ENCRYPTION_KEY) \
@@ -86,6 +92,8 @@ run-gateway:
 		--addr=0.0.0.0:8090 \
 		--target-override=localhost:4096 \
 		--filesystem-target-override=localhost:4097 \
+		--delegation-namespace="$(DELEGATION_NAMESPACE)" \
+		--delegation-gateway-url="$(DELEGATION_GATEWAY_URL)" \
 		--postgres-dsn="$(POSTGRES_DSN)" \
 		--external-jwt-jwks-url=$(BETTER_AUTH_URL)/api/auth/.well-known/jwks.json \
 		--external-jwt-issuer=$(BETTER_AUTH_URL) \
@@ -113,6 +121,7 @@ run-manager:
 		--health-probe-bind-address=:8888 \
 		--enable-webhooks=false \
 		--workflowrun-orphan-retention=168h \
+		--delegation-namespace="$(DELEGATION_NAMESPACE)" \
 		--controller-image=$(IMAGE) \
 		--agent-image=$(AGENT_IMAGE) \
 		--openbao-addr=http://openbao.openbao.svc.cluster.local:8200 \

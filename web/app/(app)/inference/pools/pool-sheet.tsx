@@ -350,7 +350,7 @@ export function PoolSheet({
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent size="half" className="h-full overflow-hidden">
-        <SheetHeader className="shrink-0">
+        <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
             <Layers3 className="size-4" />
             {pool ? "Edit Pool" : "New Pool"}
@@ -359,7 +359,11 @@ export function PoolSheet({
             Choose a primary model, then set the order of its backups.
           </SheetDescription>
         </SheetHeader>
-        <form className="flex min-h-0 flex-1 flex-col" onSubmit={form.handleSubmit(submit)}>
+        <form
+          className="flex min-h-0 flex-1 flex-col"
+          onSubmit={form.handleSubmit(submit)}
+          noValidate
+        >
           <div className="flex-1 space-y-7 overflow-y-auto px-4 pb-4">
             <FieldGroup>
               <Field data-invalid={Boolean(form.formState.errors.display_name)}>
@@ -370,8 +374,13 @@ export function PoolSheet({
                   id="pool-display-name"
                   aria-invalid={Boolean(form.formState.errors.display_name)}
                   {...form.register("display_name")}
+                  aria-describedby="pool-display-name-error"
+                  aria-required="true"
                 />
-                <FieldError errors={[form.formState.errors.display_name]} />
+                <FieldError
+                  errors={[form.formState.errors.display_name]}
+                  id="pool-display-name-error"
+                />
               </Field>
               <Controller
                 control={form.control}

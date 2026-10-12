@@ -28,6 +28,9 @@ inference:
     managedNamespaceSelector:
       app.kubernetes.io/managed-by: agentz
 
+delegation:
+  namespace: ""
+
 replicaCount: 1
 revisionHistoryLimit: 10
 terminationGracePeriodSeconds: 10

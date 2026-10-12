@@ -3,7 +3,19 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
-    "global": { "type": "object", "properties": { "secretName": { "type": "string" } } },
+    "global": {
+      "type": "object",
+      "properties": {
+        "secretName": { "type": "string" },
+        "agentz": {
+          "type": "object",
+          "properties": {
+            "delegationEnabled": { "type": "boolean" },
+            "umbrella": { "type": "boolean" }
+          }
+        }
+      }
+    },
     "enabled": { "type": "boolean" },
     "nameOverride": { "type": "string" },
     "fullnameOverride": { "type": "string" },

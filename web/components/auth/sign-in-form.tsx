@@ -21,16 +21,13 @@ const signInSchema = z.object({
   password: z.string().min(1, "Enter your password."),
 })
 
-const twoFactorRedirectResponseSchema = z.object({
-  twoFactorRedirect: z.literal(true),
-})
-
 type SignInValues = z.infer<typeof signInSchema>
 
 type SignInFormProps = {
   actions: Record<SocialProvider, (formData: FormData) => Promise<void>>
   providers: SocialProvider[]
   returnTo?: string
+  oauthQuery?: string
   routeError?: AuthError
   routeProvider?: SocialProvider
   showPasswordAuth: boolean
@@ -42,6 +39,7 @@ export function SignInForm({
   actions,
   providers,
   returnTo,
+  oauthQuery,
   routeError,
   routeProvider,
   showPasswordAuth,
@@ -98,19 +96,6 @@ export function SignInForm({
         setPasswordActionError(result.error.message ?? "Sign-in could not be completed. Try again.")
         return
       }
-
-      if (twoFactorRedirectResponseSchema.safeParse(result.data).success) {
-        const search = new URLSearchParams()
-        if (returnTo) {
-          search.set("returnTo", returnTo)
-        }
-
-        const target = search.size === 0 ? "/signin/two-factor" : `/signin/two-factor?${search}`
-        window.location.replace(target)
-        return
-      }
-
-      window.location.replace(returnTo ?? "/")
     })
   }
 
@@ -126,6 +111,8 @@ export function SignInForm({
     routeErrorVisible && routeError && !routeCredentialErrorVisible && !providerErrors
       ? authErrorMessages[routeError]
       : undefined
+  const signUpSearch = new URLSearchParams(oauthQuery)
+  if (returnTo) signUpSearch.set("returnTo", returnTo)
 
   return (
     <div className="flex flex-col gap-7">
@@ -170,8 +157,10 @@ export function SignInForm({
                       }
                       field.onBlur()
                     }}
+                    aria-describedby="signin-email-error"
+                    aria-required="true"
                   />
-                  <FieldError errors={[fieldState.error]}>
+                  <FieldError errors={[fieldState.error]} id="signin-email-error">
                     {fieldState.error?.message ??
                       (routeCredentialErrorVisible ? invalidCredentialsMessage : undefined)}
                   </FieldError>
@@ -201,8 +190,10 @@ export function SignInForm({
                       }
                       field.onBlur()
                     }}
+                    aria-describedby="signin-password-error"
+                    aria-required="true"
                   />
-                  <FieldError errors={[fieldState.error]}>
+                  <FieldError errors={[fieldState.error]} id="signin-password-error">
                     {fieldState.error?.message ??
                       (routeCredentialErrorVisible ? invalidCredentialsMessage : undefined)}
                   </FieldError>
@@ -243,6 +234,7 @@ export function SignInForm({
             errors={providerErrors}
             providers={providers}
             returnTo={returnTo}
+            hiddenFields={{ oauth_query: oauthQuery }}
             submitLabel="Sign in"
             pendingProvider={pendingProvider}
             onPendingChangeAction={(provider) => {
@@ -258,7 +250,7 @@ export function SignInForm({
           Don&apos;t have an account?{" "}
           <Link
             className="text-foreground underline underline-offset-4"
-            href={returnTo ? `/signup?returnTo=${encodeURIComponent(returnTo)}` : "/signup"}
+            href={signUpSearch.size ? `/signup?${signUpSearch}` : "/signup"}
           >
             Sign up
           </Link>

@@ -162,6 +162,7 @@ var (
 	enableWebhooks                                   bool
 	workflowRunOrphanRetention                       time.Duration
 	inferenceSecretStoreName                         string
+	delegationNamespace                              string
 	inferenceSecretRefreshInterval                   time.Duration
 )
 
@@ -205,6 +206,11 @@ var cmd = &cli.Command{
 		cli.HandleExitCoder(err)
 	},
 	Flags: []cli.Flag{
+		&cli.StringFlag{
+			Name:        "delegation-namespace",
+			Destination: &delegationNamespace,
+			Usage:       "Private native MCP aggregator namespace",
+		},
 		&cli.StringFlag{
 			Name:  "log-level",
 			Usage: "Set log level: debug, info, warn, error",
@@ -1458,6 +1464,7 @@ var managerCmd = &cli.Command{
 			OpenBaoAddr:             openBaoAddr,
 			OpenBaoSecretMountPath:  openBaoSecretMountPath,
 			OpenBaoK8sAuthMountPath: openBaoK8sAuthMountPath,
+			DelegationNamespace:     delegationNamespace,
 		}
 		if err := extAuthRuntimeReconciler.SetupWithManager(mgr); err != nil {
 			setupLog.ErrorContext(ctx,

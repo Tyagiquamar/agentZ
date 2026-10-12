@@ -21,7 +21,8 @@ type GatewayAgentAccess = {
   owner: boolean
 }
 
-async function resolveGatewayAuthState(): Promise<GatewayAuthContext> {
+/** currentGatewayAuthContext resolves the active organization and browser session. */
+export async function currentGatewayAuthContext(): Promise<GatewayAuthContext> {
   const organizationSession = await getOrganizationSession()
   if (!organizationSession) {
     throw new GatewayUnauthorizedError()
@@ -42,27 +43,18 @@ async function resolveGatewayAuthState(): Promise<GatewayAuthContext> {
   }
 }
 
-export async function currentGatewayAuthContext(): Promise<GatewayAuthContext> {
-  const state = await resolveGatewayAuthState()
-  return {
-    organizationId: state.organizationId,
-    sessionId: state.sessionId,
-    userId: state.userId,
-    userName: state.userName,
-  }
-}
-
 /**
  * currentGatewayAuthToken signs identity and an authorization snapshot for the
  * selected scope. The gateway also resolves current grants on every request so
  * revocation remains immediate.
  */
 export async function currentGatewayAuthToken(workspaceId?: string): Promise<string> {
-  const state = await resolveGatewayAuthState()
+  const state = await currentGatewayAuthContext()
   return getGatewayAuthToken(state.organizationId, state.userId, state.userName, workspaceId)
 }
 
-const getGatewayAuthToken = cache(signGatewayAuthToken)
+/** getGatewayAuthToken signs server-selected scope without changing browser context. */
+export const getGatewayAuthToken = cache(signGatewayAuthToken)
 
 async function signGatewayAuthToken(
   organizationId: string,

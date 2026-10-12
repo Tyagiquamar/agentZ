@@ -449,6 +449,22 @@ func (e Effective) Allows(scope Scope, operation Operation) bool {
 	return allowed
 }
 
+// CanDelegate reports whether external apps may use a resource in the selected workspace.
+func (e Effective) CanDelegate(scope Scope, resource gatewaydb.PermissionResource) bool {
+	if !e.active || scope.OrganizationID != e.organizationID || scope.WorkspaceID == "" {
+		return false
+	}
+	if e.CanAdminister(scope) {
+		return true
+	}
+	_, allowed := e.grants[grantKey{
+		workspaceID: scope.WorkspaceID,
+		resource:    resource,
+		action:      gatewaydb.PermissionActionDelegate,
+	}]
+	return allowed
+}
+
 // CanAdminister reports whether a built-in role bypass applies to the exact scope.
 func (e Effective) CanAdminister(scope Scope) bool {
 	if scope.OrganizationID != e.organizationID {

@@ -102,7 +102,8 @@ func (s *service) git(w http.ResponseWriter, r *http.Request) {
 
 func (s *service) runGit(ctx context.Context, req GitRequest) (gatewayapi.CodingGitResult, error) {
 	result := gatewayapi.CodingGitResult{Files: []gatewayapi.CodingGitFile{}}
-	for _, name := range []string{req.Root, req.Directory} {
+	names := []string{req.Root, req.Directory}
+	for _, name := range names {
 		if !filepath.IsLocal(name) || !strings.HasPrefix(name, "Projects/") {
 			return result, errors.New("git directory must be a managed project path")
 		}
@@ -195,7 +196,8 @@ func (s *service) runGit(ctx context.Context, req GitRequest) (gatewayapi.Coding
 	}
 	if req.Git.Operation == gatewayapi.CodingGitDiscover {
 		snapshot := gatewayapi.CodingRepositorySnapshot{
-			Refs: []gatewayapi.CodingRef{}, Worktrees: []gatewayapi.CodingDiscoveredWorktree{},
+			Refs:      []gatewayapi.CodingRef{},
+			Worktrees: []gatewayapi.CodingDiscoveredWorktree{},
 		}
 		common, err := run(repo, "", "rev-parse", "--path-format=absolute", "--git-common-dir")
 		if err != nil {

@@ -1,5 +1,9 @@
 "use client"
 
+import { Controller, useForm, useWatch } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
+import { z } from "zod"
+import { roleNameSchema } from "@/data/schema"
 import type { Route } from "next"
 import Link from "next/link"
 import { useRouter } from "@bprogress/next/app"
@@ -7,7 +11,7 @@ import { Fragment, startTransition, useActionState, useMemo, useState } from "re
 import {
   Building2,
   CircleAlert,
-  KeyRound,
+  ChevronDown,
   LockKeyhole,
   PanelsTopLeft,
   Plus,
@@ -44,6 +48,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -66,6 +80,8 @@ import type {
   WorkspaceRoleEditorData,
 } from "@/data/roles"
 
+const roleNameInputSchema = z.object({ name: roleNameSchema })
+
 const resourceDescriptions: Partial<Record<RoleResource, string>> = {
   inference_pool: "Pools that route requests through an ordered list of models.",
   inference_provider: "Provider credentials, model catalogs, and model metadata.",
@@ -85,32 +101,21 @@ const capabilityDescriptions: Partial<Record<RoleAction, string>> = {
   write_shared_secret: "Create and update secrets shared with agents.",
 }
 
-function accessLabel(action: RoleAction) {
-  if (action === "read") {
-    return "Read-only"
-  }
-  if (action === "create") {
-    return "Read and create"
-  }
-  if (action === "modify") {
-    return "Read, create, and modify"
-  }
-  if (action === "delete") {
-    return "Full access"
-  }
-  return action.replaceAll("_", " ")
-}
+const configurationAccess = [
+  { action: "read", label: "Read", description: "View configuration." },
+  { action: "create", label: "Create", description: "View configuration and create new entries." },
+  { action: "modify", label: "Edit", description: "View, create, and edit configuration." },
+  {
+    action: "delete",
+    label: "Delete",
+    description: "View, create, edit, and delete configuration.",
+  },
+] satisfies { action: RoleAction; label: string; description: string }[]
+
+const appAccessLabel = "Use externally"
 
 function key(grant: RoleGrantInput) {
   return `${grant.workspaceId ?? "organisation"}\u001f${grant.resource}\u001f${grant.action}`
-}
-
-function sameGrant(left: RoleGrantInput, right: RoleGrantInput) {
-  return (
-    left.workspaceId === right.workspaceId &&
-    left.resource === right.resource &&
-    left.action === right.action
-  )
 }
 
 function expand(
@@ -150,7 +155,11 @@ export function RoleEditor({ data }: { data: RoleEditorData | WorkspaceRoleEdito
         .map(({ workspaceId, resource, action }) => ({ workspaceId, resource, action })) ?? [],
     [role?.grants]
   )
-  const [name, setName] = useState(role?.name ?? "")
+  const form = useForm<z.infer<typeof roleNameInputSchema>>({
+    defaultValues: { name: role?.name ?? "" },
+    resolver: zodResolver(roleNameInputSchema),
+  })
+  const name = useWatch({ control: form.control, name: "name" })
   const [direct, setDirect] = useState(baseline)
   const [activeScope, setActiveScope] = useState(workspace?.id ?? "organisation")
   const [dismissedPreview, setDismissedPreview] = useState<RoleFormState["preview"]>()
@@ -178,6 +187,8 @@ export function RoleEditor({ data }: { data: RoleEditorData | WorkspaceRoleEdito
             formData
           )
         : await organizationRoleFormAction(data.organization.slug, role?.id, state, formData)
+      if (result.errors?.name)
+        form.setError("name", { type: "server", message: result.errors.name[0] })
       if (result.href) {
         toast.success(role ? "Role updated" : "Role created")
         router.push(result.href)
@@ -213,26 +224,24 @@ export function RoleEditor({ data }: { data: RoleEditorData | WorkspaceRoleEdito
   if (name !== (role?.name ?? "")) {
     dirtyScopes.add(workspace?.id ?? "organisation")
   }
+  const directKeys = new Set(direct.map(key))
+  const baselineKeys = new Set(baseline.map(key))
   const changed =
-    direct.filter((grant) => !baseline.some((value) => sameGrant(value, grant))).length +
-    baseline.filter((grant) => !direct.some((value) => sameGrant(value, grant))).length +
+    direct.filter((grant) => !baselineKeys.has(key(grant))).length +
+    baseline.filter((grant) => !directKeys.has(key(grant))).length +
     (name !== (role?.name ?? "") ? 1 : 0)
   const workspaceId = activeScope === "organisation" ? null : activeScope
   const availableResources = data.catalog.resources.filter((resource) =>
     workspaceId ? resource.workspace : resource.organisation
   )
   const agentCapabilities = workspaceId ? data.catalog.agentCapabilities : []
-  const resourceSelected = (resource: RoleResource) =>
-    availableResources
-      .find((candidate) => candidate.resource === resource)
-      ?.actions.some((actionName) =>
-        selected.has(key({ workspaceId, resource, action: actionName }))
-      ) ?? false
+  const resourceSelected = (resource: (typeof availableResources)[number]) =>
+    resource.actions.some((action) =>
+      selected.has(key({ workspaceId, resource: resource.resource, action }))
+    )
   const capabilitySelected = (actionName: RoleAction) =>
     selected.has(key({ workspaceId, resource: "agent", action: actionName }))
-  const selectedResources = availableResources.filter((resource) =>
-    resourceSelected(resource.resource)
-  )
+  const selectedResources = availableResources.filter(resourceSelected)
   const selectedCapabilities = agentCapabilities.filter((capability) =>
     capabilitySelected(capability.action)
   )
@@ -245,13 +254,9 @@ export function RoleEditor({ data }: { data: RoleEditorData | WorkspaceRoleEdito
         grant.resource === resource &&
         (!actionName || grant.action === actionName)
     )
-  const setResourceAccess = (resource: RoleResource, actionName: RoleAction) => {
-    setDirect((current) => [
-      ...current.filter(
-        (grant) => grant.workspaceId !== workspaceId || grant.resource !== resource
-      ),
-      { workspaceId, resource, action: actionName },
-    ])
+  const dependencies = {
+    organisation: data.catalog.organisationDependencies,
+    workspace: data.catalog.workspaceDependencies,
   }
   const togglePermission = (
     resource: RoleResource,
@@ -264,35 +269,33 @@ export function RoleEditor({ data }: { data: RoleEditorData | WorkspaceRoleEdito
           return current
         }
         const grant = { workspaceId, resource, action: actionName }
-        return current.some((value) => sameGrant(value, grant)) ? current : [...current, grant]
+        return current.some((value) => key(value) === key(grant)) ? current : [...current, grant]
       }
       return current.filter(
         (grant) =>
           grant.workspaceId !== workspaceId ||
           grant.resource !== resource ||
-          (resource === "agent" && grant.action !== actionName)
+          (actionName !== undefined && grant.action !== actionName)
       )
     })
   }
 
+  const submit = (values: z.infer<typeof roleNameInputSchema>, intent: "preview" | "save") => {
+    const formData = new FormData()
+    formData.set("name", values.name)
+    formData.set("grants", JSON.stringify(directGrants))
+    if (updatedAt) formData.set("updated_at", updatedAt)
+    formData.set("preview_fingerprint", previewValid ? (state.preview?.fingerprint ?? "") : "")
+    formData.set("intent", intent)
+    startTransition(() => formAction(formData))
+  }
   return (
     <form
       className="flex min-w-0 flex-col gap-6"
       id="role-form"
-      onSubmit={(event) => {
-        event.preventDefault()
-        const submitter = (event.nativeEvent as SubmitEvent).submitter
-        startTransition(() => formAction(new FormData(event.currentTarget, submitter)))
-      }}
+      noValidate
+      onSubmit={form.handleSubmit((values) => submit(values, role ? "preview" : "save"))}
     >
-      <input name="grants" type="hidden" value={JSON.stringify(directGrants)} />
-      {updatedAt ? <input name="updated_at" type="hidden" value={updatedAt} /> : null}
-      <input
-        name="preview_fingerprint"
-        type="hidden"
-        value={previewValid ? state.preview?.fingerprint : ""}
-      />
-
       {!role ? (
         <AdministrationPageHeader
           title={`Create ${workspace ? "workspace" : "organization"} role`}
@@ -300,22 +303,27 @@ export function RoleEditor({ data }: { data: RoleEditorData | WorkspaceRoleEdito
       ) : null}
       <div className="flex w-full flex-col gap-6 px-4 md:px-6">
         <FieldGroup className={workspace ? "max-w-2xl" : "md:grid md:grid-cols-2"}>
-          <Field data-invalid={Boolean(state.errors?.name)}>
-            <FieldLabel htmlFor="role-name" required>
-              Role name
-            </FieldLabel>
-            <Input
-              aria-invalid={Boolean(state.errors?.name)}
-              disabled={immutable}
-              id="role-name"
-              maxLength={80}
-              name="name"
-              onChange={(event) => setName(event.target.value)}
-              required
-              value={name}
-            />
-            <FieldError>{state.errors?.name?.[0]}</FieldError>
-          </Field>
+          <Controller
+            name="name"
+            control={form.control}
+            render={({ field, fieldState }) => (
+              <Field data-invalid={fieldState.invalid}>
+                <FieldLabel htmlFor="role-name" required>
+                  Role name
+                </FieldLabel>
+                <Input
+                  {...field}
+                  required
+                  disabled={immutable || pending}
+                  id="role-name"
+                  maxLength={80}
+                  aria-invalid={fieldState.invalid}
+                  aria-describedby={fieldState.invalid ? "role-name-error" : undefined}
+                />
+                <FieldError id="role-name-error" errors={[fieldState.error]} />
+              </Field>
+            )}
+          />
           {!workspace ? (
             <Field>
               <FieldLabel htmlFor="permission-scope">Permission scope</FieldLabel>
@@ -389,7 +397,7 @@ export function RoleEditor({ data }: { data: RoleEditorData | WorkspaceRoleEdito
                         <CommandEmpty>No permissions found.</CommandEmpty>
                         <CommandGroup heading="Resources">
                           {availableResources.map((resource) => {
-                            const active = resourceSelected(resource.resource)
+                            const active = resourceSelected(resource)
                             const editable = hasDirect(resource.resource)
                             return (
                               <CommandItem
@@ -398,7 +406,11 @@ export function RoleEditor({ data }: { data: RoleEditorData | WorkspaceRoleEdito
                                 key={resource.resource}
                                 keywords={[resourceDescriptions[resource.resource] ?? ""]}
                                 onSelect={() =>
-                                  togglePermission(resource.resource, resource.actions[0], !active)
+                                  togglePermission(
+                                    resource.resource,
+                                    active ? undefined : resource.actions[0],
+                                    !active
+                                  )
                                 }
                                 value={resource.label}
                               >
@@ -457,8 +469,38 @@ export function RoleEditor({ data }: { data: RoleEditorData | WorkspaceRoleEdito
               </div>
             ) : null}
             {selectedResources.map((resource, index) => {
-              const currentAction = resource.actions.findLast((actionName) =>
-                selected.has(key({ workspaceId, resource: resource.resource, action: actionName }))
+              const configurationOptions = configurationAccess
+                .filter((option) => resource.actions.includes(option.action))
+                .map((option) => {
+                  let description = option.description
+                  if (option.action === "delete" && !resource.actions.includes("modify")) {
+                    description = "View, create, and delete configuration."
+                  }
+                  if (resource.resource === "observability") {
+                    description = "View runtime events, traces, and telemetry."
+                  }
+                  return { ...option, description }
+                })
+              const currentAccess = configurationOptions.findLast((option) =>
+                selected.has(
+                  key({ workspaceId, resource: resource.resource, action: option.action })
+                )
+              )
+              const supportsApps = workspaceId !== null && resource.actions.includes("delegate")
+              const appGrant: RoleGrantInput = {
+                workspaceId,
+                resource: resource.resource,
+                action: "delegate",
+              }
+              const appsSelected = supportsApps && selected.has(key(appGrant))
+              const summary = [currentAccess?.label, appsSelected ? appAccessLabel : undefined]
+                .filter(Boolean)
+                .join(" · ")
+              const otherGrants = direct.filter(
+                (grant) =>
+                  grant.workspaceId !== workspaceId ||
+                  grant.resource !== resource.resource ||
+                  !configurationOptions.some((option) => option.action === grant.action)
               )
               const required = !hasDirect(resource.resource)
               return (
@@ -480,42 +522,121 @@ export function RoleEditor({ data }: { data: RoleEditorData | WorkspaceRoleEdito
                       </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
-                      <Select
-                        disabled={immutable}
-                        onValueChange={(value) => {
-                          const actionName = resource.actions.find(
-                            (candidate) => candidate === value
-                          )
-                          if (actionName) {
-                            setResourceAccess(resource.resource, actionName)
-                          }
-                        }}
-                        value={currentAction}
-                      >
-                        <SelectTrigger
-                          aria-label={`${resource.label} access`}
-                          className="w-52 max-w-[calc(100vw-6.5rem)]"
-                        >
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectGroup>
-                            {resource.actions.map((actionName) => (
-                              <SelectItem key={actionName} value={actionName}>
-                                <KeyRound />
-                                {accessLabel(actionName)}
-                              </SelectItem>
-                            ))}
-                          </SelectGroup>
-                        </SelectContent>
-                      </Select>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            aria-label={`${resource.label} permissions: ${summary}`}
+                            className="w-60 max-w-[calc(100vw-6.5rem)] justify-between"
+                            disabled={pending}
+                            type="button"
+                            variant="outline"
+                          >
+                            <span className="truncate">{summary}</span>
+                            <ChevronDown data-icon="inline-end" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-80">
+                          <DropdownMenuRadioGroup
+                            aria-label={`${resource.label} configuration access`}
+                            onValueChange={(value) => {
+                              const option = configurationOptions.find(
+                                (item) => item.action === value
+                              )
+                              if (!option) return
+                              setDirect((current) => [
+                                ...current.filter(
+                                  (grant) =>
+                                    grant.workspaceId !== workspaceId ||
+                                    grant.resource !== resource.resource ||
+                                    !configurationOptions.some(
+                                      (item) => item.action === grant.action
+                                    )
+                                ),
+                                { workspaceId, resource: resource.resource, action: option.action },
+                              ])
+                            }}
+                            value={currentAccess?.action ?? ""}
+                          >
+                            {configurationOptions.map((option) => {
+                              const sources = otherGrants.filter((grant) =>
+                                expand([grant], dependencies).has(
+                                  key({
+                                    workspaceId,
+                                    resource: resource.resource,
+                                    action: option.action,
+                                  })
+                                )
+                              )
+                              const requirementLabels = sources.map((source) => {
+                                let label = configurationAccess.find(
+                                  (item) => item.action === source.action
+                                )?.label
+                                if (source.action === "delegate") {
+                                  label = appAccessLabel
+                                } else if (source.resource === "agent") {
+                                  label = data.catalog.agentCapabilities.find(
+                                    (item) => item.action === source.action
+                                  )?.label
+                                }
+                                if (source.resource === resource.resource) return label
+                                const resourceLabel =
+                                  source.resource === "agent"
+                                    ? "Agents"
+                                    : data.catalog.resources.find(
+                                        (item) => item.resource === source.resource
+                                      )?.label
+                                return `${resourceLabel}: ${label}`
+                              })
+                              return (
+                                <DropdownMenuRadioItem
+                                  disabled={immutable}
+                                  key={option.action}
+                                  onSelect={(event) => event.preventDefault()}
+                                  value={option.action}
+                                >
+                                  <span className="flex min-w-0 flex-col gap-0.5 whitespace-normal">
+                                    <span>{option.label}</span>
+                                    <span className="text-xs text-muted-foreground">
+                                      {option.description}
+                                    </span>
+                                    {!immutable && sources.length ? (
+                                      <span className="text-xs text-muted-foreground">
+                                        Required by {[...new Set(requirementLabels)].join(", ")}.
+                                      </span>
+                                    ) : null}
+                                  </span>
+                                </DropdownMenuRadioItem>
+                              )
+                            })}
+                          </DropdownMenuRadioGroup>
+                          {supportsApps ? (
+                            <DropdownMenuGroup aria-label={`${resource.label} external app access`}>
+                              <DropdownMenuCheckboxItem
+                                checked={appsSelected}
+                                disabled={immutable}
+                                onCheckedChange={(enabled) =>
+                                  togglePermission(resource.resource, "delegate", enabled === true)
+                                }
+                                onSelect={(event) => event.preventDefault()}
+                              >
+                                <span className="flex min-w-0 flex-col gap-0.5 whitespace-normal">
+                                  <span>{appAccessLabel}</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {resource.resource === "inference_provider"
+                                      ? "Use provider models in external apps."
+                                      : "Use MCP connections in external apps."}
+                                  </span>
+                                </span>
+                              </DropdownMenuCheckboxItem>
+                            </DropdownMenuGroup>
+                          ) : null}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                       {!immutable ? (
                         <Button
                           aria-label={`Remove ${resource.label}`}
-                          disabled={!hasDirect(resource.resource)}
-                          onClick={() =>
-                            togglePermission(resource.resource, resource.actions[0], false)
-                          }
+                          disabled={!hasDirect(resource.resource) || pending}
+                          onClick={() => togglePermission(resource.resource, undefined, false)}
                           size="icon"
                           title={
                             hasDirect(resource.resource)
@@ -615,10 +736,8 @@ export function RoleEditor({ data }: { data: RoleEditorData | WorkspaceRoleEdito
               <Button
                 data-dialog-submit
                 disabled={pending}
-                form="role-form"
-                name="intent"
-                type="submit"
-                value="save"
+                type="button"
+                onClick={form.handleSubmit((values) => submit(values, "save"))}
               >
                 {pending ? <Spinner data-icon="inline-start" /> : <Save data-icon="inline-start" />}
                 Confirm update
@@ -667,6 +786,7 @@ function builtinSelection(data: RoleEditorData, activeScope: string) {
       continue
     }
     for (const action of resource.actions) {
+      if (workspaceId === null && action === "delegate") continue
       selected.add(key({ workspaceId, resource: resource.resource, action }))
     }
   }

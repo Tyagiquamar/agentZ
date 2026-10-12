@@ -1,12 +1,19 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto"
 import { cache } from "react"
 import { and, asc, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm"
-import { betterAuth } from "better-auth"
+import {
+  betterAuth,
+  type Auth as BetterAuthInstance,
+  type BetterAuthPlugin,
+  type BetterAuthOptions,
+} from "better-auth"
+import type { OAuthAccountKeyContext } from "@better-auth/core/oauth2"
 import { createAuthMiddleware, getOAuthState } from "better-auth/api"
 import { APIError, BASE_ERROR_CODES } from "@better-auth/core/error"
 import { nextCookies } from "better-auth/next-js"
 import { deleteSessionCookie, expireCookie } from "better-auth/cookies"
 import { apiKey } from "@better-auth/api-key"
+import { verifyOAuthQueryParams } from "@better-auth/oauth-provider"
 import { drizzleAdapter } from "better-auth/adapters/drizzle"
 import { jwt } from "better-auth/plugins/jwt"
 import { organization } from "better-auth/plugins/organization"
@@ -15,11 +22,15 @@ import { defaultStatements } from "better-auth/plugins/organization/access"
 import { twoFactor } from "better-auth/plugins/two-factor"
 import { headers } from "next/headers"
 import { z } from "zod"
-import { authErrorMessages } from "@/app/(auth)/shared"
+import { authErrorMessages, authSearchParamsSchema } from "@/app/(auth)/shared"
 import { getDB, schema } from "@/db"
 import { agentAPIKeyConfigID, webhookAPIKeyConfigID } from "@/lib/api-key-config"
 import { getEnv } from "@/lib/env"
-import { getGithubUserInfo, socialOAuthStateSchema } from "@/lib/github-membership"
+import {
+  getGithubUserInfo,
+  socialOAuthStateSchema,
+  type GithubProfile,
+} from "@/lib/github-membership"
 import { getGoogleUserInfo } from "@/lib/google-membership"
 import { dayjs } from "@/lib/format"
 import {
@@ -29,6 +40,7 @@ import {
 } from "@/lib/organization-invitation"
 import { minPasswordLength } from "@/lib/password-policy"
 import { signInReturnTo } from "@/lib/sign-in-redirect"
+import { agentZOAuthProvider } from "@/lib/delegation"
 
 // Better Auth uses these internal cookie names for 2FA challenge state and
 // trusted-device bypass. The plugin does not export them publicly, so the
@@ -52,6 +64,15 @@ const memberRole = organizationAccessControl.newRole({
 })
 
 const disabledAuthPaths = [
+  // AgentZ owns client registration and connected-application revocation.
+  "/oauth2/create-client",
+  "/oauth2/get-client",
+  "/oauth2/get-clients",
+  "/oauth2/update-client",
+  "/oauth2/delete-client",
+  "/oauth2/client/rotate-secret",
+  "/oauth2/update-consent",
+  "/oauth2/delete-consent",
   // Workspace capabilities and typed targets govern durable credentials.
   // Native API-key management cannot enforce that scope.
   "/api-key/create",
@@ -183,10 +204,10 @@ export async function projectMemberRoleTransports(
   )
 }
 
-function buildAuth() {
+function buildAuthOptions() {
   const env = getEnv()
 
-  return betterAuth({
+  return {
     appName: "AgentZ",
     baseURL: env.BETTER_AUTH_URL,
     trustedOrigins: [new URL(env.BETTER_AUTH_URL).origin],
@@ -293,6 +314,19 @@ function buildAuth() {
     },
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
+        if (
+          ctx.path === "/oauth2/authorize" &&
+          (ctx.query?.claims != null || ctx.body?.claims != null)
+        ) {
+          throw new APIError("BAD_REQUEST", {
+            error: "invalid_request",
+            error_description: "Request profile or email scopes instead of explicit claims.",
+          })
+        }
+        if (ctx.path === "/oauth2/authorize" && !ctx.body?.oauth_query) {
+          delete ctx.query?.agentz_tx
+          delete ctx.body?.agentz_tx
+        }
         if (ctx.path !== "/sign-in/email" && ctx.path !== "/sign-up/email") {
           return
         }
@@ -413,17 +447,28 @@ function buildAuth() {
         await ctx.context.internalAdapter.deleteSession(newSession.session.token)
         ctx.context.setNewSession(null)
 
+        const oauthQuery = z.string().optional().parse(state?.agentzOAuthQuery)
+        if (oauthQuery && !(await verifyOAuthQueryParams(oauthQuery, ctx.context.secret))) {
+          throw ctx.redirect("/signin?error=session_expired")
+        }
+
         const twoFactorCookieMaxAge =
           plugin?.options?.twoFactorCookieMaxAge ?? defaultTwoFactorCookieMaxAge
         const twoFactorCookie = ctx.context.createAuthCookie(twoFactorCookieName, {
           maxAge: twoFactorCookieMaxAge,
         })
         const twoFactorIdentifier = `2fa-${randomUUID()}`
+        const expiresAt = dayjs().add(twoFactorCookieMaxAge, "seconds").toDate()
 
         await ctx.context.internalAdapter.createVerificationValue({
           value: newSession.user.id,
           identifier: twoFactorIdentifier,
-          expiresAt: dayjs().add(twoFactorCookieMaxAge, "seconds").toDate(),
+          expiresAt,
+        })
+        await ctx.context.internalAdapter.createVerificationValue({
+          value: "0",
+          identifier: `2fa-attempts-${twoFactorIdentifier}`,
+          expiresAt,
         })
         await ctx.setSignedCookie(
           twoFactorCookie.name,
@@ -432,9 +477,8 @@ function buildAuth() {
           twoFactorCookie.attributes
         )
 
-        const oauthState = await getOAuthState()
-        const returnTo = signInReturnTo(oauthState?.callbackURL)
-        const search = new URLSearchParams()
+        const returnTo = signInReturnTo(state?.callbackURL)
+        const search = new URLSearchParams(oauthQuery)
         if (returnTo) {
           search.set("returnTo", returnTo)
         }
@@ -459,7 +503,6 @@ function buildAuth() {
               clientSecret: env.GITHUB_CLIENT_SECRET,
               prompt: "select_account",
               scope: ["user:email", "read:org"],
-              getUserInfo: getGithubUserInfo,
             },
           }
         : {}),
@@ -470,12 +513,33 @@ function buildAuth() {
               clientSecret: env.GOOGLE_CLIENT_SECRET,
               accessType: "offline",
               prompt: "select_account",
-              getUserInfo: getGoogleUserInfo,
             },
           }
         : {}),
     },
     plugins: [
+      {
+        id: "agentz-social-admission",
+        init: (ctx) => ({
+          context: {
+            socialProviders: ctx.socialProviders.map((provider) => {
+              if (provider.id === "github") {
+                return {
+                  ...provider,
+                  getUserInfo: getGithubUserInfo,
+                  accountSubject: ({ profile }: OAuthAccountKeyContext<GithubProfile>) =>
+                    profile.id.toString(),
+                }
+              }
+              if (provider.id === "google") {
+                return { ...provider, getUserInfo: getGoogleUserInfo }
+              }
+              return provider
+            }),
+          },
+        }),
+      } satisfies BetterAuthPlugin,
+      agentZOAuthProvider(env.BETTER_AUTH_URL),
       organization({
         ac: organizationAccessControl,
         allowUserToCreateOrganization: false,
@@ -683,7 +747,7 @@ function buildAuth() {
       }),
       nextCookies(), // make sure this is the last plugin in the array
     ],
-  })
+  } satisfies BetterAuthOptions
 }
 
 async function createSocialAdmissionMembership(
@@ -826,20 +890,40 @@ async function createSocialAdmissionMembership(
   })
 }
 
-export type Auth = ReturnType<typeof buildAuth>
+/** authPageParameters verifies the OAuth continuation shared by authentication pages. */
+export async function authPageParameters(search: Awaited<PageProps<"/signin">["searchParams"]>) {
+  const query = new URLSearchParams()
+  for (const [key, values] of Object.entries(search)) {
+    for (const value of [values].flat()) if (value !== undefined) query.append(key, value)
+  }
+  const signedParameters = new Set([...query.getAll("ba_param"), "sig"])
+  const oauthQuery = query.has("sig")
+    ? new URLSearchParams([...query].filter(([key]) => signedParameters.has(key))).toString()
+    : undefined
+  return {
+    ...authSearchParamsSchema.parse(search),
+    oauthQuery,
+    expired:
+      !!oauthQuery && !(await verifyOAuthQueryParams(oauthQuery, getEnv().BETTER_AUTH_SECRET)),
+  }
+}
+
+export type Auth = BetterAuthInstance<ReturnType<typeof buildAuthOptions>>
 let authInstance: Auth | undefined
 
-export const auth: Auth = new Proxy({} as Auth, {
-  get(_, prop) {
-    return Reflect.get(getAuth(), prop)
+const authConfig = {
+  get options() {
+    return buildAuthOptions()
   },
-})
+}
+
+export default authConfig
 
 /**
  * getAuth returns the shared Better Auth instance.
  */
 export function getAuth(): Auth {
-  authInstance ??= buildAuth()
+  authInstance ??= betterAuth(buildAuthOptions())
   return authInstance
 }
 

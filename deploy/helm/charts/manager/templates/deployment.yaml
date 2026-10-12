@@ -17,6 +17,10 @@
 {{- if and $umbrella (not $traceServiceNamespace) }}
 {{- $traceServiceNamespace = .Release.Namespace }}
 {{- end }}
+{{- $delegationNamespace := .Values.delegation.namespace }}
+{{- if and $umbrella (dig "agentz" "delegationEnabled" false (.Values.global | default dict)) }}
+{{- $delegationNamespace = default (printf "%s-gateway-delegations" .Release.Name) $delegationNamespace }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -98,6 +102,9 @@ spec:
             - --sinjector-openbao-k8s-auth-token-path={{ .Values.config.sinjectorOpenBaoK8sAuthTokenPath }}
             - --manager-openbao-k8s-auth-role={{ .Values.config.managerOpenBaoK8sAuthRole }}
             - --manager-openbao-k8s-auth-token-path={{ .Values.config.managerOpenBaoK8sAuthTokenPath }}
+            {{- if $delegationNamespace }}
+            - --delegation-namespace={{ $delegationNamespace }}
+            {{- end }}
             - --inference-secret-store-name={{ include "manager.inferenceSecretStoreName" . }}
             - --inference-secret-refresh-interval={{ required "manager.inference.externalSecrets.refreshInterval is required" .Values.inference.externalSecrets.refreshInterval }}
             - --manager-gateway-token-path={{ .Values.config.managerGatewayTokenPath }}

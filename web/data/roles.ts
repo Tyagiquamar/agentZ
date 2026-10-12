@@ -2,6 +2,7 @@ import "server-only"
 
 import { createHash, randomUUID } from "node:crypto"
 import type { UrlObject } from "node:url"
+import { cache } from "react"
 import { and, asc, eq, gt, inArray, isNull, ne, or, sql } from "drizzle-orm"
 import { cacheLife, cacheTag } from "next/cache"
 import { z } from "zod"
@@ -65,14 +66,14 @@ const roleResourceCatalog: RoleResourceDefinition[] = [
     label: "MCP connections",
     organisation: true,
     workspace: true,
-    actions: ["read", "create", "delete"],
+    actions: ["read", "create", "delete", "delegate"],
   },
   {
     resource: "inference_provider",
     label: "Inference providers",
     organisation: true,
     workspace: true,
-    actions: ["read", "create", "modify", "delete"],
+    actions: ["read", "create", "modify", "delete", "delegate"],
   },
   {
     resource: "inference_pool",
@@ -184,7 +185,9 @@ function available(resource: RoleResourceDefinition, workspaceId: string | null)
 function requiredGrants(grant: RoleGrantInput): RoleGrantInput[] {
   const resource = roleResourceCatalog.find((candidate) => candidate.resource === grant.resource)
   const requirements: RoleGrantInput[] = []
-  if (resource) {
+  if (grant.action === "delegate") {
+    requirements.push({ ...grant, action: "read" })
+  } else if (resource) {
     const index = resource.actions.indexOf(grant.action)
     if (index > 0) {
       for (const action of resource.actions.slice(0, index)) {
@@ -264,7 +267,9 @@ function editorCatalog() {
       ...roleResourceCatalog
         .filter((resource) => available(resource, workspaceId))
         .flatMap((resource) =>
-          resource.actions.map((action) => ({ workspaceId, resource: resource.resource, action }))
+          resource.actions
+            .filter((action) => workspaceId !== null || action !== "delegate")
+            .map((action) => ({ workspaceId, resource: resource.resource, action }))
         ),
       ...(workspaceId
         ? agentCapabilityCatalog.map(({ action }) => ({
@@ -358,6 +363,7 @@ async function validateGrantScopes(organizationId: string, grants: RoleGrantInpu
   }
 
   return grants.every((grant) => {
+    if (grant.action === "delegate" && grant.workspaceId === null) return false
     if (grant.resource === "agent") {
       return (
         Boolean(grant.workspaceId) &&
@@ -383,21 +389,13 @@ export async function listOrganizationRoles(orgSlug: string, pageToken?: string)
   return { organization: scope.actor.organization, ...(await listRoles(scope, pageToken)) }
 }
 
-export async function getRoleEditorData(
-  orgSlug: string,
-  roleId?: string
-): Promise<RoleEditorData | undefined> {
-  "use cache: private"
-  cacheLife({ stale: 30 })
-  const scope = await resolveRoleManagement(orgSlug)
-  if (!scope) return
-  cacheTag(
-    `organization:${scope.actor.organization.id}:roles`,
-    `organization:${scope.actor.organization.id}:user:${scope.actor.userId}:roles`,
-    ...(roleId ? [`organization:${scope.actor.organization.id}:role:${roleId}`] : [])
-  )
-  return loadRoleEditor(scope, roleId)
-}
+export const getRoleEditorData = cache(
+  async (orgSlug: string, roleId?: string): Promise<RoleEditorData | undefined> => {
+    const scope = await resolveRoleManagement(orgSlug)
+    if (!scope) return
+    return loadRoleEditor(scope, roleId)
+  }
+)
 
 export async function previewOrganizationRole(
   orgSlug: string,
@@ -1654,31 +1652,21 @@ export async function listWorkspaceRoles(
   }
 }
 
-export async function getWorkspaceRoleEditorData(
-  orgSlug: string,
-  workspaceSlug: string,
-  roleId?: string
-): Promise<WorkspaceRoleEditorData | undefined> {
-  "use cache: private"
-  cacheLife({ stale: 30 })
-  const scope = await resolveRoleManagement(orgSlug, workspaceSlug)
-  if (!scope?.workspace) return
-  cacheTag(
-    `organization:${scope.actor.organization.id}:roles`,
-    `organization:${scope.actor.organization.id}:workspace:${scope.workspace.id}:roles`,
-    `organization:${scope.actor.organization.id}:workspace:${scope.workspace.id}:user:${scope.actor.userId}:roles`,
-    ...(roleId
-      ? [
-          `organization:${scope.actor.organization.id}:workspace:${scope.workspace.id}:role:${roleId}`,
-        ]
-      : [])
-  )
-  return {
-    ...(await loadRoleEditor(scope, roleId)),
-    superadmin: scope.superadmin,
-    workspace: scope.workspace,
+export const getWorkspaceRoleEditorData = cache(
+  async (
+    orgSlug: string,
+    workspaceSlug: string,
+    roleId?: string
+  ): Promise<WorkspaceRoleEditorData | undefined> => {
+    const scope = await resolveRoleManagement(orgSlug, workspaceSlug)
+    if (!scope?.workspace) return
+    return {
+      ...(await loadRoleEditor(scope, roleId)),
+      superadmin: scope.superadmin,
+      workspace: scope.workspace,
+    }
   }
-}
+)
 
 export async function previewWorkspaceRole(
   orgSlug: string,

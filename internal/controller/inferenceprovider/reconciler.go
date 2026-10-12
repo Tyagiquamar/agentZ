@@ -103,9 +103,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	if err != nil {
 		return ctrl.Result{}, errors.Join(err, r.updateStatus(ctx, provider, runtime, err))
 	}
-	if err := ctrlutil.SetControllerReference(provider, runtime.Backend, r.Scheme); err != nil {
-		return ctrl.Result{}, fmt.Errorf("own inference backend: %w", err)
-	}
 	currentBackend := &agentgatewayv1alpha1.AgentgatewayBackend{
 		ObjectMeta: metav1.ObjectMeta{Name: provider.Name, Namespace: provider.Namespace},
 	}
@@ -127,13 +124,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 	runtime.Backend = currentBackend
 	if runtime.AuthPolicy != nil {
-		err := ctrlutil.SetControllerReference(provider, runtime.AuthPolicy, r.Scheme)
-		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("own provider auth policy: %w", err)
-		}
 		currentPolicy := &agentgatewayv1alpha1.AgentgatewayPolicy{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: runtime.AuthPolicy.Name, Namespace: provider.Namespace,
+				Name:      runtime.AuthPolicy.Name,
+				Namespace: provider.Namespace,
 			},
 		}
 		_, err = ctrlutil.CreateOrPatch(
@@ -160,10 +154,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		}
 	}
 	if runtime.ExternalSecret != nil {
-		err := ctrlutil.SetControllerReference(provider, runtime.ExternalSecret, r.Scheme)
-		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("own provider external secret: %w", err)
-		}
 		currentExternalSecret := &externalsecretsv1.ExternalSecret{
 			ObjectMeta: metav1.ObjectMeta{Name: provider.Name, Namespace: provider.Namespace},
 		}
@@ -467,8 +457,10 @@ func (r *Reconciler) updateStatus(ctx context.Context, provider *agentzv1alpha1.
 			meta.SetStatusCondition(
 				&status.Conditions,
 				metav1.Condition{
-					Type:   string(agentzv1alpha1.InferenceProviderConditionAccepted),
-					Status: acceptedStatus, Reason: acceptedReason, Message: acceptedMessage,
+					Type:               string(agentzv1alpha1.InferenceProviderConditionAccepted),
+					Status:             acceptedStatus,
+					Reason:             acceptedReason,
+					Message:            acceptedMessage,
 					ObservedGeneration: current.Generation,
 				},
 			)
@@ -485,7 +477,11 @@ func (r *Reconciler) updateStatus(ctx context.Context, provider *agentzv1alpha1.
 				credentialsReady = externalSecretReady(runtime.ExternalSecret)
 				credentialsMessage = "Authentication is still being prepared"
 				secret := &corev1.Secret{}
-				err := r.Get(ctx, types.NamespacedName{Name: current.Name, Namespace: current.Namespace}, secret)
+				secretKey := types.NamespacedName{
+					Name:      current.Name,
+					Namespace: current.Namespace,
+				}
+				err := r.Get(ctx, secretKey, secret)
 				switch {
 				case err == nil:
 					keysReady := hasKeys(secret, runtime.SecretKeys)
@@ -597,7 +593,10 @@ func setReadyCondition(conditions *[]metav1.Condition, conditionType string, rea
 	meta.SetStatusCondition(
 		conditions,
 		metav1.Condition{
-			Type: conditionType, Status: status, Reason: reason, Message: message,
+			Type:               conditionType,
+			Status:             status,
+			Reason:             reason,
+			Message:            message,
 			ObservedGeneration: generation,
 		},
 	)
