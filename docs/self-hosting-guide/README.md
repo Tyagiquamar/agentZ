@@ -91,9 +91,9 @@ kubectl apply --server-side --force-conflicts -f \
 ```
 helm upgrade -i --create-namespace \
   --namespace agentgateway-system \
-  --version v1.5.0 agentgateway-crds oci://cr.agentgateway.dev/charts/agentgateway-crds
+  --version v1.6.0 agentgateway-crds oci://cr.agentgateway.dev/charts/agentgateway-crds
 
-helm upgrade -i -n agentgateway-system agentgateway oci://cr.agentgateway.dev/charts/agentgateway --version v1.5.0
+helm upgrade -i -n agentgateway-system agentgateway oci://cr.agentgateway.dev/charts/agentgateway --version v1.6.0
 ```
 
 Read more: <https://agentgateway.dev/docs/kubernetes/latest/documentation/install/helm/>

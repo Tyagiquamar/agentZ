@@ -596,7 +596,9 @@ func (r *Reconciler) reconcileInferenceGateway(ctx context.Context, namespace st
 func (r *Reconciler) inferenceTracing(namespace string) *agentgatewayv1alpha1.Tracing {
 	randomSampling := agentgatewayv1alpha1.CELExpression("true")
 	return &agentgatewayv1alpha1.Tracing{
-		BackendRef:     tracePolicyBackendRef(r.TraceBackend, inferenceTraceBackendName),
+		PolicyBackendEndpoint: agentgatewayv1alpha1.PolicyBackendEndpoint{
+			BackendRef: tracePolicyBackendRef(r.TraceBackend, inferenceTraceBackendName),
+		},
 		Protocol:       agentgatewayv1alpha1.OTLPProtocolGrpc,
 		RandomSampling: &randomSampling,
 		Attributes: &agentgatewayv1alpha1.LogTracingAttributes{

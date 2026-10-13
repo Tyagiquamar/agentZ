@@ -12,13 +12,13 @@
           pkgs = import nixpkgs { inherit system; };
           oapiCodegen = nixpkgs-oapi-codegen.legacyPackages.${system}.oapi-codegen;
           otel = pkgs.callPackage ./opencode/plugin-otel/default.nix { };
-          cli = pkgs.buildGoModule {
+          cli = pkgs.buildGo127Module {
             pname = "agentz";
             version = "0.1.0";
             src = ./.;
             subPackages = [ "cmd/agentz" ];
             ldflags = [ "-s" "-w" ];
-            vendorHash = "sha256-SAuwgS/lcyJ7xOftox2o1la9ptn5CECfjvoB7NnK7xU=";
+            vendorHash = "sha256-MjuyaonNg+T7A/iddE4fwnWddMnJYNPWNXi2USENOlM=";
           };
           nodeModules = pkgs.stdenvNoCC.mkDerivation {
             pname = "opencode-config-node_modules";
@@ -213,7 +213,7 @@
             packages = with pkgs; [
               nixd
               nixpkgs-fmt
-              go
+              go_1_27
               go-tools
               gotools
               gofumpt

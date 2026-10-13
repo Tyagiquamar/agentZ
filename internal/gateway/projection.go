@@ -267,9 +267,13 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 			transport := &agw.BackendSimple{
 				TLS: &agw.BackendTLS{Sni: &target.Host},
 				HTTP: &agw.BackendHTTP{
-					Version:        new(agw.HTTPVersion1),
-					RequestTimeout: connection.Spec.Endpoint.Timeout,
+					Version: new(agw.HTTPVersion1),
 				},
+			}
+			if connection.Spec.Endpoint.Timeout != nil {
+				transport.HTTP.RequestTimeout = &agw.Duration{
+					Duration: connection.Spec.Endpoint.Timeout.Duration,
+				}
 			}
 			innerName := fmt.Sprintf("d-%s-mcp-%d", grant.ID, index)
 			section := gwv1.SectionName(selected.Id)

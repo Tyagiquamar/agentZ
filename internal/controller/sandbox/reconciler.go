@@ -746,9 +746,10 @@ func (r *Reconciler) reconcileBackend(ctx context.Context, sandbox *agentzv1alph
 			}
 		}
 		if conn.Spec.Endpoint.Timeout != nil {
-			timeout := conn.Spec.Endpoint.Timeout.DeepCopy()
 			policies.HTTP = &agentgatewayv1alpha1.BackendHTTP{
-				RequestTimeout: timeout,
+				RequestTimeout: &agentgatewayv1alpha1.Duration{
+					Duration: conn.Spec.Endpoint.Timeout.Duration,
+				},
 			}
 		}
 		if policies.TLS == nil && policies.HTTP == nil {
@@ -1081,7 +1082,9 @@ func (r *Reconciler) reconcileTracePolicy(ctx context.Context, namespace string,
 		}},
 		Frontend: &agentgatewayv1alpha1.Frontend{
 			Tracing: &agentgatewayv1alpha1.Tracing{
-				BackendRef:     backendRef,
+				PolicyBackendEndpoint: agentgatewayv1alpha1.PolicyBackendEndpoint{
+					BackendRef: backendRef,
+				},
 				Protocol:       agentgatewayv1alpha1.OTLPProtocolGrpc,
 				Attributes:     attrs,
 				Resources:      resources,
@@ -1175,12 +1178,12 @@ func (r *Reconciler) reconcileTraceBackend(ctx context.Context, namespace, name 
 	return nil
 }
 
-func tracePolicyBackendRef(cfg TraceBackend, name string) gwv1.BackendObjectReference {
+func tracePolicyBackendRef(cfg TraceBackend, name string) *gwv1.BackendObjectReference {
 	if cfg.Mode == TraceBackendModeService {
 		kind := gwv1.Kind("Service")
 		namespace := gwv1.Namespace(cfg.ServiceNamespace)
 		port := cfg.ServicePort
-		return gwv1.BackendObjectReference{
+		return &gwv1.BackendObjectReference{
 			Kind:      &kind,
 			Name:      gwv1.ObjectName(cfg.ServiceName),
 			Namespace: &namespace,
@@ -1190,7 +1193,7 @@ func tracePolicyBackendRef(cfg TraceBackend, name string) gwv1.BackendObjectRefe
 
 	group := gwv1.Group("agentgateway.dev")
 	kind := gwv1.Kind("AgentgatewayBackend")
-	return gwv1.BackendObjectReference{
+	return &gwv1.BackendObjectReference{
 		Group: &group,
 		Kind:  &kind,
 		Name:  gwv1.ObjectName(name),

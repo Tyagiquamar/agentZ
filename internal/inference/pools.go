@@ -320,7 +320,7 @@ func RenderPoolBackend(pool *agentzv1alpha1.InferencePool, definition PoolDefini
 			policies.Health = &agentgatewayv1alpha1.Health{
 				UnhealthyCondition: &condition,
 				Eviction: &agentgatewayv1alpha1.BackendEviction{
-					Duration:            &metav1.Duration{Duration: 60 * time.Second},
+					Duration:            &agentgatewayv1alpha1.Duration{Duration: 60 * time.Second},
 					ConsecutiveFailures: &failures,
 					RestoreHealth:       &restore,
 				},
