@@ -1195,7 +1195,11 @@ func TestDelegatedMCPTransportBoundary(t *testing.T) {
 				Trailer: http.Header{"X-Diagnostic": {"private-credential"}},
 			}}
 			service.delegationTransport = upstream
-			request := httptest.NewRequest(http.MethodPost, "/api/mcp?api_key=private-credential", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"ping"}`))
+			request := httptest.NewRequest(
+				http.MethodPost,
+				"/api/mcp?api_key=private-credential",
+				strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"ping"}`),
+			)
 			request.Header.Set("Authorization", "Bearer "+signed)
 			request.Header.Set("Cookie", "private-credential")
 			request.Header.Set("X-Api-Key", "private-credential")

@@ -221,7 +221,10 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 			fmt.Sprintf("/delegations/%s/models/%d", grant.ID, index),
 			gwv1.PathMatchPathPrefix,
 		)
-		objects = append(objects, backend, route, delegationTelemetry(grant, appName, route, selected.WorkspaceId, "inference", selected.Provider, selected.Uid, selected.Id))
+		objects = append(objects, backend, route, delegationTelemetry(
+			grant, appName, route, selected.WorkspaceId,
+			"inference", selected.Provider, selected.Uid, selected.Id,
+		))
 		// Keep the owner route intact through the shared private ingress. Only the
 		// owner gateway rewrites it to the provider's API and injects credentials.
 		forward := &agw.AgentgatewayBackend{
@@ -328,7 +331,10 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 			}
 			path := "/delegations/" + grant.ID + "/mcp/" + selected.Id
 			route := delegationRoute(selected.Namespace, mcp.GatewayName, innerName, path, gwv1.PathMatchExact)
-			objects = append(objects, inner, policy, route, delegationTelemetry(grant, appName, route, selected.WorkspaceId, "mcp", selected.Connection, selected.Uid, selected.Id))
+			objects = append(objects, inner, policy, route, delegationTelemetry(
+				grant, appName, route, selected.WorkspaceId,
+				"mcp", selected.Connection, selected.Uid, selected.Id,
+			))
 			host := mcp.GatewayName + "." + selected.Namespace + ".svc.cluster.local"
 			outer.Spec.MCP.Targets = append(outer.Spec.MCP.Targets, agw.McpTargetSelector{
 				Name: section,

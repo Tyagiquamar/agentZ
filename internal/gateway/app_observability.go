@@ -111,7 +111,10 @@ func (s *Service) ListAppTraces(w http.ResponseWriter, r *http.Request, clientID
 		before = params.StartedBefore.UTC()
 	}
 	if after.After(before) {
-		apiutil.WriteError(w, r, apiutil.NewError(http.StatusBadRequest, "invalid_request", "started_after must not exceed started_before", errBadRequest))
+		apiutil.WriteError(w, r, apiutil.NewError(
+			http.StatusBadRequest, "invalid_request",
+			"started_after must not exceed started_before", errBadRequest,
+		))
 		return
 	}
 	rows, err := s.queries.GatewayListAppTraces(r.Context(), gatewaydb.GatewayListAppTracesParams{
@@ -175,7 +178,10 @@ func (s *Service) GetAppTraceChart(w http.ResponseWriter, r *http.Request, clien
 		before = params.StartedBefore.UTC()
 	}
 	if after.After(before) {
-		apiutil.WriteError(w, r, apiutil.NewError(http.StatusBadRequest, "invalid_request", "started_after must not exceed started_before", errBadRequest))
+		apiutil.WriteError(w, r, apiutil.NewError(
+			http.StatusBadRequest, "invalid_request",
+			"started_after must not exceed started_before", errBadRequest,
+		))
 		return
 	}
 	rows, err := s.queries.GatewayGetAppTraceChart(r.Context(), gatewaydb.GatewayGetAppTraceChartParams{
