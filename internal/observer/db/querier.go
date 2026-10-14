@@ -9,6 +9,7 @@ import (
 )
 
 type Querier interface {
+	InsertAppOperation(ctx context.Context, arg []InsertAppOperationParams) *InsertAppOperationBatchResults
 	InsertFileEvents(ctx context.Context, arg []InsertFileEventsParams) (int64, error)
 	InsertMCPToolInvocation(ctx context.Context, arg []InsertMCPToolInvocationParams) *InsertMCPToolInvocationBatchResults
 	InsertNetworkEvents(ctx context.Context, arg []InsertNetworkEventsParams) (int64, error)

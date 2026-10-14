@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"sync/atomic"
 	"time"
+
+	observerdb "github.com/accuknox/agentz/internal/observer/db"
 )
 
 type store interface {
@@ -33,6 +35,7 @@ type collector struct {
 	files     []fileEvent
 	networks  []networkEvent
 	traces    []traceSpanEvent
+	apps      []observerdb.InsertAppOperationParams
 }
 
 func (c *collector) add(ev event) {
@@ -48,10 +51,13 @@ func (c *collector) add(ev event) {
 	if ev.trace != nil {
 		c.traces = append(c.traces, *ev.trace)
 	}
+	if ev.app != nil {
+		c.apps = append(c.apps, *ev.app)
+	}
 }
 
 func (c *collector) count() int {
-	return len(c.processes) + len(c.files) + len(c.networks) + len(c.traces)
+	return len(c.processes) + len(c.files) + len(c.networks) + len(c.traces) + len(c.apps)
 }
 
 func (c *collector) flush() batch {
@@ -60,11 +66,13 @@ func (c *collector) flush() batch {
 		files:     c.files,
 		networks:  c.networks,
 		traces:    c.traces,
+		apps:      c.apps,
 	}
 	c.processes = nil
 	c.files = nil
 	c.networks = nil
 	c.traces = nil
+	c.apps = nil
 	return b
 }
 
@@ -85,9 +93,11 @@ func (s *sink) run(ctx context.Context) {
 		if b.empty() {
 			return
 		}
-		if err := s.store.insertBatch(ctx, b); err != nil {
+		flushCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		defer cancel()
+		if err := s.store.insertBatch(flushCtx, b); err != nil {
 			atomic.AddUint64(&s.stats.failed, 1)
-			slog.ErrorContext(ctx, "flush observer batch", slog.Any("error", err))
+			slog.ErrorContext(flushCtx, "flush observer batch", slog.Any("error", err))
 			return
 		}
 		atomic.AddUint64(&s.stats.flushed, 1)
@@ -95,17 +105,12 @@ func (s *sink) run(ctx context.Context) {
 
 	for {
 		select {
-		case <-ctx.Done():
-			for {
-				select {
-				case ev := <-s.events:
-					c.add(ev)
-				default:
-					flush()
-					return
-				}
+
+		case ev, ok := <-s.events:
+			if !ok {
+				flush()
+				return
 			}
-		case ev := <-s.events:
 			c.add(ev)
 			if c.count() >= s.cfg.BatchSize {
 				flush()

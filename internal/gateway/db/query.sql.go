@@ -1714,6 +1714,211 @@ func (q *Queries) GatewayGetAgentShare(ctx context.Context, arg GatewayGetAgentS
 	return i, err
 }
 
+const gatewayGetAppMCPGraph = `-- name: GatewayGetAppMCPGraph :many
+SELECT resource_uid, resource_name, resource_namespace, tool_name,
+ AVG(duration_ns::double precision / 1000000)::double precision AS avg_latency_ms,
+ COUNT(*) FILTER (WHERE status_code <> 'ERROR')::bigint AS success_count,
+ COUNT(*) FILTER (WHERE status_code = 'ERROR')::bigint AS failed_count,
+ COALESCE((
+  SELECT MAX(history.start_time) FROM observer_app_operations history
+  WHERE history.organization_id = $1
+    AND history.workspace_id = $2 AND history.client_id = $3
+    AND history.span_class = 'tool' AND history.resource_uid = op.resource_uid
+    AND history.tool_name = op.tool_name
+ ), MAX(op.start_time))::timestamptz AS last_called_at
+FROM observer_app_operations op
+WHERE op.organization_id = $1
+  AND op.workspace_id = $2
+  AND op.client_id = $3
+ AND op.span_class = 'tool' AND op.start_time >= $4
+ AND op.start_time < $5
+GROUP BY resource_uid, resource_name, resource_namespace, tool_name
+ORDER BY resource_namespace, resource_name, tool_name
+`
+
+type GatewayGetAppMCPGraphParams struct {
+	OrganizationID  string    `json:"organization_id"`
+	WorkspaceID     string    `json:"workspace_id"`
+	ClientID        string    `json:"client_id"`
+	StartTimeAfter  time.Time `json:"start_time_after"`
+	StartTimeBefore time.Time `json:"start_time_before"`
+}
+
+type GatewayGetAppMCPGraphRow struct {
+	ResourceUid       string    `json:"resource_uid"`
+	ResourceName      string    `json:"resource_name"`
+	ResourceNamespace string    `json:"resource_namespace"`
+	ToolName          string    `json:"tool_name"`
+	AvgLatencyMs      float64   `json:"avg_latency_ms"`
+	SuccessCount      int64     `json:"success_count"`
+	FailedCount       int64     `json:"failed_count"`
+	LastCalledAt      time.Time `json:"last_called_at"`
+}
+
+func (q *Queries) GatewayGetAppMCPGraph(ctx context.Context, arg GatewayGetAppMCPGraphParams) ([]GatewayGetAppMCPGraphRow, error) {
+	rows, err := q.db.Query(ctx, gatewayGetAppMCPGraph,
+		arg.OrganizationID,
+		arg.WorkspaceID,
+		arg.ClientID,
+		arg.StartTimeAfter,
+		arg.StartTimeBefore,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GatewayGetAppMCPGraphRow{}
+	for rows.Next() {
+		var i GatewayGetAppMCPGraphRow
+		if err := rows.Scan(
+			&i.ResourceUid,
+			&i.ResourceName,
+			&i.ResourceNamespace,
+			&i.ToolName,
+			&i.AvgLatencyMs,
+			&i.SuccessCount,
+			&i.FailedCount,
+			&i.LastCalledAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const gatewayGetAppOperation = `-- name: GatewayGetAppOperation :one
+SELECT op.id, op.organization_id, op.workspace_id, op.client_id, op.app_name, op.grant_id, op.user_id, op.resource_kind, op.resource_namespace, op.resource_name, op.resource_uid, op.target_id, op.trace_id, op.span_id, op.parent_span_id, op.start_time, op.end_time, op.duration_ns, op.name, op.span_class, op.operation_name, op.status_code, op.error_type, op.error_message, op.model, op.tool_name, op.session_id, op.input_tokens, op.output_tokens, op.reasoning_tokens, op.cached_input_tokens, op.cached_write_tokens, op.cost_usd, op.resource_attributes, op.span_attributes, op.ingested_at, payload.operation_id, payload.input_messages, payload.output_messages, payload.tool_arguments, payload.tool_result, payload.tool_error
+FROM observer_app_operations op JOIN observer_app_operation_payloads payload ON payload.operation_id = op.id
+WHERE op.organization_id = $1
+  AND op.workspace_id = $2
+  AND op.client_id = $3 AND op.id = $4
+`
+
+type GatewayGetAppOperationParams struct {
+	OrganizationID string `json:"organization_id"`
+	WorkspaceID    string `json:"workspace_id"`
+	ClientID       string `json:"client_id"`
+	OperationID    int64  `json:"operation_id"`
+}
+
+type GatewayGetAppOperationRow struct {
+	ObserverAppOperation        ObserverAppOperation        `json:"observer_app_operation"`
+	ObserverAppOperationPayload ObserverAppOperationPayload `json:"observer_app_operation_payload"`
+}
+
+func (q *Queries) GatewayGetAppOperation(ctx context.Context, arg GatewayGetAppOperationParams) (GatewayGetAppOperationRow, error) {
+	row := q.db.QueryRow(ctx, gatewayGetAppOperation,
+		arg.OrganizationID,
+		arg.WorkspaceID,
+		arg.ClientID,
+		arg.OperationID,
+	)
+	var i GatewayGetAppOperationRow
+	err := row.Scan(
+		&i.ObserverAppOperation.ID,
+		&i.ObserverAppOperation.OrganizationID,
+		&i.ObserverAppOperation.WorkspaceID,
+		&i.ObserverAppOperation.ClientID,
+		&i.ObserverAppOperation.AppName,
+		&i.ObserverAppOperation.GrantID,
+		&i.ObserverAppOperation.UserID,
+		&i.ObserverAppOperation.ResourceKind,
+		&i.ObserverAppOperation.ResourceNamespace,
+		&i.ObserverAppOperation.ResourceName,
+		&i.ObserverAppOperation.ResourceUid,
+		&i.ObserverAppOperation.TargetID,
+		&i.ObserverAppOperation.TraceID,
+		&i.ObserverAppOperation.SpanID,
+		&i.ObserverAppOperation.ParentSpanID,
+		&i.ObserverAppOperation.StartTime,
+		&i.ObserverAppOperation.EndTime,
+		&i.ObserverAppOperation.DurationNs,
+		&i.ObserverAppOperation.Name,
+		&i.ObserverAppOperation.SpanClass,
+		&i.ObserverAppOperation.OperationName,
+		&i.ObserverAppOperation.StatusCode,
+		&i.ObserverAppOperation.ErrorType,
+		&i.ObserverAppOperation.ErrorMessage,
+		&i.ObserverAppOperation.Model,
+		&i.ObserverAppOperation.ToolName,
+		&i.ObserverAppOperation.SessionID,
+		&i.ObserverAppOperation.InputTokens,
+		&i.ObserverAppOperation.OutputTokens,
+		&i.ObserverAppOperation.ReasoningTokens,
+		&i.ObserverAppOperation.CachedInputTokens,
+		&i.ObserverAppOperation.CachedWriteTokens,
+		&i.ObserverAppOperation.CostUsd,
+		&i.ObserverAppOperation.ResourceAttributes,
+		&i.ObserverAppOperation.SpanAttributes,
+		&i.ObserverAppOperation.IngestedAt,
+		&i.ObserverAppOperationPayload.OperationID,
+		&i.ObserverAppOperationPayload.InputMessages,
+		&i.ObserverAppOperationPayload.OutputMessages,
+		&i.ObserverAppOperationPayload.ToolArguments,
+		&i.ObserverAppOperationPayload.ToolResult,
+		&i.ObserverAppOperationPayload.ToolError,
+	)
+	return i, err
+}
+
+const gatewayGetAppTraceChart = `-- name: GatewayGetAppTraceChart :many
+WITH traces AS (
+ SELECT trace_id, MIN(start_time)::timestamptz AS started_at
+ FROM observer_app_operations op
+ WHERE op.organization_id = $3
+   AND op.workspace_id = $4
+   AND op.client_id = $5
+  GROUP BY trace_id
+)
+SELECT date_trunc('hour', started_at)::timestamptz AS time, COUNT(*)::bigint AS count
+FROM traces
+WHERE traces.started_at >= $1::timestamptz AND traces.started_at <= $2::timestamptz
+GROUP BY time ORDER BY time
+`
+
+type GatewayGetAppTraceChartParams struct {
+	StartedAfter   time.Time `json:"started_after"`
+	StartedBefore  time.Time `json:"started_before"`
+	OrganizationID string    `json:"organization_id"`
+	WorkspaceID    string    `json:"workspace_id"`
+	ClientID       string    `json:"client_id"`
+}
+
+type GatewayGetAppTraceChartRow struct {
+	Time  time.Time `json:"time"`
+	Count int64     `json:"count"`
+}
+
+func (q *Queries) GatewayGetAppTraceChart(ctx context.Context, arg GatewayGetAppTraceChartParams) ([]GatewayGetAppTraceChartRow, error) {
+	rows, err := q.db.Query(ctx, gatewayGetAppTraceChart,
+		arg.StartedAfter,
+		arg.StartedBefore,
+		arg.OrganizationID,
+		arg.WorkspaceID,
+		arg.ClientID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GatewayGetAppTraceChartRow{}
+	for rows.Next() {
+		var i GatewayGetAppTraceChartRow
+		if err := rows.Scan(&i.Time, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const gatewayGetChatInput = `-- name: GatewayGetChatInput :one
 SELECT id, sequence, workspace_id, agent_name, session_id, organization_id, author_id, author_name, directory, resume, content, delivery, state, revision, message_id, error, created_at, updated_at FROM chat_inputs WHERE id = $1 AND workspace_id = $2
   AND agent_name = $3 AND session_id = $4
@@ -2013,6 +2218,47 @@ func (q *Queries) GatewayGetDelegationGrant(ctx context.Context, arg GatewayGetD
 		&i.ApprovedAt,
 		&i.RevokedAt,
 	)
+	return i, err
+}
+
+const gatewayGetLensApp = `-- name: GatewayGetLensApp :one
+WITH history AS (
+ SELECT app_name AS name FROM observer_app_operations op
+ WHERE op.organization_id = $2
+   AND op.workspace_id = $3 AND op.client_id = $1
+ ORDER BY start_time DESC, id DESC LIMIT 1
+), subject AS (
+ SELECT name FROM history
+ UNION ALL
+ SELECT COALESCE(c.name, c.client_id)::text FROM delegation_grants g
+ JOIN oauth_clients c ON c.client_id = g.client_id
+ WHERE g.organization_id = $2 AND g.client_id = $1
+   AND g.approved_at IS NOT NULL AND g.revoked_at IS NULL AND c.disabled IS NOT TRUE
+   AND EXISTS (
+    SELECT 1 FROM jsonb_array_elements((g.selection->'models') || (g.selection->'mcp')) AS selected
+    WHERE selected->>'workspace_id' = $3
+   )
+)
+SELECT $1::text AS client_id, COALESCE(c.name, subject.name)::text AS name
+FROM subject LEFT JOIN oauth_clients c ON c.client_id = $1
+LIMIT 1
+`
+
+type GatewayGetLensAppParams struct {
+	ClientID       string `json:"client_id"`
+	OrganizationID string `json:"organization_id"`
+	WorkspaceID    string `json:"workspace_id"`
+}
+
+type GatewayGetLensAppRow struct {
+	ClientID string `json:"client_id"`
+	Name     string `json:"name"`
+}
+
+func (q *Queries) GatewayGetLensApp(ctx context.Context, arg GatewayGetLensAppParams) (GatewayGetLensAppRow, error) {
+	row := q.db.QueryRow(ctx, gatewayGetLensApp, arg.ClientID, arg.OrganizationID, arg.WorkspaceID)
+	var i GatewayGetLensAppRow
+	err := row.Scan(&i.ClientID, &i.Name)
 	return i, err
 }
 
@@ -3139,6 +3385,222 @@ func (q *Queries) GatewayListAgentsByName(ctx context.Context, arg GatewayListAg
 	return items, nil
 }
 
+const gatewayListAppSpans = `-- name: GatewayListAppSpans :many
+SELECT op.id, op.organization_id, op.workspace_id, op.client_id, op.app_name, op.grant_id, op.user_id, op.resource_kind, op.resource_namespace, op.resource_name, op.resource_uid, op.target_id, op.trace_id, op.span_id, op.parent_span_id, op.start_time, op.end_time, op.duration_ns, op.name, op.span_class, op.operation_name, op.status_code, op.error_type, op.error_message, op.model, op.tool_name, op.session_id, op.input_tokens, op.output_tokens, op.reasoning_tokens, op.cached_input_tokens, op.cached_write_tokens, op.cost_usd, op.resource_attributes, op.span_attributes, op.ingested_at FROM observer_app_operations op
+WHERE op.organization_id = $1
+  AND op.workspace_id = $2
+  AND op.client_id = $3
+ AND trace_id = $4
+ AND (NOT $5::boolean
+  OR (start_time, id) > ($6::timestamptz, $7::bigint))
+ORDER BY start_time, id LIMIT $8
+`
+
+type GatewayListAppSpansParams struct {
+	OrganizationID  string    `json:"organization_id"`
+	WorkspaceID     string    `json:"workspace_id"`
+	ClientID        string    `json:"client_id"`
+	TraceID         []byte    `json:"trace_id"`
+	CursorSet       bool      `json:"cursor_set"`
+	CursorStartTime time.Time `json:"cursor_start_time"`
+	CursorID        int64     `json:"cursor_id"`
+	PageSize        int32     `json:"page_size"`
+}
+
+type GatewayListAppSpansRow struct {
+	ObserverAppOperation ObserverAppOperation `json:"observer_app_operation"`
+}
+
+func (q *Queries) GatewayListAppSpans(ctx context.Context, arg GatewayListAppSpansParams) ([]GatewayListAppSpansRow, error) {
+	rows, err := q.db.Query(ctx, gatewayListAppSpans,
+		arg.OrganizationID,
+		arg.WorkspaceID,
+		arg.ClientID,
+		arg.TraceID,
+		arg.CursorSet,
+		arg.CursorStartTime,
+		arg.CursorID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GatewayListAppSpansRow{}
+	for rows.Next() {
+		var i GatewayListAppSpansRow
+		if err := rows.Scan(
+			&i.ObserverAppOperation.ID,
+			&i.ObserverAppOperation.OrganizationID,
+			&i.ObserverAppOperation.WorkspaceID,
+			&i.ObserverAppOperation.ClientID,
+			&i.ObserverAppOperation.AppName,
+			&i.ObserverAppOperation.GrantID,
+			&i.ObserverAppOperation.UserID,
+			&i.ObserverAppOperation.ResourceKind,
+			&i.ObserverAppOperation.ResourceNamespace,
+			&i.ObserverAppOperation.ResourceName,
+			&i.ObserverAppOperation.ResourceUid,
+			&i.ObserverAppOperation.TargetID,
+			&i.ObserverAppOperation.TraceID,
+			&i.ObserverAppOperation.SpanID,
+			&i.ObserverAppOperation.ParentSpanID,
+			&i.ObserverAppOperation.StartTime,
+			&i.ObserverAppOperation.EndTime,
+			&i.ObserverAppOperation.DurationNs,
+			&i.ObserverAppOperation.Name,
+			&i.ObserverAppOperation.SpanClass,
+			&i.ObserverAppOperation.OperationName,
+			&i.ObserverAppOperation.StatusCode,
+			&i.ObserverAppOperation.ErrorType,
+			&i.ObserverAppOperation.ErrorMessage,
+			&i.ObserverAppOperation.Model,
+			&i.ObserverAppOperation.ToolName,
+			&i.ObserverAppOperation.SessionID,
+			&i.ObserverAppOperation.InputTokens,
+			&i.ObserverAppOperation.OutputTokens,
+			&i.ObserverAppOperation.ReasoningTokens,
+			&i.ObserverAppOperation.CachedInputTokens,
+			&i.ObserverAppOperation.CachedWriteTokens,
+			&i.ObserverAppOperation.CostUsd,
+			&i.ObserverAppOperation.ResourceAttributes,
+			&i.ObserverAppOperation.SpanAttributes,
+			&i.ObserverAppOperation.IngestedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const gatewayListAppTraces = `-- name: GatewayListAppTraces :many
+WITH traces AS (
+SELECT trace_id, MIN(start_time)::timestamptz AS started_at,
+ MAX(end_time)::timestamptz AS ended_at,
+ (ARRAY_AGG(span_id ORDER BY start_time, id))[1]::bytea AS root_span_id,
+ (EXTRACT(EPOCH FROM MAX(end_time) - MIN(start_time)) * 1000000000)::bigint AS duration_ns,
+ COUNT(*)::bigint AS span_count,
+ COUNT(*) FILTER (WHERE status_code = 'ERROR')::bigint AS error_count,
+ COUNT(*) FILTER (WHERE span_class = 'tool')::bigint AS tool_count,
+ COUNT(*) FILTER (WHERE span_class = 'llm')::bigint AS model_count,
+ COALESCE(SUM(input_tokens), 0)::bigint AS input_tokens,
+ COUNT(input_tokens) > 0 AND COUNT(input_tokens) = COUNT(*) FILTER (WHERE span_class = 'llm') AS input_tokens_known,
+ COALESCE(SUM(output_tokens), 0)::bigint AS output_tokens,
+ COUNT(output_tokens) > 0 AND COUNT(output_tokens) = COUNT(*) FILTER (WHERE span_class = 'llm') AS output_tokens_known,
+ COALESCE(SUM(cached_input_tokens), 0)::bigint AS cached_input_tokens,
+ COUNT(cached_input_tokens) > 0 AND COUNT(cached_input_tokens) = COUNT(*) FILTER (WHERE span_class = 'llm') AS cached_input_tokens_known,
+ COALESCE(SUM(cached_write_tokens), 0)::bigint AS cached_write_tokens,
+ COUNT(cached_write_tokens) > 0 AND COUNT(cached_write_tokens) = COUNT(*) FILTER (WHERE span_class = 'llm') AS cached_write_tokens_known,
+ COALESCE(SUM(cost_usd), 0)::double precision AS cost_usd,
+ COUNT(cost_usd) > 0 AND COUNT(cost_usd) = COUNT(*) FILTER (WHERE span_class = 'llm') AS cost_usd_known,
+ CASE WHEN BOOL_OR(status_code = 'ERROR') THEN 'ERROR' ELSE 'OK' END::text AS status_code,
+ MAX(ingested_at)::timestamptz AS updated_at
+FROM observer_app_operations op
+WHERE op.organization_id = $7
+  AND op.workspace_id = $8
+  AND op.client_id = $9
+GROUP BY trace_id
+)
+SELECT trace_id, started_at, ended_at, root_span_id, duration_ns, span_count, error_count, tool_count, model_count, input_tokens, input_tokens_known, output_tokens, output_tokens_known, cached_input_tokens, cached_input_tokens_known, cached_write_tokens, cached_write_tokens_known, cost_usd, cost_usd_known, status_code, updated_at FROM traces
+WHERE traces.started_at >= $1::timestamptz AND traces.started_at <= $2::timestamptz
+ AND (NOT $3::boolean
+ OR (started_at, trace_id) < ($4::timestamptz, $5::bytea))
+ORDER BY started_at DESC, trace_id DESC
+LIMIT $6
+`
+
+type GatewayListAppTracesParams struct {
+	StartedAfter    time.Time `json:"started_after"`
+	StartedBefore   time.Time `json:"started_before"`
+	CursorSet       bool      `json:"cursor_set"`
+	CursorStartedAt time.Time `json:"cursor_started_at"`
+	CursorTraceID   []byte    `json:"cursor_trace_id"`
+	PageSize        int32     `json:"page_size"`
+	OrganizationID  string    `json:"organization_id"`
+	WorkspaceID     string    `json:"workspace_id"`
+	ClientID        string    `json:"client_id"`
+}
+
+type GatewayListAppTracesRow struct {
+	TraceID                []byte      `json:"trace_id"`
+	StartedAt              time.Time   `json:"started_at"`
+	EndedAt                time.Time   `json:"ended_at"`
+	RootSpanID             []byte      `json:"root_span_id"`
+	DurationNs             int64       `json:"duration_ns"`
+	SpanCount              int64       `json:"span_count"`
+	ErrorCount             int64       `json:"error_count"`
+	ToolCount              int64       `json:"tool_count"`
+	ModelCount             int64       `json:"model_count"`
+	InputTokens            int64       `json:"input_tokens"`
+	InputTokensKnown       pgtype.Bool `json:"input_tokens_known"`
+	OutputTokens           int64       `json:"output_tokens"`
+	OutputTokensKnown      pgtype.Bool `json:"output_tokens_known"`
+	CachedInputTokens      int64       `json:"cached_input_tokens"`
+	CachedInputTokensKnown pgtype.Bool `json:"cached_input_tokens_known"`
+	CachedWriteTokens      int64       `json:"cached_write_tokens"`
+	CachedWriteTokensKnown pgtype.Bool `json:"cached_write_tokens_known"`
+	CostUsd                float64     `json:"cost_usd"`
+	CostUsdKnown           pgtype.Bool `json:"cost_usd_known"`
+	StatusCode             string      `json:"status_code"`
+	UpdatedAt              time.Time   `json:"updated_at"`
+}
+
+func (q *Queries) GatewayListAppTraces(ctx context.Context, arg GatewayListAppTracesParams) ([]GatewayListAppTracesRow, error) {
+	rows, err := q.db.Query(ctx, gatewayListAppTraces,
+		arg.StartedAfter,
+		arg.StartedBefore,
+		arg.CursorSet,
+		arg.CursorStartedAt,
+		arg.CursorTraceID,
+		arg.PageSize,
+		arg.OrganizationID,
+		arg.WorkspaceID,
+		arg.ClientID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GatewayListAppTracesRow{}
+	for rows.Next() {
+		var i GatewayListAppTracesRow
+		if err := rows.Scan(
+			&i.TraceID,
+			&i.StartedAt,
+			&i.EndedAt,
+			&i.RootSpanID,
+			&i.DurationNs,
+			&i.SpanCount,
+			&i.ErrorCount,
+			&i.ToolCount,
+			&i.ModelCount,
+			&i.InputTokens,
+			&i.InputTokensKnown,
+			&i.OutputTokens,
+			&i.OutputTokensKnown,
+			&i.CachedInputTokens,
+			&i.CachedInputTokensKnown,
+			&i.CachedWriteTokens,
+			&i.CachedWriteTokensKnown,
+			&i.CostUsd,
+			&i.CostUsdKnown,
+			&i.StatusCode,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const gatewayListChatInputs = `-- name: GatewayListChatInputs :many
 SELECT id, sequence, workspace_id, agent_name, session_id, organization_id, author_id, author_name, directory, resume, content, delivery, state, revision, message_id, error, created_at, updated_at FROM chat_inputs
 WHERE workspace_id = $1 AND agent_name = $2 AND session_id = $3
@@ -3748,7 +4210,7 @@ func (q *Queries) GatewayListCodingWorktrees(ctx context.Context, arg GatewayLis
 }
 
 const gatewayListDelegationGrants = `-- name: GatewayListDelegationGrants :many
-SELECT g.id, g.client_id, g.user_id, g.organization_id, g.scopes, g.resources, g.selection, g.created_at, g.approved_at, g.revoked_at
+SELECT g.id, g.client_id, g.user_id, g.organization_id, g.scopes, g.resources, g.selection, g.created_at, g.approved_at, g.revoked_at, COALESCE(c.name, c.client_id)::text AS app_name
 FROM delegation_grants g
 JOIN oauth_clients c ON c.client_id = g.client_id AND c.disabled IS NOT TRUE AND g.scopes <@ c.scopes
 WHERE g.approved_at IS NOT NULL AND g.revoked_at IS NULL
@@ -3763,26 +4225,32 @@ WHERE g.approved_at IS NOT NULL AND g.revoked_at IS NULL
   )
 `
 
-func (q *Queries) GatewayListDelegationGrants(ctx context.Context) ([]DelegationGrant, error) {
+type GatewayListDelegationGrantsRow struct {
+	DelegationGrant DelegationGrant `json:"delegation_grant"`
+	AppName         string          `json:"app_name"`
+}
+
+func (q *Queries) GatewayListDelegationGrants(ctx context.Context) ([]GatewayListDelegationGrantsRow, error) {
 	rows, err := q.db.Query(ctx, gatewayListDelegationGrants)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []DelegationGrant{}
+	items := []GatewayListDelegationGrantsRow{}
 	for rows.Next() {
-		var i DelegationGrant
+		var i GatewayListDelegationGrantsRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.ClientID,
-			&i.UserID,
-			&i.OrganizationID,
-			&i.Scopes,
-			&i.Resources,
-			&i.Selection,
-			&i.CreatedAt,
-			&i.ApprovedAt,
-			&i.RevokedAt,
+			&i.DelegationGrant.ID,
+			&i.DelegationGrant.ClientID,
+			&i.DelegationGrant.UserID,
+			&i.DelegationGrant.OrganizationID,
+			&i.DelegationGrant.Scopes,
+			&i.DelegationGrant.Resources,
+			&i.DelegationGrant.Selection,
+			&i.DelegationGrant.CreatedAt,
+			&i.DelegationGrant.ApprovedAt,
+			&i.DelegationGrant.RevokedAt,
+			&i.AppName,
 		); err != nil {
 			return nil, err
 		}
@@ -4381,6 +4849,59 @@ func (q *Queries) GatewayListFileEventsAggregated(ctx context.Context, arg Gatew
 			&i.Source,
 			&i.Occurrences,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const gatewayListLensApps = `-- name: GatewayListLensApps :many
+WITH subjects AS (
+ SELECT client_id, app_name AS name, MAX(start_time) AS last_seen
+ FROM observer_app_operations op
+ WHERE op.organization_id = $1 AND op.workspace_id = $2
+ GROUP BY client_id, app_name
+ UNION ALL
+ SELECT g.client_id, COALESCE(c.name, c.client_id)::text AS name, now() AS last_seen
+ FROM delegation_grants g JOIN oauth_clients c ON c.client_id = g.client_id
+ WHERE g.organization_id = $1
+   AND g.approved_at IS NOT NULL AND g.revoked_at IS NULL AND c.disabled IS NOT TRUE
+   AND EXISTS (
+    SELECT 1 FROM jsonb_array_elements((g.selection->'models') || (g.selection->'mcp')) AS selected
+    WHERE selected->>'workspace_id' = $2
+   )
+), latest AS (
+ SELECT DISTINCT ON (client_id) client_id, name FROM subjects ORDER BY client_id, last_seen DESC
+)
+SELECT latest.client_id, COALESCE(c.name, latest.name)::text AS name
+FROM latest LEFT JOIN oauth_clients c ON c.client_id = latest.client_id
+ORDER BY COALESCE(c.name, latest.name), latest.client_id
+`
+
+type GatewayListLensAppsParams struct {
+	OrganizationID string `json:"organization_id"`
+	WorkspaceID    string `json:"workspace_id"`
+}
+
+type GatewayListLensAppsRow struct {
+	ClientID string `json:"client_id"`
+	Name     string `json:"name"`
+}
+
+func (q *Queries) GatewayListLensApps(ctx context.Context, arg GatewayListLensAppsParams) ([]GatewayListLensAppsRow, error) {
+	rows, err := q.db.Query(ctx, gatewayListLensApps, arg.OrganizationID, arg.WorkspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GatewayListLensAppsRow{}
+	for rows.Next() {
+		var i GatewayListLensAppsRow
+		if err := rows.Scan(&i.ClientID, &i.Name); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

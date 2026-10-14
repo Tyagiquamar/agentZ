@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useSelectResource } from "@/components/page-selection"
-import { BotIcon, MessageSquareQuote } from "lucide-react"
+import { BotIcon, AppWindowIcon, MessageSquareQuote } from "lucide-react"
 import { useRouter } from "@bprogress/next/app"
 import { usePathname, useSearchParams } from "next/navigation"
 import { DateRangePicker } from "@/components/ui/calendar"
@@ -14,12 +14,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import type { TraceSessionFilterItem } from "@/data/types"
+import type { LensSubject, TraceSessionFilterItem } from "@/data/types"
 import { dayjs, formatDateParam } from "@/lib/format"
-import type { Agent } from "@/lib/gateway/client"
+import type { Agent, LensApp } from "@/lib/gateway/client"
 
 type LensFiltersProps = {
   agents: Agent[]
+  apps?: LensApp[]
+  selectedAppClientID?: string
   from: string
   selectedAgentName?: string
   selectedSessionId?: string
@@ -29,6 +31,8 @@ type LensFiltersProps = {
 
 export function LensFilters({
   agents,
+  apps = [],
+  selectedAppClientID,
   from,
   selectedAgentName,
   selectedSessionId,
@@ -40,6 +44,11 @@ export function LensFilters({
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const [pending, startTransition] = React.useTransition()
+
+  const subjects: LensSubject[] = [
+    ...agents.map((agent): LensSubject => ({ kind: "agent", name: agent.name })),
+    ...apps.map((app): LensSubject => ({ kind: "app", name: app.name, clientID: app.client_id })),
+  ]
 
   function update(values: Record<string, string | undefined>) {
     const params = new URLSearchParams(searchParams)
@@ -66,31 +75,74 @@ export function LensFilters({
     >
       <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
         <Select
-          value={selectedAgentName ?? ""}
-          onValueChange={(agent_name) => select({ agent_name })}
-          disabled={agents.length === 0 || pending || selectionPending}
+          value={
+            selectedAppClientID
+              ? `app:${selectedAppClientID}`
+              : selectedAgentName
+                ? `agent:${selectedAgentName}`
+                : ""
+          }
+          onValueChange={(value) => {
+            const subject = subjects.find(
+              (subject) =>
+                (subject.kind === "app" ? `app:${subject.clientID}` : `agent:${subject.name}`) ===
+                value
+            )
+            if (!subject) return
+            select(
+              subject.kind === "app"
+                ? { app_client_id: subject.clientID }
+                : { agent_name: subject.name }
+            )
+          }}
+          disabled={subjects.length === 0 || pending || selectionPending}
         >
-          <SelectTrigger className="h-8 w-full min-w-0 rounded-md sm:w-64 sm:min-w-52">
-            <SelectValue placeholder="Agent" />
+          <SelectTrigger
+            aria-label="Agent or app"
+            className="h-8 w-full min-w-0 rounded-md sm:w-64 sm:min-w-52"
+          >
+            <SelectValue placeholder="Agent or app" />
           </SelectTrigger>
           <SelectContent>
             <SelectGroup>
-              {agents.map((agent) => (
-                <SelectItem key={agent.name} value={agent.name}>
-                  <BotIcon className="inline-block" />
-                  {agent.name}
-                </SelectItem>
-              ))}
+              {subjects.map((subject) => {
+                const id =
+                  subject.kind === "app" ? `app:${subject.clientID}` : `agent:${subject.name}`
+                return (
+                  <SelectItem key={id} value={id}>
+                    {subject.kind === "app" ? (
+                      <AppWindowIcon aria-label="App" />
+                    ) : (
+                      <BotIcon aria-label="Agent" />
+                    )}
+                    {subject.name}
+                    {subject.kind === "app" &&
+                    apps.some(
+                      (app) => app.name === subject.name && app.client_id !== subject.clientID
+                    ) ? (
+                      <span
+                        className="max-w-28 truncate text-xs text-muted-foreground"
+                        title={subject.clientID}
+                      >
+                        {subject.clientID}
+                      </span>
+                    ) : null}
+                  </SelectItem>
+                )
+              })}
             </SelectGroup>
           </SelectContent>
         </Select>
-        {sessions ? (
+        {sessions && !selectedAppClientID ? (
           <Select
             value={selectedSessionId ?? ""}
             onValueChange={(session_id) => select({ agent_name: selectedAgentName, session_id })}
             disabled={sessions.length === 0 || pending || selectionPending}
           >
-            <SelectTrigger className="h-8 w-full min-w-0 rounded-md sm:w-72 sm:min-w-52">
+            <SelectTrigger
+              aria-label="Session"
+              className="h-8 w-full min-w-0 rounded-md sm:w-72 sm:min-w-52"
+            >
               <SelectValue placeholder="Session" className="truncate" />
             </SelectTrigger>
             <SelectContent>

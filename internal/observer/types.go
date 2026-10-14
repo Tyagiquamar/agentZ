@@ -2,6 +2,8 @@ package observer
 
 import (
 	"time"
+
+	observerdb "github.com/accuknox/agentz/internal/observer/db"
 )
 
 const (
@@ -20,6 +22,7 @@ type event struct {
 	file    *fileEvent
 	network *networkEvent
 	trace   *traceSpanEvent
+	app     *observerdb.InsertAppOperationParams
 }
 
 type processEvent struct {
@@ -119,11 +122,12 @@ type batch struct {
 	files     []fileEvent
 	networks  []networkEvent
 	traces    []traceSpanEvent
+	apps      []observerdb.InsertAppOperationParams
 }
 
 func (b batch) empty() bool {
 	return len(b.processes) == 0 &&
 		len(b.files) == 0 &&
 		len(b.networks) == 0 &&
-		len(b.traces) == 0
+		len(b.traces) == 0 && len(b.apps) == 0
 }

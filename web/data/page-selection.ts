@@ -4,6 +4,7 @@ import { cookies } from "next/headers"
 import { cache } from "react"
 import type {
   Agent,
+  LensApp,
   Error,
   Workflow,
   WorkflowRunDetail,
@@ -25,7 +26,9 @@ import { listWorkflowSchedulesCachedQuery } from "@/data/workflow-schedule.queri
 import { listWorkflowWebhookTriggersCachedQuery } from "@/data/workflow-trigger.queries"
 import { getWorkflowRunCachedQuery, listWorkflowRunsCachedQuery } from "@/data/workflow-run.queries"
 import { listTraceSessionFilterAction } from "@/data/lens.actions"
-import type { TraceSessionFilterItem } from "@/data/types"
+import { listLensApps } from "@/lib/gateway/client"
+import { getGatewayServerClient } from "@/lib/gateway/server-client"
+import type { LensSubject, TraceSessionFilterItem } from "@/data/types"
 import type { getWorkspaceScope } from "@/data/workspaces"
 
 type WorkspaceScope = Extract<Awaited<ReturnType<typeof getWorkspaceScope>>, { kind: "ready" }>
@@ -34,6 +37,8 @@ export type ResolvedPageSelection = {
   selected: PageSelection
   requested: PageSelection
   agents: Agent[]
+  apps: LensApp[]
+  subject?: LensSubject
   workflows: WorkflowSummary[]
   schedules: WorkflowSchedule[]
   webhookTriggers: WorkflowWebhookTrigger[]
@@ -62,22 +67,40 @@ export async function resolvePageSelection(
     workspace.scope.organization.id,
     workspaceId,
   ])
-  const [history, agentsResult] = await Promise.all([
+  const [history, agentsResult, appsResult] = await Promise.all([
     getSelectionHistory(),
     listAgentsCachedQuery(undefined, workspaceId),
+    page === "lens/traces" || page === "lens/mcp"
+      ? listLensApps({ client: getGatewayServerClient(workspaceId) })
+      : undefined,
   ])
   const requested = restoreSelection(history, scope, page, search)
   const state: ResolvedPageSelection = {
     selected: {},
     requested,
     agents: [],
+    apps: [],
     workflows: [],
     schedules: [],
     webhookTriggers: [],
     workflowRuns: [],
     sessions: [],
   }
-  if (agentsResult.error) return { ...state, error: agentsResult.error }
+  if (requested.agent_name && requested.app_client_id) {
+    return {
+      ...state,
+      error: { code: "invalid_request", message: "Select an Agent or an app." },
+    }
+  }
+  if (appsResult?.error) return { ...state, error: appsResult.error }
+  state.apps = appsResult?.data.apps ?? []
+  if (agentsResult.error) {
+    const app = state.apps.find((app) => app.client_id === requested.app_client_id) ?? state.apps[0]
+    if (!app) return { ...state, error: agentsResult.error }
+    state.selected.app_client_id = app.client_id
+    state.subject = { kind: "app", clientID: app.client_id, name: app.name }
+    return state
+  }
   state.agents = agentsResult.agents
   if (
     requested.agent_name &&
@@ -104,9 +127,18 @@ export async function resolvePageSelection(
       pageToken = result.nextPageToken
     }
   }
+  const app =
+    state.apps.find((app) => app.client_id === requested.app_client_id) ??
+    (state.agents.length === 0 ? state.apps[0] : undefined)
+  if (app) {
+    state.selected.app_client_id = app.client_id
+    state.subject = { kind: "app", clientID: app.client_id, name: app.name }
+    return state
+  }
   const agent = state.agents.find((agent) => agent.name === requested.agent_name) ?? state.agents[0]
   if (!agent) return state
   state.selected.agent_name = agent.name
+  state.subject = { kind: "agent", name: agent.name }
   // A fallback parent must not inherit descendants from the missing resource.
   const children =
     requested.agent_name !== undefined && agent.name !== requested.agent_name ? {} : requested

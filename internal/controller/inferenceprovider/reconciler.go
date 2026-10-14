@@ -162,7 +162,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			r.Client,
 			currentExternalSecret,
 			func() error {
-				if currentExternalSecret.UID != "" && !metav1.IsControlledBy(currentExternalSecret, provider) {
+				exists := currentExternalSecret.UID != ""
+				if exists && !metav1.IsControlledBy(currentExternalSecret, provider) {
 					return errors.New("provider external secret name is already in use")
 				}
 				currentExternalSecret.Labels = runtime.ExternalSecret.Labels
@@ -175,7 +176,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		}
 		runtime.ExternalSecret = currentExternalSecret
 	}
-	if r.Recorder != nil && runtime.ExternalSecret != nil && !externalSecretReady(runtime.ExternalSecret) {
+	credentialsPending := r.Recorder != nil && runtime.ExternalSecret != nil &&
+		!externalSecretReady(runtime.ExternalSecret)
+	if credentialsPending {
 		r.Recorder.Eventf(
 			provider,
 			nil,

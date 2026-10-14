@@ -600,7 +600,7 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		name := fmt.Sprintf("d-%s-model-%d", grant.ID, index)
-		err = s.delegationReady(r.Context(), grant, selected.Namespace, inference.GatewayName, name)
+		err = s.delegationReady(r.Context(), grant, selected.Namespace, inference.GatewayName, name, name+"-telemetry")
 		if err != nil {
 			s.delegationError(
 				w,
@@ -700,7 +700,7 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 		}
 		for index, selected := range selection.Mcp {
 			name := fmt.Sprintf("d-%s-mcp-%d", grant.ID, index)
-			err := s.delegationReady(r.Context(), grant, selected.Namespace, mcp.GatewayName, name, name+"-auth")
+			err := s.delegationReady(r.Context(), grant, selected.Namespace, mcp.GatewayName, name, name+"-auth", name+"-telemetry")
 			if err != nil {
 				s.delegationError(
 					w,
@@ -724,7 +724,8 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 			return
 		}
 	}
-	if err := controller.SetReadDeadline(time.Time{}); err != nil && !errors.Is(err, http.ErrNotSupported) {
+	readErr := controller.SetReadDeadline(time.Time{})
+	if readErr != nil && !errors.Is(readErr, http.ErrNotSupported) {
 		s.delegationError(
 			w,
 			r,

@@ -57,6 +57,7 @@ spec:
             - --kubearmor-relay-addr={{ .Values.config.kubearmorRelayAddr }}
             - --hubble-relay-addr={{ .Values.config.hubbleRelayAddr }}
             - "--otlp-trace-grpc-addr=:{{ .Values.service.otlpGrpcPort }}"
+            - --otlp-trace-max-message-size={{ .Values.config.otlpTraceMaxMessageSize }}
             - --batch-size={{ .Values.config.batchSize }}
             - --flush-interval={{ .Values.config.flushInterval }}
             {{- if .Values.config.logWithSource }}

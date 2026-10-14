@@ -2,6 +2,41 @@
 
 import * as z from "zod"
 
+export const zLensApp = z.object({
+  client_id: z.string(),
+  name: z.string(),
+})
+
+export const zListLensAppsResponse = z.object({
+  apps: z.array(zLensApp),
+})
+
+/**
+ * Serialized JSON documents preserve numeric precision when displayed by browser clients.
+ */
+export const zAppPayload = z.object({
+  input_messages: z.string(),
+  output_messages: z.string(),
+  tool_arguments: z.string(),
+  tool_result: z.string(),
+})
+
+export const zAppTraceChartPoint = z.object({
+  time: z.iso.datetime({ offset: true }),
+  count: z.coerce
+    .bigint()
+    .min(BigInt("-9223372036854775808"), {
+      error: "Invalid value: Expected int64 to be >= -9223372036854775808",
+    })
+    .max(BigInt("9223372036854775807"), {
+      error: "Invalid value: Expected int64 to be <= 9223372036854775807",
+    }),
+})
+
+export const zAppTraceChartResponse = z.object({
+  points: z.array(zAppTraceChartPoint),
+})
+
 export const zDelegationModel = z.object({
   id: z.string().min(1),
   workspace_id: z.string().min(1),
@@ -215,6 +250,152 @@ export const zOptionalSpanId = z
   .string()
   .max(16)
   .regex(/^([0-9a-f]{16})?$/)
+
+export const zAppTrace = z.object({
+  trace_id: zTraceId,
+  root_span_id: zOptionalSpanId,
+  started_at: z.iso.datetime({ offset: true }),
+  ended_at: z.iso.datetime({ offset: true }),
+  duration_ns: z.coerce.bigint().gte(BigInt(0)).max(BigInt("9223372036854775807"), {
+    error: "Invalid value: Expected int64 to be <= 9223372036854775807",
+  }),
+  duration_ms: z.number().gte(0),
+  span_count: z.coerce.bigint().gte(BigInt(0)).max(BigInt("9223372036854775807"), {
+    error: "Invalid value: Expected int64 to be <= 9223372036854775807",
+  }),
+  error_count: z.coerce.bigint().gte(BigInt(0)).max(BigInt("9223372036854775807"), {
+    error: "Invalid value: Expected int64 to be <= 9223372036854775807",
+  }),
+  tool_count: z.coerce.bigint().gte(BigInt(0)).max(BigInt("9223372036854775807"), {
+    error: "Invalid value: Expected int64 to be <= 9223372036854775807",
+  }),
+  model_count: z.coerce.bigint().gte(BigInt(0)).max(BigInt("9223372036854775807"), {
+    error: "Invalid value: Expected int64 to be <= 9223372036854775807",
+  }),
+  input_tokens: z.coerce
+    .bigint()
+    .gte(BigInt(0))
+    .max(BigInt("9223372036854775807"), {
+      error: "Invalid value: Expected int64 to be <= 9223372036854775807",
+    })
+    .nullable(),
+  output_tokens: z.coerce
+    .bigint()
+    .gte(BigInt(0))
+    .max(BigInt("9223372036854775807"), {
+      error: "Invalid value: Expected int64 to be <= 9223372036854775807",
+    })
+    .nullable(),
+  cached_input_tokens: z.coerce
+    .bigint()
+    .gte(BigInt(0))
+    .max(BigInt("9223372036854775807"), {
+      error: "Invalid value: Expected int64 to be <= 9223372036854775807",
+    })
+    .nullable(),
+  cached_write_tokens: z.coerce
+    .bigint()
+    .gte(BigInt(0))
+    .max(BigInt("9223372036854775807"), {
+      error: "Invalid value: Expected int64 to be <= 9223372036854775807",
+    })
+    .nullable(),
+  cost_usd: z.number().gte(0).nullable(),
+  status_code: z.string(),
+  updated_at: z.iso.datetime({ offset: true }),
+})
+
+export const zAppSpan = z.object({
+  id: z.coerce.bigint().gte(BigInt(1)).max(BigInt("9223372036854775807"), {
+    error: "Invalid value: Expected int64 to be <= 9223372036854775807",
+  }),
+  session_id: z.string(),
+  trace_id: zTraceId,
+  span_id: zSpanId,
+  parent_span_id: zOptionalSpanId,
+  start_time: z.iso.datetime({ offset: true }),
+  end_time: z.iso.datetime({ offset: true }),
+  duration_ns: z.coerce.bigint().gte(BigInt(0)).max(BigInt("9223372036854775807"), {
+    error: "Invalid value: Expected int64 to be <= 9223372036854775807",
+  }),
+  duration_ms: z.number().gte(0),
+  name: z.string(),
+  span_class: z.string(),
+  operation_name: z.string(),
+  kind: z.string(),
+  status_code: z.string(),
+  error_type: z.string(),
+  error_message: z.string(),
+  model: z.string(),
+  tool_name: z.string(),
+  input_tokens: z.coerce
+    .bigint()
+    .gte(BigInt(0))
+    .max(BigInt("9223372036854775807"), {
+      error: "Invalid value: Expected int64 to be <= 9223372036854775807",
+    })
+    .nullable(),
+  output_tokens: z.coerce
+    .bigint()
+    .gte(BigInt(0))
+    .max(BigInt("9223372036854775807"), {
+      error: "Invalid value: Expected int64 to be <= 9223372036854775807",
+    })
+    .nullable(),
+  cached_input_tokens: z.coerce
+    .bigint()
+    .gte(BigInt(0))
+    .max(BigInt("9223372036854775807"), {
+      error: "Invalid value: Expected int64 to be <= 9223372036854775807",
+    })
+    .nullable(),
+  cached_write_tokens: z.coerce
+    .bigint()
+    .gte(BigInt(0))
+    .max(BigInt("9223372036854775807"), {
+      error: "Invalid value: Expected int64 to be <= 9223372036854775807",
+    })
+    .nullable(),
+  cost_usd: z.number().gte(0).nullable(),
+  ingested_at: z.iso.datetime({ offset: true }),
+  grant_id: z.string(),
+  user_id: z.string(),
+  resource_namespace: z.string(),
+  resource_name: z.string(),
+  resource_uid: z.string(),
+  resource_kind: z.string(),
+  target_id: z.string(),
+  reasoning_tokens: z.coerce
+    .bigint()
+    .min(BigInt("-9223372036854775808"), {
+      error: "Invalid value: Expected int64 to be >= -9223372036854775808",
+    })
+    .max(BigInt("9223372036854775807"), {
+      error: "Invalid value: Expected int64 to be <= 9223372036854775807",
+    })
+    .nullable(),
+})
+
+export const zListAppTracesResponse = z.object({
+  traces: z.array(zAppTrace),
+  next_page_token: z.string(),
+})
+
+export const zListAppSpansResponse = z.object({
+  spans: z.array(zAppSpan),
+  next_page_token: z.string(),
+})
+
+/**
+ * Content fields contain serialized JSON, including the JSON literal null for absent values.
+ */
+export const zAppOperationResponse = z.object({
+  span: zAppSpan,
+  resource_attributes: z.string(),
+  span_attributes: z.string(),
+  payload: zAppPayload,
+  tool_error: z.string(),
+})
 
 export const zTenantPhase = z.enum(["BOOTSTRAPPING", "READY", "FAILED"])
 
@@ -1203,7 +1384,7 @@ export const zMcpGraphTool = z.object({
 export const zMcpGraphEdge = z.object({
   source: z.string(),
   target: z.string(),
-  kind: z.enum(["agent_connection", "connection_tool"]),
+  kind: z.enum(["agent_connection", "app_connection", "connection_tool"]),
   avg_latency_ms: z.number().gte(0).optional(),
   success_count: z.coerce
     .bigint()
@@ -1220,6 +1401,13 @@ export const zMcpGraphEdge = z.object({
     })
     .optional(),
   last_called_at: z.iso.datetime({ offset: true }).optional(),
+})
+
+export const zAppMcpGraphResponse = z.object({
+  connections: z.array(zMcpGraphConnection),
+  tools: z.array(zMcpGraphTool),
+  edges: z.array(zMcpGraphEdge),
+  app: zLensApp,
 })
 
 export const zMcpGraphResponse = z.object({
@@ -3825,6 +4013,82 @@ export const zDashboardWidgetNamePath = zDashboardWidgetName
  * Stable publish call identifier.
  */
 export const zIdempotencyKeyHeader = z.string().min(1).max(128)
+
+/**
+ * Workspace-scoped app telemetry.
+ */
+export const zListLensAppsResponse2 = zListLensAppsResponse
+
+export const zListAppTracesPath = z.object({
+  clientID: z.string().min(1),
+})
+
+export const zListAppTracesQuery = z.object({
+  limit: z.int().gte(1).lte(200).optional().default(50),
+  page_token: z.string().min(1).optional(),
+  started_after: z.iso.datetime({ offset: true }).optional(),
+  started_before: z.iso.datetime({ offset: true }).optional(),
+})
+
+/**
+ * Workspace-scoped app telemetry.
+ */
+export const zListAppTracesResponse2 = zListAppTracesResponse
+
+export const zGetAppTraceChartPath = z.object({
+  clientID: z.string().min(1),
+})
+
+export const zGetAppTraceChartQuery = z.object({
+  started_after: z.iso.datetime({ offset: true }).optional(),
+  started_before: z.iso.datetime({ offset: true }).optional(),
+})
+
+/**
+ * Workspace-scoped app telemetry.
+ */
+export const zGetAppTraceChartResponse = zAppTraceChartResponse
+
+export const zListAppSpansPath = z.object({
+  clientID: z.string().min(1),
+  traceID: zTraceId,
+})
+
+export const zListAppSpansQuery = z.object({
+  limit: z.int().gte(1).lte(200).optional().default(50),
+  page_token: z.string().min(1).optional(),
+})
+
+/**
+ * Workspace-scoped app telemetry.
+ */
+export const zListAppSpansResponse2 = zListAppSpansResponse
+
+export const zGetAppOperationPath = z.object({
+  clientID: z.string().min(1),
+  operationID: z.coerce.bigint().gte(BigInt(1)).max(BigInt("9223372036854775807"), {
+    error: "Invalid value: Expected int64 to be <= 9223372036854775807",
+  }),
+})
+
+/**
+ * Workspace-scoped app telemetry.
+ */
+export const zGetAppOperationResponse = zAppOperationResponse
+
+export const zGetAppMcpGraphPath = z.object({
+  clientID: z.string().min(1),
+})
+
+export const zGetAppMcpGraphQuery = z.object({
+  from: z.iso.date(),
+  to: z.iso.date(),
+})
+
+/**
+ * Workspace-scoped app telemetry.
+ */
+export const zGetAppMcpGraphResponse = zAppMcpGraphResponse
 
 export const zGetDelegationCatalogHeaders = z.object({
   "X-AgentZ-Workspace-ID": z.string().min(1).max(128).optional(),

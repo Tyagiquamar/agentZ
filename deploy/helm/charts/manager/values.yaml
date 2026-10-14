@@ -110,6 +110,9 @@ config:
   agentImage: ""
   agentInitImage: ""
   gatewayURL: ""
+  delegationImageRegistry: public.ecr.aws
+  delegationImageRepository: k9v9d5v2/agentz/agentgateway
+  delegationImageTag: main
   agentgatewayTraceMode: service
   agentgatewayTraceServiceName: ""
   agentgatewayTraceServiceNamespace: ""

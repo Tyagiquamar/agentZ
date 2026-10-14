@@ -3,6 +3,7 @@ import type {
   Sandbox,
   Error,
   McpGraphResponse,
+  AppMcpGraphResponse,
   SecretWarning,
   WorkflowArbitraryJson,
   WorkflowInputs,
@@ -31,9 +32,16 @@ export type AgentSessionListItem = {
   parentID?: string
 }
 
+export type LensSubject =
+  | { kind: "agent"; name: string }
+  | { kind: "app"; clientID: string; name: string }
+
+export type TraceSubject =
+  | { kind: "agent"; name: string; sessionId: string }
+  | Extract<LensSubject, { kind: "app" }>
+
 export type TraceListItem = {
-  agentName: string
-  sessionId: string
+  subject: TraceSubject
   traceId: string
   startedAt: string
   endedAt: string
@@ -49,9 +57,9 @@ export type TraceListItem = {
   errorCount: number
   toolCount: number
   modelCount: number
-  inputTokens: number
-  outputTokens: number
-  totalTokens: number
+  inputTokens: number | null
+  outputTokens: number | null
+  totalTokens: number | null
   tokenRatio: number
 }
 
@@ -199,7 +207,7 @@ export type EventsChartActionResponse =
 
 export type McpGraphActionResponse =
   | {
-      data: McpGraphResponse
+      data: McpGraphResponse | AppMcpGraphResponse
       error: undefined
     }
   | {
@@ -209,8 +217,7 @@ export type McpGraphActionResponse =
 
 export type SpanListItem = {
   id: number
-  agentName: string
-  sessionId: string
+  subject: TraceSubject
   traceId: string
   spanId: string
   parentSpanId: string
@@ -223,17 +230,17 @@ export type SpanListItem = {
   spanClass: string
   kind: string
   statusCode: string
-  llmFinishReason: string
+  llmFinishReason?: string
   hasError: boolean
   error: string
   spanType: "agent" | "model" | "tool" | "span"
   depth: number
-  inputTokens: number
-  cachedInputTokens: number
-  cachedWriteTokens: number
-  outputTokens: number
-  totalTokens: number
-  costUSD: number
+  inputTokens: number | null
+  cachedInputTokens: number | null
+  cachedWriteTokens: number | null
+  outputTokens: number | null
+  totalTokens: number | null
+  costUSD: number | null
   offsetPercent: number
   durationPercent: number
 }
@@ -257,7 +264,6 @@ export type ListSpansActionResponse =
 export type SpanDetailPayloadSection = {
   key: string
   label: string
-  preview: string
   json: string
   empty: boolean
 }

@@ -3,7 +3,7 @@
 import * as React from "react"
 import dagre from "@dagrejs/dagre"
 import type { GraphLabel as DagreGraphLabel, NodeLabel as DagreNodeLabel } from "@dagrejs/dagre"
-import { BotIcon, GaugeIcon, HammerIcon, HistoryIcon } from "lucide-react"
+import { AppWindowIcon, BotIcon, GaugeIcon, HammerIcon, HistoryIcon } from "lucide-react"
 import {
   Handle,
   Position,
@@ -25,8 +25,13 @@ import { mcpConnectionFallbackIcon, renderMcpServerIcon } from "@/app/(app)/mcps
 import { formatAge } from "@/lib/format"
 import type { McpGraphEdge, McpGraphResponse } from "@/lib/gateway/client"
 
+import type { LensSubject } from "@/data/types"
+
+type McpGraphData = Pick<McpGraphResponse, "connections" | "tools" | "edges">
+
 type McpGraphProps = {
-  graph: McpGraphResponse
+  subject: LensSubject
+  graph: McpGraphData
 }
 
 type ToolMetrics = {
@@ -41,7 +46,7 @@ type FlowHandles = {
 
 type McpNodeData =
   | {
-      kind: "agent" | "connection"
+      kind: "agent" | "app" | "connection"
       label: string
       handles: FlowHandles
       serverURL?: string
@@ -74,13 +79,14 @@ const mcpNodeTypes = {
 } satisfies NodeTypes
 
 /**
- * McpGraph renders the MCP path as agent, connection, and tool circles.
+ * McpGraph renders a subject, its selected connections and executed tools.
  */
-export function McpGraph({ graph }: McpGraphProps) {
+export function McpGraph({ graph, subject }: McpGraphProps) {
+  const rootID = subject.kind === "app" ? `app:${subject.clientID}` : `agent:${subject.name}`
   const edgeCounts = React.useMemo(() => {
     return graph.edges.reduce(
       (counts, edge) => {
-        const sourceID = flowSourceID(graph, edge)
+        const sourceID = flowSourceID(edge)
         const targetID = flowTargetID(edge)
         counts.source.set(sourceID, (counts.source.get(sourceID) ?? 0) + 1)
         counts.target.set(targetID, (counts.target.get(targetID) ?? 0) + 1)
@@ -110,7 +116,7 @@ export function McpGraph({ graph }: McpGraphProps) {
       (edge, index) =>
         ({
           id: `${edge.kind}:${edge.source}:${edge.target}:${index}`,
-          source: flowSourceID(graph, edge),
+          source: flowSourceID(edge),
           target: flowTargetID(edge),
           type: "animated",
         }) satisfies McpCanvasEdge
@@ -120,14 +126,14 @@ export function McpGraph({ graph }: McpGraphProps) {
     return applyLayout(graph, [
       {
         data: {
-          kind: "agent",
-          label: graph.agent.name,
+          kind: subject.kind,
+          label: subject.name,
           handles: {
-            source: (edgeCounts.source.get(agentID(graph.agent.name)) ?? 0) > 0,
+            source: (edgeCounts.source.get(rootID) ?? 0) > 0,
             target: false,
           },
         },
-        id: agentID(graph.agent.name),
+        id: rootID,
         position: {
           x: 0,
           y: 0,
@@ -175,7 +181,7 @@ export function McpGraph({ graph }: McpGraphProps) {
           }) satisfies McpCanvasNode
       ),
     ])
-  }, [edgeCounts, graph, toolMetricsByID])
+  }, [edgeCounts, graph, rootID, subject, toolMetricsByID])
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
 
   return (
@@ -237,11 +243,11 @@ export function McpGraphSkeleton() {
 /**
  * McpEmptyState renders the empty MCP observability canvas.
  */
-export function McpEmptyState({ agentName }: { agentName: string }) {
+export function McpEmptyState({ subjectName }: { subjectName: string }) {
   return (
     <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden border-y bg-sidebar text-sm text-muted-foreground">
       <div className="absolute inset-0 bg-[radial-gradient(circle,var(--color-sidebar-border)_1px,transparent_1px)] bg-size-[10px_10px] opacity-35" />
-      <p className="relative">No MCP traffic for {agentName}</p>
+      <p className="relative">No MCP traffic for {subjectName}</p>
     </div>
   )
 }
@@ -250,7 +256,7 @@ function McpAutoLayout({
   graph,
   setNodes,
 }: {
-  graph: McpGraphResponse
+  graph: McpGraphData
   setNodes: ReturnType<typeof useNodesState<McpCanvasNode>>[1]
 }) {
   const nodesInitialized = useNodesInitialized()
@@ -281,7 +287,7 @@ function McpAutoLayout({
 
       const width = node.measured?.width
       const height = node.measured?.height
-      if (typeof width !== "number" || typeof height !== "number") {
+      if (width === undefined || height === undefined) {
         return null
       }
 
@@ -303,16 +309,27 @@ function McpAutoLayout({
 
 function McpNodeCircle({ data }: FlowNodeProps<McpCanvasNode>) {
   const serverURL = data.kind === "connection" ? data.serverURL : undefined
-  const icon =
-    data.kind === "agent" ? (
-      <BotIcon className="size-8" />
-    ) : data.kind === "connection" ? (
-      renderMcpServerIcon(serverURL ?? "", { className: "size-8" }, mcpConnectionFallbackIcon)
-    ) : (
-      <HammerIcon className="size-8" />
-    )
+  let icon: React.ReactNode
+  switch (data.kind) {
+    case "agent":
+      icon = <BotIcon className="size-8" />
+      break
+    case "app":
+      icon = <AppWindowIcon className="size-8" />
+      break
+    case "connection":
+      icon = renderMcpServerIcon(
+        serverURL ?? "",
+        { className: "size-8" },
+        mcpConnectionFallbackIcon
+      )
+      break
+    case "tool":
+      icon = <HammerIcon className="size-8" />
+      break
+  }
   const tone =
-    data.kind === "agent"
+    data.kind === "agent" || data.kind === "app"
       ? "border-primary/30 bg-background text-primary dark:bg-accent"
       : "border-border bg-background text-foreground dark:bg-accent"
   const rootClassName =
@@ -377,7 +394,7 @@ function ToolMetricsView({ metrics }: { metrics: ToolMetrics }) {
   )
 }
 
-function applyLayout(graph: McpGraphResponse, nodes: McpCanvasNode[]): McpCanvasNode[] {
+function applyLayout(graph: McpGraphData, nodes: McpCanvasNode[]): McpCanvasNode[] {
   const dagreGraph = new dagre.graphlib.Graph<DagreGraphLabel, DagrePositionedNode>()
 
   dagreGraph.setDefaultEdgeLabel(() => ({}))
@@ -399,7 +416,7 @@ function applyLayout(graph: McpGraphResponse, nodes: McpCanvasNode[]): McpCanvas
   }
 
   for (const edge of graph.edges) {
-    dagreGraph.setEdge(flowSourceID(graph, edge), flowTargetID(edge))
+    dagreGraph.setEdge(flowSourceID(edge), flowTargetID(edge))
   }
 
   dagre.layout(dagreGraph)
@@ -425,24 +442,14 @@ function nodeSize(node: McpCanvasNode): { height: number; width: number } {
   }
 }
 
-function flowSourceID(graph: McpGraphResponse, edge: McpGraphEdge): string {
-  if (edge.kind === "agent_connection") {
-    return agentID(graph.agent.name)
-  }
-
-  return connectionID(edge.source)
+function flowSourceID(edge: McpGraphEdge): string {
+  if (edge.kind === "connection_tool") return connectionID(edge.source)
+  return edge.source
 }
 
 function flowTargetID(edge: McpGraphEdge): string {
-  if (edge.kind === "agent_connection") {
-    return connectionID(edge.target)
-  }
-
-  return toolID(edge.target)
-}
-
-function agentID(name: string): string {
-  return `agent:${name}`
+  if (edge.kind === "connection_tool") return toolID(edge.target)
+  return connectionID(edge.target)
 }
 
 function connectionID(id: string): string {

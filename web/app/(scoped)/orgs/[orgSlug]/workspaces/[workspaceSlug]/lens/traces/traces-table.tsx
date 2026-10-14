@@ -156,6 +156,7 @@ export function TracesTable({
 }) {
   "use no memo"
 
+  const requestVersion = React.useRef(0)
   const [selectedTrace, setSelectedTrace] = React.useState<TraceListItem | undefined>()
   const [spans, setSpans] = React.useState<ListSpansActionData | undefined>()
   const [telemetryTab, setTelemetryTab] = React.useState<RuntimeTelemetryTab>("process")
@@ -180,6 +181,7 @@ export function TracesTable({
   })
 
   function selectTrace(trace: TraceListItem) {
+    const version = ++requestVersion.current
     setSelectedTrace(trace)
     setSpans(undefined)
     setTelemetryPage(undefined)
@@ -194,8 +196,7 @@ export function TracesTable({
     startTransition(async () => {
       const spanResult = await listSpansAction(
         {
-          agentName: trace.agentName,
-          sessionID: trace.sessionId,
+          subject: trace.subject,
           traceID: trace.traceId,
         },
         {
@@ -203,6 +204,7 @@ export function TracesTable({
         },
         workspaceId
       )
+      if (version !== requestVersion.current) return
       setSpans(spanResult.data)
       setSpansError(spanResult.error)
     })
@@ -213,19 +215,22 @@ export function TracesTable({
     nextPageToken?: string,
     mode: "reset" | "next" | "previous" = "reset"
   ) {
-    if (!selectedTrace) {
+    if (!selectedTrace || selectedTrace.subject.kind !== "agent") {
       return
     }
+    const version = ++requestVersion.current
+    const agentName = selectedTrace.subject.name
 
     startTelemetryTransition(async () => {
       const result = await getRuntimeTelemetryTabAction({
-        agent_name: selectedTrace.agentName,
+        agent_name: agentName,
         started_after: selectedTrace.startedAt,
         started_before: selectedTrace.endedAt,
         tab: nextTab,
         page_token: nextPageToken,
         workspace_id: workspaceId,
       })
+      if (version !== requestVersion.current) return
       setTelemetryPage(result.data)
       setTelemetryError(result.error)
       setTelemetryTab(nextTab)
@@ -249,11 +254,11 @@ export function TracesTable({
       return
     }
 
+    const version = ++requestVersion.current
     startSpansTransition(async () => {
       const result = await listSpansAction(
         {
-          agentName: selectedTrace.agentName,
-          sessionID: selectedTrace.sessionId,
+          subject: selectedTrace.subject,
           traceID: selectedTrace.traceId,
         },
         {
@@ -262,6 +267,7 @@ export function TracesTable({
         },
         workspaceId
       )
+      if (version !== requestVersion.current) return
       setSpans(result.data)
       setSpansError(result.error)
       if (mode === "next") {
@@ -274,6 +280,7 @@ export function TracesTable({
   }
 
   function closeTrace() {
+    requestVersion.current++
     setSelectedTrace(undefined)
     setSpans(undefined)
     setTelemetryPage(undefined)
@@ -417,9 +424,11 @@ function TraceInspector({
             <TabsTrigger value="spans" className="gap-2">
               <Route /> Spans
             </TabsTrigger>
-            <TabsTrigger value="telemetry" className="gap-2">
-              <Server /> Runtime Telemetry
-            </TabsTrigger>
+            {trace?.subject.kind === "agent" ? (
+              <TabsTrigger value="telemetry" className="gap-2">
+                <Server /> Runtime Telemetry
+              </TabsTrigger>
+            ) : null}
           </TabsList>
         </Tabs>
       }
@@ -475,16 +484,16 @@ function SpansInspectorContent({
   onNextPage: () => void
   onPreviousPage: () => void
 }) {
-  const [selectedSpanID, setSelectedSpanID] = React.useState<string | undefined>()
+  const [selectedOperationID, setSelectedOperationID] = React.useState<number | undefined>()
   const [detailState, setDetailState] = React.useState<{
-    spanID?: string
+    operationID?: number
     data?: SpanDetailActionData
     error?: Error
   }>({})
   const [detailPending, startDetailTransition] = React.useTransition()
-  const selectedSpan = data?.spans.find((span) => span.spanId === selectedSpanID) ?? data?.spans[0]
-  const detail = detailState.spanID === selectedSpan?.spanId ? detailState.data : undefined
-  const detailError = detailState.spanID === selectedSpan?.spanId ? detailState.error : undefined
+  const selectedSpan = data?.spans.find((span) => span.id === selectedOperationID) ?? data?.spans[0]
+  const detail = detailState.operationID === selectedSpan?.id ? detailState.data : undefined
+  const detailError = detailState.operationID === selectedSpan?.id ? detailState.error : undefined
 
   React.useEffect(() => {
     if (!selectedSpan) {
@@ -496,8 +505,8 @@ function SpansInspectorContent({
     startDetailTransition(async () => {
       const result = await getSpanDetailAction(
         {
-          agentName: selectedSpan.agentName,
-          sessionID: selectedSpan.sessionId,
+          subject: selectedSpan.subject,
+          operationID: selectedSpan.id,
           traceID: selectedSpan.traceId,
           spanID: selectedSpan.spanId,
         },
@@ -505,7 +514,7 @@ function SpansInspectorContent({
       )
       if (!cancelled) {
         setDetailState({
-          spanID: selectedSpan.spanId,
+          operationID: selectedSpan.id,
           data: result.data,
           error: result.error,
         })
@@ -550,15 +559,15 @@ function SpansInspectorContent({
         data.spans.length > 0 ? (
           data.spans.map((span) => (
             <SpanTreeRow
-              key={span.spanId}
+              key={span.id}
               span={span}
-              selected={selectedSpan?.spanId === span.spanId}
+              selected={selectedSpan?.id === span.id}
               onClick={() => {
-                if (selectedSpan?.spanId === span.spanId) {
+                if (selectedSpan?.id === span.id) {
                   return
                 }
 
-                setSelectedSpanID(span.spanId)
+                setSelectedOperationID(span.id)
                 setDetailState({})
               }}
             />
@@ -596,7 +605,7 @@ function SpanTreeRow({
       onClick={onClick}
       depth={span.depth}
       duration={span.duration}
-      tokens={span.totalTokens}
+      tokens={span.totalTokens ?? undefined}
       id={span.spanId}
       hasError={span.hasError}
       timelineClass={spanTimelineClass(span)}
@@ -638,18 +647,23 @@ function SpanDetailViewer({
       title={title}
       started={span?.startLabel ?? trace?.startedDate}
       duration={span?.duration ?? trace?.duration}
-      tokens={span?.totalTokens}
+      tokens={span?.totalTokens ?? undefined}
     >
-      {span && span.spanType !== "agent" ? (
+      {span &&
+      span.spanType !== "agent" &&
+      span.inputTokens !== null &&
+      span.outputTokens !== null ? (
         <TraceTokenMeter
           segments={[
             {
               label: "Input",
-              value: Math.max(span.inputTokens - span.cachedInputTokens, 0),
+              value: Math.max(span.inputTokens - (span.cachedInputTokens ?? 0), 0),
               displayValue: span.inputTokens,
               colorClass: "bg-chart-1",
             },
-            { label: "Cached", value: span.cachedInputTokens, colorClass: "bg-chart-3" },
+            ...(span.cachedInputTokens === null
+              ? []
+              : [{ label: "Cached", value: span.cachedInputTokens, colorClass: "bg-chart-3" }]),
             { label: "Output", value: span.outputTokens, colorClass: "bg-chart-4" },
           ]}
         />
@@ -684,7 +698,7 @@ function SpanJSONSections({
           title="Trace"
           rows={[
             ["trace.id", trace?.traceId ?? ""],
-            ["agent.name", trace?.agentName ?? ""],
+            [trace?.subject.kind === "app" ? "app.name" : "agent.name", trace?.subject.name ?? ""],
             ["duration", trace?.duration ?? ""],
             ["spans", String(trace?.spanCount ?? 0)],
             ["tools", String(trace?.toolCount ?? 0)],
@@ -696,11 +710,41 @@ function SpanJSONSections({
     )
   }
 
+  const rows: [string, string][] = [
+    [span.subject.kind === "app" ? "app.name" : "agent.name", span.subject.name],
+    ["span.id", span.spanId],
+    ["parent.id", span.parentSpanId || "root"],
+    ["span.class", span.spanClass],
+    ["kind", span.kind],
+    ["status_code", span.statusCode],
+    ["operation", span.operationLabel],
+    ["input_tokens", span.inputTokens === null ? "Unknown" : String(span.inputTokens)],
+    [
+      "cached_input_tokens",
+      span.cachedInputTokens === null ? "Unknown" : String(span.cachedInputTokens),
+    ],
+    [
+      "cached_write_tokens",
+      span.cachedWriteTokens === null ? "Unknown" : String(span.cachedWriteTokens),
+    ],
+    ["output_tokens", span.outputTokens === null ? "Unknown" : String(span.outputTokens)],
+    ["cost_usd", span.costUSD === null ? "Unknown" : String(span.costUSD)],
+  ]
+  if (span.subject.kind === "agent") {
+    rows.push(
+      ["session.id", span.subject.sessionId],
+      ["llm_finish_reason", span.llmFinishReason || ""]
+    )
+  } else {
+    rows.push(["app.client_id", span.subject.clientID])
+  }
+
   const payload = detail?.payload ?? []
   const input = payload.find((section) => section.key === "input_messages")
   const output = payload.find((section) => section.key === "output_messages")
   const toolArguments = payload.find((section) => section.key === "tool_arguments")
   const toolResult = payload.find((section) => section.key === "tool_result")
+  const toolError = payload.find((section) => section.key === "tool_error")
 
   return (
     <div className="flex flex-col gap-5">
@@ -715,31 +759,16 @@ function SpanJSONSections({
       {toolResult && !toolResult.empty ? (
         <TraceContentPanel title="Tool result" code={toolResult.json} />
       ) : null}
+      {toolError && !toolError.empty ? (
+        <TraceContentPanel title="Tool error" code={toolError.json} />
+      ) : null}
       {detail?.resourceAttributes && !detail.resourceAttributes.empty ? (
         <TraceContentPanel title="Resource attributes" code={detail.resourceAttributes.json} />
       ) : null}
       {detail?.spanAttributes && !detail.spanAttributes.empty ? (
         <TraceContentPanel title="Span attributes" code={detail.spanAttributes.json} />
       ) : null}
-      <JSONPanel
-        title="Usage"
-        rows={[
-          ["agent.name", span.agentName],
-          ["session.id", span.sessionId],
-          ["span.id", span.spanId],
-          ["parent.id", span.parentSpanId || "root"],
-          ["span.class", span.spanClass],
-          ["kind", span.kind],
-          ["status_code", span.statusCode],
-          ["operation", span.operationLabel],
-          ["llm_finish_reason", span.llmFinishReason || ""],
-          ["input_tokens", String(span.inputTokens)],
-          ["cached_input_tokens", String(span.cachedInputTokens)],
-          ["cached_write_tokens", String(span.cachedWriteTokens)],
-          ["output_tokens", String(span.outputTokens)],
-          ["cost_usd", String(span.costUSD)],
-        ]}
-      />
+      <JSONPanel title="Usage" rows={rows} />
     </div>
   )
 }

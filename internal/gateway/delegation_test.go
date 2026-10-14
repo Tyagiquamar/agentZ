@@ -603,6 +603,7 @@ func TestDelegatedInferenceUsesPrivateGateway(t *testing.T) {
 		conditions := []metav1.Condition{
 			{Type: "Accepted", Status: metav1.ConditionTrue, ObservedGeneration: 1},
 			{Type: "ResolvedRefs", Status: metav1.ConditionTrue, ObservedGeneration: 1},
+			{Type: "Attached", Status: metav1.ConditionTrue, ObservedGeneration: 1},
 		}
 		objects := []ctrlclient.Object{
 			&gwv1.HTTPRoute{
@@ -617,6 +618,23 @@ func TestDelegatedInferenceUsesPrivateGateway(t *testing.T) {
 				ObjectMeta: metadata,
 				Status:     agw.AgentgatewayBackendStatus{Conditions: conditions},
 			},
+		}
+		if ns != "private" {
+			objects = append(objects, &agw.AgentgatewayPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: gateway + "-delegation-tracing", Namespace: ns, Generation: 1},
+				Status: gwv1.PolicyStatus{Ancestors: []gwv1.PolicyAncestorStatus{{
+					AncestorRef:    gwv1.ParentReference{Name: gwv1.ObjectName(gateway)},
+					ControllerName: "agentgateway.dev/agentgateway", Conditions: conditions,
+				}}},
+			})
+			objects = append(objects, &agw.AgentgatewayPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: metadata.Name + "-telemetry", Namespace: ns,
+					Generation: 1, Annotations: metadata.Annotations},
+				Status: gwv1.PolicyStatus{Ancestors: []gwv1.PolicyAncestorStatus{{
+					AncestorRef:    gwv1.ParentReference{Name: gwv1.ObjectName(gateway)},
+					ControllerName: "agentgateway.dev/agentgateway", Conditions: conditions,
+				}}},
+			})
 		}
 		for _, object := range objects {
 			if err := service.k8sClient.Create(t.Context(), object); err != nil {
@@ -1092,6 +1110,17 @@ func TestDelegatedMCPTransportBoundary(t *testing.T) {
 		{Type: "Attached", Status: metav1.ConditionTrue, ObservedGeneration: 1},
 	}
 	projections := []ctrlclient.Object{
+		&agw.AgentgatewayPolicy{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       mcp.GatewayName + "-delegation-tracing",
+				Namespace:  namespace,
+				Generation: 1,
+			},
+			Status: gwv1.PolicyStatus{Ancestors: []gwv1.PolicyAncestorStatus{{
+				AncestorRef:    gwv1.ParentReference{Name: gwv1.ObjectName(mcp.GatewayName)},
+				ControllerName: "agentgateway.dev/agentgateway", Conditions: conditions,
+			}}},
+		},
 		&gwv1.HTTPRoute{
 			ObjectMeta: metadata,
 			Status: gwv1.HTTPRouteStatus{RouteStatus: gwv1.RouteStatus{Parents: []gwv1.RouteParentStatus{{
@@ -1137,6 +1166,14 @@ func TestDelegatedMCPTransportBoundary(t *testing.T) {
 				AncestorRef:    gwv1.ParentReference{Name: gwv1.ObjectName(mcp.GatewayName)},
 				ControllerName: "agentgateway.dev/agentgateway",
 				Conditions:     conditions,
+			}}},
+		},
+		&agw.AgentgatewayPolicy{
+			ObjectMeta: metav1.ObjectMeta{Name: "d-grant-1-mcp-0-telemetry", Namespace: namespace,
+				Generation: 1, Annotations: metadata.Annotations},
+			Status: gwv1.PolicyStatus{Ancestors: []gwv1.PolicyAncestorStatus{{
+				AncestorRef:    gwv1.ParentReference{Name: gwv1.ObjectName(mcp.GatewayName)},
+				ControllerName: "agentgateway.dev/agentgateway", Conditions: conditions,
 			}}},
 		},
 	}

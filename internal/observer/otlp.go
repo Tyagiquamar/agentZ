@@ -8,14 +8,18 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	tracev1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
 	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
 	"google.golang.org/grpc"
+
+	observerdb "github.com/accuknox/agentz/internal/observer/db"
 )
 
 var (
@@ -97,7 +101,11 @@ func runOTLPTraceReceiver(ctx context.Context, cfg Config, out chan<- event, s *
 		return fmt.Errorf("listen otlp trace grpc %s: %w", cfg.OTLPTraceGRPCAddr, err)
 	}
 
-	srv := grpc.NewServer()
+	maxMessageSize := cfg.OTLPTraceMaxMessageSize
+	if maxMessageSize == 0 {
+		maxMessageSize = DefaultOTLPTraceMaxMessageSize
+	}
+	srv := grpc.NewServer(grpc.MaxRecvMsgSize(maxMessageSize))
 	tracev1.RegisterTraceServiceServer(
 		srv,
 		&traceReceiver{
@@ -132,7 +140,7 @@ func runOTLPTraceReceiver(ctx context.Context, cfg Config, out chan<- event, s *
 func (r *traceReceiver) Export(ctx context.Context, req *tracev1.ExportTraceServiceRequest) (*tracev1.ExportTraceServiceResponse, error) {
 	events, rejected := traceEventsFromOTLPRequest(req)
 	for _, ev := range events {
-		if err := sendEvent(ctx, r.out, event{trace: &ev}); err != nil {
+		if err := sendEvent(ctx, r.out, ev); err != nil {
 			return nil, err
 		}
 	}
@@ -143,27 +151,123 @@ func (r *traceReceiver) Export(ctx context.Context, req *tracev1.ExportTraceServ
 	return &tracev1.ExportTraceServiceResponse{}, nil
 }
 
-func traceEventsFromOTLPRequest(req *tracev1.ExportTraceServiceRequest) ([]traceSpanEvent, int) {
+func traceEventsFromOTLPRequest(req *tracev1.ExportTraceServiceRequest) ([]event, int) {
 	if req == nil {
 		return nil, 0
 	}
 
-	events := make([]traceSpanEvent, 0)
+	events := make([]event, 0)
 	rejected := 0
 	for _, rs := range req.GetResourceSpans() {
 		resourceAttrs := attrsMap(rs.GetResource().GetAttributes())
 		for _, ss := range rs.GetScopeSpans() {
 			for _, sp := range ss.GetSpans() {
+				if resourceAttrs["service.name"].GetStringValue() == "agentz-oauth-gateway" {
+					operation, err := appOperationFromOTLPSpan(sp, resourceAttrs)
+					if err != nil {
+						rejected++
+						continue
+					}
+					events = append(events, event{app: &operation})
+					continue
+				}
 				ev, err := traceEventFromOTLPSpan(sp, resourceAttrs)
 				if err != nil {
 					rejected++
 					continue
 				}
-				events = append(events, ev)
+				events = append(events, event{trace: &ev})
 			}
 		}
 	}
 	return events, rejected
+}
+
+func appOperationFromOTLPSpan(sp *tracepb.Span, resourceAttrs map[string]*commonpb.AnyValue) (observerdb.InsertAppOperationParams, error) {
+	if sp.GetKind() != tracepb.Span_SPAN_KIND_SERVER || len(sp.GetTraceId()) != 16 || len(sp.GetSpanId()) != 8 {
+		return observerdb.InsertAppOperationParams{}, errors.New("invalid app operation span")
+	}
+	attrs := attrsMap(sp.GetAttributes())
+	operation := observerdb.InsertAppOperationParams{
+		OrganizationID:    attrs["agentz.organization_id"].GetStringValue(),
+		WorkspaceID:       attrs["agentz.workspace_id"].GetStringValue(),
+		ClientID:          attrs["agentz.client_id"].GetStringValue(),
+		AppName:           attrs["agentz.app_name"].GetStringValue(),
+		GrantID:           attrs["agentz.grant_id"].GetStringValue(),
+		UserID:            attrs["agentz.user_id"].GetStringValue(),
+		ResourceKind:      attrs["agentz.resource_kind"].GetStringValue(),
+		ResourceNamespace: attrs["agentz.resource_namespace"].GetStringValue(),
+		ResourceName:      attrs["agentz.resource_name"].GetStringValue(),
+		ResourceUid:       attrs["agentz.resource_uid"].GetStringValue(),
+		TargetID:          attrs["agentz.target_id"].GetStringValue(),
+		TraceID:           sp.GetTraceId(), SpanID: sp.GetSpanId(), ParentSpanID: append([]byte{}, sp.GetParentSpanId()...),
+		StartTime: unixNano(sp.GetStartTimeUnixNano()), EndTime: unixNano(sp.GetEndTimeUnixNano()),
+		Name: sp.GetName(), StatusCode: statusCode(sp.GetStatus()),
+		ErrorType:          attrs[attrErrorType].GetStringValue(),
+		ErrorMessage:       cmp.Or(attrs[attrErrorMessage].GetStringValue(), sp.GetStatus().GetMessage()),
+		Model:              cmp.Or(attrs[attrGenAIResponseModel].GetStringValue(), attrs[attrGenAIRequestModel].GetStringValue()),
+		ToolName:           attrs[attrGenAIToolName].GetStringValue(),
+		SessionID:          attrs[attrMCPSessionID].GetStringValue(),
+		ResourceAttributes: jsonObject(attrsForStorage(resourceAttrs)),
+	}
+	for _, identity := range []string{operation.OrganizationID, operation.WorkspaceID, operation.ClientID,
+		operation.GrantID, operation.UserID, operation.ResourceNamespace, operation.ResourceName,
+		operation.ResourceUid, operation.TargetID} {
+		if identity == "" {
+			return operation, errors.New("app operation attribution is incomplete")
+		}
+	}
+	operation.DurationNs = max(operation.EndTime.Sub(operation.StartTime).Nanoseconds(), 0)
+	stored := attrsForStorage(attrs)
+	operation.InputMessages = extractJSONPayload(stored, attrLLMInputMessages)
+	operation.OutputMessages = extractJSONPayload(stored, attrLLMOutputMessages)
+	operation.ToolArguments = extractJSONPayload(stored, attrToolParameters)
+	operation.ToolResult = extractJSONPayload(stored, attrOutputValue)
+	operation.ToolError = extractJSONPayload(stored, attrToolError)
+	switch operation.ResourceKind {
+	case "inference":
+		operation.SpanClass, operation.OperationName = spanClassLLM, operationChat
+		for key, tokens := range map[string]*pgtype.Int8{
+			attrGenAIInputTokens:            &operation.InputTokens,
+			attrGenAIOutputTokens:           &operation.OutputTokens,
+			attrGenAICacheRead:              &operation.CachedInputTokens,
+			attrGenAICacheWrite:             &operation.CachedWriteTokens,
+			"gen_ai.usage.reasoning_tokens": &operation.ReasoningTokens,
+		} {
+			if value, ok := attrs[key]; ok {
+				tokens.Int64, tokens.Valid = value.GetIntValue(), true
+			}
+		}
+		if value, ok := attrs["agw.ai.usage.cost.total"]; ok {
+			cost, err := strconv.ParseFloat(value.GetStringValue(), 64)
+			if err != nil {
+				return operation, fmt.Errorf("read app inference cost: %w", err)
+			}
+			operation.CostUsd = pgtype.Float8{Float64: cost, Valid: true}
+		}
+	case "mcp":
+		if attrs[attrMCPMethodName].GetStringValue() != "tools/call" {
+			return operation, errors.New("MCP discovery is not app tool activity")
+		}
+		operation.SpanClass, operation.OperationName = spanClassTool, operationExecuteTool
+		var result mcpToolResult
+		if hasPayloadValue(operation.ToolResult) {
+			if err := json.Unmarshal(operation.ToolResult, &result); err != nil {
+				return operation, fmt.Errorf("read MCP tool result: %w", err)
+			}
+		}
+		if result.IsError || hasPayloadValue(operation.ToolError) || attrs["mcp.error.code"] != nil {
+			operation.StatusCode = statusError
+			operation.ErrorMessage = cmp.Or(operation.ErrorMessage, attrs["mcp.error.message"].GetStringValue())
+		}
+	default:
+		return operation, errors.New("unsupported app resource kind")
+	}
+	if attrs["http.response.status_code"].GetIntValue() >= 400 || operation.ErrorType != "" || operation.ErrorMessage != "" {
+		operation.StatusCode = statusError
+	}
+	operation.SpanAttributes = jsonObject(stored)
+	return operation, nil
 }
 
 func traceEventFromOTLPSpan(sp *tracepb.Span, resourceAttrs map[string]*commonpb.AnyValue) (traceSpanEvent, error) {

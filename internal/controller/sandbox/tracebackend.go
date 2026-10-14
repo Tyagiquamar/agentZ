@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/accuknox/agentz/internal/networkpolicy"
+	ciliumapi "github.com/cilium/cilium/pkg/policy/api"
 	gwv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
@@ -72,4 +74,39 @@ func ParseTraceBackend(mode string, svcName string, svcNS string, svcPort int, h
 		Port:             gwv1.PortNumber(port),
 	}
 	return cfg, cfg.Validate()
+}
+
+// BackendRef identifies the configured collector from a gateway namespace.
+func (cfg TraceBackend) BackendRef(name string) *gwv1.BackendObjectReference {
+	if cfg.Mode == TraceBackendModeService {
+		kind := gwv1.Kind("Service")
+		namespace := gwv1.Namespace(cfg.ServiceNamespace)
+		port := cfg.ServicePort
+		return &gwv1.BackendObjectReference{
+			Kind:      &kind,
+			Name:      gwv1.ObjectName(cfg.ServiceName),
+			Namespace: &namespace,
+			Port:      &port,
+		}
+	}
+
+	group := gwv1.Group("agentgateway.dev")
+	kind := gwv1.Kind("AgentgatewayBackend")
+	return &gwv1.BackendObjectReference{
+		Group: &group,
+		Kind:  &kind,
+		Name:  gwv1.ObjectName(name),
+	}
+}
+
+// Egress permits only the configured collector's destination and port.
+func (c TraceBackend) Egress() []ciliumapi.EgressRule {
+	switch c.Mode {
+	case TraceBackendModeService:
+		return networkpolicy.ServiceEgress(c.ServiceNamespace, c.ServiceName, c.ServicePort)
+	case TraceBackendModeStatic:
+		return networkpolicy.ExternalEgress([]networkpolicy.Target{{Host: c.Host, Port: c.Port}})
+	default:
+		return nil
+	}
 }

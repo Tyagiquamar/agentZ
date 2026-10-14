@@ -29,12 +29,13 @@ var (
 
 // Config describes how the observer consumes telemetry and writes PostgreSQL.
 type Config struct {
-	PostgresDSN        string
-	KubeArmorRelayAddr string
-	HubbleRelayAddr    string
-	OTLPTraceGRPCAddr  string
-	BatchSize          int
-	FlushInterval      time.Duration
+	PostgresDSN             string
+	KubeArmorRelayAddr      string
+	HubbleRelayAddr         string
+	OTLPTraceGRPCAddr       string
+	OTLPTraceMaxMessageSize int
+	BatchSize               int
+	FlushInterval           time.Duration
 }
 
 // Validate reports invalid observer configuration before any side effects.
@@ -50,6 +51,9 @@ func (c Config) Validate() error {
 	}
 	if c.OTLPTraceGRPCAddr == "" {
 		return errOTLPTraceGRPCAddrEmpty
+	}
+	if c.OTLPTraceMaxMessageSize < 0 {
+		return errors.New("otlp trace max message size must not be negative")
 	}
 	if c.BatchSize <= 0 {
 		return errBatchSizeInvalid
@@ -93,9 +97,11 @@ func Serve(ctx context.Context, cfg Config) error {
 	}
 
 	var wg sync.WaitGroup
-	wg.Go(func() {
+	sinkDone := make(chan struct{})
+	go func() {
+		defer close(sinkDone)
 		sink.run(ctx)
-	})
+	}()
 	wg.Go(func() {
 		runKubeArmorWatcher(ctx, cfg, res, watchModeLogs, evCh, stats)
 	})
@@ -116,6 +122,8 @@ func Serve(ctx context.Context, cfg Config) error {
 
 	<-ctx.Done()
 	wg.Wait()
+	close(evCh)
+	<-sinkDone
 	return nil
 }
 

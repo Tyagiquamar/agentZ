@@ -98,6 +98,18 @@ func (s *dbStore) insertBatch(ctx context.Context, b batch) error {
 		}
 	}
 
+	if len(b.apps) > 0 {
+		var batchErr error
+		q.InsertAppOperation(ctx, b.apps).Exec(func(_ int, err error) {
+			if batchErr == nil {
+				batchErr = err
+			}
+		})
+		if batchErr != nil {
+			return fmt.Errorf("insert app operations: %w", batchErr)
+		}
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit tx: %w", err)
 	}

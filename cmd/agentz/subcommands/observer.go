@@ -52,6 +52,11 @@ var observerServeCmd = &cli.Command{
 			},
 		},
 		&cli.IntFlag{
+			Name:  "otlp-trace-max-message-size",
+			Usage: "Maximum encoded OTLP export size in bytes",
+			Value: observer.DefaultOTLPTraceMaxMessageSize,
+		},
+		&cli.IntFlag{
 			Name:  "batch-size",
 			Usage: "Maximum events per PostgreSQL flush",
 			Value: observer.DefaultBatchSize,
@@ -66,12 +71,13 @@ var observerServeCmd = &cli.Command{
 		return observer.Serve(
 			ctx,
 			observer.Config{
-				PostgresDSN:        c.String("postgres-dsn"),
-				KubeArmorRelayAddr: c.String("kubearmor-relay-addr"),
-				HubbleRelayAddr:    c.String("hubble-relay-addr"),
-				OTLPTraceGRPCAddr:  c.String("otlp-trace-grpc-addr"),
-				BatchSize:          c.Int("batch-size"),
-				FlushInterval:      c.Duration("flush-interval"),
+				PostgresDSN:             c.String("postgres-dsn"),
+				KubeArmorRelayAddr:      c.String("kubearmor-relay-addr"),
+				HubbleRelayAddr:         c.String("hubble-relay-addr"),
+				OTLPTraceGRPCAddr:       c.String("otlp-trace-grpc-addr"),
+				OTLPTraceMaxMessageSize: c.Int("otlp-trace-max-message-size"),
+				BatchSize:               c.Int("batch-size"),
+				FlushInterval:           c.Duration("flush-interval"),
 			},
 		)
 	},

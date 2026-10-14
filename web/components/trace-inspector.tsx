@@ -26,6 +26,10 @@ const CodeBlock = dynamic(
   }
 )
 
+const CodeEditor = dynamic(() =>
+  import("@/components/code-editor").then((module) => module.CodeEditor)
+)
+
 export function TraceInspectorSheet({
   title,
   description,
@@ -320,8 +324,13 @@ export function TraceContentPanel({
         )}
       </div>
       <div className="max-h-100 overflow-auto rounded-md">
-        {code !== undefined ? (
+        {/* Large JSON needs a virtual viewport; highlighting or laying out the entire text blocks interaction. */}
+        {code !== undefined && code.length <= 16_384 ? (
           <CodeBlock code={code} language="json" showLineNumbers className="border-0 bg-muted/20" />
+        ) : code !== undefined ? (
+          <div className="h-100">
+            <CodeEditor filename={`${title}.txt`} readOnly lineWrapping={false} value={code} />
+          </div>
         ) : (
           <pre className="bg-muted/20 p-4 font-mono text-xs leading-relaxed wrap-break-word whitespace-pre-wrap">
             {text}

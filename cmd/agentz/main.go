@@ -100,70 +100,75 @@ var (
 	agentImage                                       string
 	controllerImage                                  string
 	gatewayURL                                       string
-	agentgatewayTraceMode                            string
-	agentgatewayTraceServiceName                     string
-	agentgatewayTraceServiceNamespace                string
-	agentgatewayTraceServicePort                     int
-	agentgatewayTraceHost                            string
-	agentgatewayTracePort                            int
-	nixStorePVC                                      string
-	agentInitImage                                   string
-	openBaoAddr                                      string
-	managerOpenBaoAddr                               string
-	openBaoSecretMountPath                           string
-	openBaoK8sAuthMountPath                          string
-	sinjectorOpenBaoK8sAuthTokenPath                 string
-	managerOpenBaoK8sAuthRole                        string
-	managerOpenBaoK8sAuthTokenPath                   string
-	managerGatewayTokenPath                          string
-	managerGatewayTokenAudience                      string
-	managerServiceAccountName                        string
-	managerServiceAccountNamespace                   string
-	gatewayServiceAccountName                        string
-	gatewayServiceAccountNamespace                   string
-	sinjectorCASecretName                            string
-	sinjectorCASecretCertKey                         string
-	sinjectorCASecretKeyKey                          string
-	sinjectorCASecretBundleKey                       string
-	sinjectorCACertPath                              string
-	sinjectorCAKeyPath                               string
-	agentCABundlePath                                string
-	nixStoreSize                                     string
-	nixStoreAccessModes                              []string
-	nixStoreStorageClass                             string
-	nixCacheEndpoint                                 string
-	skillsS3Endpoint                                 string
-	skillsS3Region                                   string
-	skillsS3Bucket                                   string
-	tenantSinjectorClusterIssuerName                 string
-	tenantAgentQuotaCount                            int32
-	tenantAgentQuotaCPU                              string
-	tenantAgentQuotaMemory                           string
-	tenantAgentDefaultCPU                            string
-	tenantAgentDefaultMemory                         string
-	tenantAgentDefaultQoS                            string
-	tenantDashboardQuotaDashboardsPerAgent           int32
-	tenantDashboardQuotaWidgetsPerDashboard          int32
-	tenantDashboardQuotaRequestBytes                 string
-	tenantDashboardQuotaRecordsPerRequest            int32
-	tenantDashboardQuotaRequestsPerMinutePerAgent    int32
-	tenantDashboardQuotaAcceptedBytesPerDay          string
-	tenantDashboardQuotaTemporalRecordsPerDay        int64
-	tenantDashboardQuotaRetainedTemporalRecords      int64
-	tenantDashboardQuotaLatestBytesPerAgent          string
-	tenantDashboardQuotaRequestsPerMinutePerUser     int32
-	tenantDashboardQuotaReturnedCellsPerHour         int64
-	tenantDashboardQuotaConcurrentRequests           int32
-	tenantDashboardQuotaCellsPerRequest              int32
-	tenantDashboardQuotaResponseBytes                string
-	tenantDashboardQuotaPointsPerSeries              int32
-	tenantDashboardQuotaTimeout                      time.Duration
-	watchNamespace                                   string
-	enableWebhooks                                   bool
-	workflowRunOrphanRetention                       time.Duration
-	inferenceSecretStoreName                         string
-	delegationNamespace                              string
-	inferenceSecretRefreshInterval                   time.Duration
+	delegationImage                                  = agentgatewayv1alpha1.Image{
+		Registry:   new("public.ecr.aws"),
+		Repository: new("k9v9d5v2/agentz/agentgateway"),
+		Tag:        new("main"),
+	}
+	agentgatewayTraceMode                         string
+	agentgatewayTraceServiceName                  string
+	agentgatewayTraceServiceNamespace             string
+	agentgatewayTraceServicePort                  int
+	agentgatewayTraceHost                         string
+	agentgatewayTracePort                         int
+	nixStorePVC                                   string
+	agentInitImage                                string
+	openBaoAddr                                   string
+	managerOpenBaoAddr                            string
+	openBaoSecretMountPath                        string
+	openBaoK8sAuthMountPath                       string
+	sinjectorOpenBaoK8sAuthTokenPath              string
+	managerOpenBaoK8sAuthRole                     string
+	managerOpenBaoK8sAuthTokenPath                string
+	managerGatewayTokenPath                       string
+	managerGatewayTokenAudience                   string
+	managerServiceAccountName                     string
+	managerServiceAccountNamespace                string
+	gatewayServiceAccountName                     string
+	gatewayServiceAccountNamespace                string
+	sinjectorCASecretName                         string
+	sinjectorCASecretCertKey                      string
+	sinjectorCASecretKeyKey                       string
+	sinjectorCASecretBundleKey                    string
+	sinjectorCACertPath                           string
+	sinjectorCAKeyPath                            string
+	agentCABundlePath                             string
+	nixStoreSize                                  string
+	nixStoreAccessModes                           []string
+	nixStoreStorageClass                          string
+	nixCacheEndpoint                              string
+	skillsS3Endpoint                              string
+	skillsS3Region                                string
+	skillsS3Bucket                                string
+	tenantSinjectorClusterIssuerName              string
+	tenantAgentQuotaCount                         int32
+	tenantAgentQuotaCPU                           string
+	tenantAgentQuotaMemory                        string
+	tenantAgentDefaultCPU                         string
+	tenantAgentDefaultMemory                      string
+	tenantAgentDefaultQoS                         string
+	tenantDashboardQuotaDashboardsPerAgent        int32
+	tenantDashboardQuotaWidgetsPerDashboard       int32
+	tenantDashboardQuotaRequestBytes              string
+	tenantDashboardQuotaRecordsPerRequest         int32
+	tenantDashboardQuotaRequestsPerMinutePerAgent int32
+	tenantDashboardQuotaAcceptedBytesPerDay       string
+	tenantDashboardQuotaTemporalRecordsPerDay     int64
+	tenantDashboardQuotaRetainedTemporalRecords   int64
+	tenantDashboardQuotaLatestBytesPerAgent       string
+	tenantDashboardQuotaRequestsPerMinutePerUser  int32
+	tenantDashboardQuotaReturnedCellsPerHour      int64
+	tenantDashboardQuotaConcurrentRequests        int32
+	tenantDashboardQuotaCellsPerRequest           int32
+	tenantDashboardQuotaResponseBytes             string
+	tenantDashboardQuotaPointsPerSeries           int32
+	tenantDashboardQuotaTimeout                   time.Duration
+	watchNamespace                                string
+	enableWebhooks                                bool
+	workflowRunOrphanRetention                    time.Duration
+	inferenceSecretStoreName                      string
+	delegationNamespace                           string
+	inferenceSecretRefreshInterval                time.Duration
 )
 
 type silentExitCoder interface {
@@ -347,6 +352,18 @@ var managerCmd = &cli.Command{
 			Config: cli.StringConfig{
 				TrimSpace: true,
 			},
+		},
+		&cli.StringFlag{
+			Name: "delegation-image-registry", Usage: "Registry for the patched delegated Agentgateway image",
+			Value: *delegationImage.Registry, Destination: delegationImage.Registry,
+		},
+		&cli.StringFlag{
+			Name: "delegation-image-repository", Usage: "Repository for the patched delegated Agentgateway image",
+			Value: *delegationImage.Repository, Destination: delegationImage.Repository,
+		},
+		&cli.StringFlag{
+			Name: "delegation-image-tag", Usage: "Tag for the patched delegated Agentgateway image",
+			Value: *delegationImage.Tag, Destination: delegationImage.Tag,
 		},
 		&cli.StringFlag{
 			Name:        "agentgateway-trace-mode",
@@ -1458,6 +1475,8 @@ var managerCmd = &cli.Command{
 			os.Exit(1)
 		}
 		extAuthRuntimeReconciler := &mcpconn.ExtAuthRuntimeReconciler{
+			TraceBackend:            traceBackend,
+			DelegationImage:         delegationImage,
 			Bao:                     baoClient,
 			Client:                  mgr.GetClient(),
 			ControllerImage:         controllerImage,

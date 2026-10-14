@@ -76,11 +76,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		}
 		backend := &agentgatewayv1alpha1.AgentgatewayBackend{}
 		key := client.ObjectKeyFromObject(pool)
-		if cleanupErr := r.Get(ctx, key, backend); cleanupErr != nil && !apierrors.IsNotFound(cleanupErr) {
+		cleanupErr = r.Get(ctx, key, backend)
+		if cleanupErr != nil && !apierrors.IsNotFound(cleanupErr) {
 			return ctrl.Result{}, cleanupErr
 		}
 		if metav1.IsControlledBy(backend, pool) {
-			if cleanupErr := r.Delete(ctx, backend); cleanupErr != nil && !apierrors.IsNotFound(cleanupErr) {
+			cleanupErr = r.Delete(ctx, backend)
+			if cleanupErr != nil && !apierrors.IsNotFound(cleanupErr) {
 				return ctrl.Result{}, cleanupErr
 			}
 		}
@@ -413,7 +415,8 @@ func (r *Reconciler) updateStatus(ctx context.Context, pool *agentzv1alpha1.Infe
 						name := inference.PoolProviderSecretName(pool.Name, member.Provider.Name)
 						key := client.ObjectKey{Name: name, Namespace: pool.Namespace}
 						projection := &externalsecretsv1.ExternalSecret{}
-						if err := r.Get(ctx, key, projection); err != nil && !apierrors.IsNotFound(err) {
+						err = r.Get(ctx, key, projection)
+						if err != nil && !apierrors.IsNotFound(err) {
 							return err
 						}
 						ready = false

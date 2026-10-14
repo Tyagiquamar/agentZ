@@ -11,11 +11,211 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 var (
 	ErrBatchAlreadyClosed = errors.New("batch already closed")
 )
+
+const insertAppOperation = `-- name: InsertAppOperation :batchexec
+WITH operation AS (
+  INSERT INTO observer_app_operations (
+    organization_id,
+    workspace_id,
+    client_id,
+    app_name,
+    grant_id,
+    user_id,
+    resource_kind,
+    resource_namespace,
+    resource_name,
+    resource_uid,
+    target_id,
+    trace_id,
+    span_id,
+    parent_span_id,
+    start_time,
+    end_time,
+    duration_ns,
+    name,
+    span_class,
+    operation_name,
+    status_code,
+    error_type,
+    error_message,
+    model,
+    tool_name,
+    session_id,
+    input_tokens,
+    output_tokens,
+    reasoning_tokens,
+    cached_input_tokens,
+    cached_write_tokens,
+    cost_usd,
+    resource_attributes,
+    span_attributes
+  ) VALUES (
+    $6,
+    $7,
+    $8,
+    $9,
+    $10,
+    $11,
+    $12,
+    $13,
+    $14,
+    $15,
+    $16,
+    $17,
+    $18,
+    $19,
+    $20,
+    $21,
+    $22,
+    $23,
+    $24,
+    $25,
+    $26,
+    $27,
+    $28,
+    $29,
+    $30,
+    $31,
+    $32,
+    $33,
+    $34,
+    $35,
+    $36,
+    $37,
+    $38,
+    $39
+  )
+  ON CONFLICT (organization_id, workspace_id, client_id, trace_id, span_id, start_time) DO NOTHING
+  RETURNING id
+)
+INSERT INTO observer_app_operation_payloads (operation_id, input_messages, output_messages, tool_arguments, tool_result, tool_error)
+SELECT id, $1, $2, $3, $4, $5 FROM operation
+`
+
+type InsertAppOperationBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type InsertAppOperationParams struct {
+	InputMessages      []byte        `json:"input_messages"`
+	OutputMessages     []byte        `json:"output_messages"`
+	ToolArguments      []byte        `json:"tool_arguments"`
+	ToolResult         []byte        `json:"tool_result"`
+	ToolError          []byte        `json:"tool_error"`
+	OrganizationID     string        `json:"organization_id"`
+	WorkspaceID        string        `json:"workspace_id"`
+	ClientID           string        `json:"client_id"`
+	AppName            string        `json:"app_name"`
+	GrantID            string        `json:"grant_id"`
+	UserID             string        `json:"user_id"`
+	ResourceKind       string        `json:"resource_kind"`
+	ResourceNamespace  string        `json:"resource_namespace"`
+	ResourceName       string        `json:"resource_name"`
+	ResourceUid        string        `json:"resource_uid"`
+	TargetID           string        `json:"target_id"`
+	TraceID            []byte        `json:"trace_id"`
+	SpanID             []byte        `json:"span_id"`
+	ParentSpanID       []byte        `json:"parent_span_id"`
+	StartTime          time.Time     `json:"start_time"`
+	EndTime            time.Time     `json:"end_time"`
+	DurationNs         int64         `json:"duration_ns"`
+	Name               string        `json:"name"`
+	SpanClass          string        `json:"span_class"`
+	OperationName      string        `json:"operation_name"`
+	StatusCode         string        `json:"status_code"`
+	ErrorType          string        `json:"error_type"`
+	ErrorMessage       string        `json:"error_message"`
+	Model              string        `json:"model"`
+	ToolName           string        `json:"tool_name"`
+	SessionID          string        `json:"session_id"`
+	InputTokens        pgtype.Int8   `json:"input_tokens"`
+	OutputTokens       pgtype.Int8   `json:"output_tokens"`
+	ReasoningTokens    pgtype.Int8   `json:"reasoning_tokens"`
+	CachedInputTokens  pgtype.Int8   `json:"cached_input_tokens"`
+	CachedWriteTokens  pgtype.Int8   `json:"cached_write_tokens"`
+	CostUsd            pgtype.Float8 `json:"cost_usd"`
+	ResourceAttributes []byte        `json:"resource_attributes"`
+	SpanAttributes     []byte        `json:"span_attributes"`
+}
+
+func (q *Queries) InsertAppOperation(ctx context.Context, arg []InsertAppOperationParams) *InsertAppOperationBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.InputMessages,
+			a.OutputMessages,
+			a.ToolArguments,
+			a.ToolResult,
+			a.ToolError,
+			a.OrganizationID,
+			a.WorkspaceID,
+			a.ClientID,
+			a.AppName,
+			a.GrantID,
+			a.UserID,
+			a.ResourceKind,
+			a.ResourceNamespace,
+			a.ResourceName,
+			a.ResourceUid,
+			a.TargetID,
+			a.TraceID,
+			a.SpanID,
+			a.ParentSpanID,
+			a.StartTime,
+			a.EndTime,
+			a.DurationNs,
+			a.Name,
+			a.SpanClass,
+			a.OperationName,
+			a.StatusCode,
+			a.ErrorType,
+			a.ErrorMessage,
+			a.Model,
+			a.ToolName,
+			a.SessionID,
+			a.InputTokens,
+			a.OutputTokens,
+			a.ReasoningTokens,
+			a.CachedInputTokens,
+			a.CachedWriteTokens,
+			a.CostUsd,
+			a.ResourceAttributes,
+			a.SpanAttributes,
+		}
+		batch.Queue(insertAppOperation, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &InsertAppOperationBatchResults{br, len(arg), false}
+}
+
+func (b *InsertAppOperationBatchResults) Exec(f func(int, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		if b.closed {
+			if f != nil {
+				f(t, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		_, err := b.br.Exec()
+		if f != nil {
+			f(t, err)
+		}
+	}
+}
+
+func (b *InsertAppOperationBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
 
 const insertMCPToolInvocation = `-- name: InsertMCPToolInvocation :batchexec
 INSERT INTO observer_mcp_tool_invocations(

@@ -45,6 +45,210 @@ tags:
   description: Workspace chat inbox and preference APIs.
 
 paths:
+  /api/lens/apps:
+    get:
+      operationId: listLensApps
+      tags:
+      - lens
+      summary: List apps with workspace access or telemetry history
+      description: Includes approved resource selections and historical operations after app access is revoked or the app is deleted.
+      security:
+      - GatewayBearer:
+        - observability.read
+      responses:
+        '200':
+          description: Workspace-scoped app telemetry.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListLensAppsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/lens/apps/{clientID}/traces:
+    get:
+      operationId: listAppTraces
+      tags:
+      - lens
+      summary: List traces for an app
+      description: Groups attributed inference and MCP tool operations by trace ID. Apps do not require an Agent or an OpenCode session.
+      parameters:
+      - name: clientID
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+      - $ref: '#/components/parameters/LimitQuery'
+      - $ref: '#/components/parameters/PageTokenQuery'
+      - $ref: '#/components/parameters/StartedAfterQuery'
+      - $ref: '#/components/parameters/StartedBeforeQuery'
+      security:
+      - GatewayBearer:
+        - observability.read
+      responses:
+        '200':
+          description: Workspace-scoped app telemetry.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListAppTracesResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/lens/apps/{clientID}/traces/chart:
+    get:
+      operationId: getAppTraceChart
+      tags:
+      - lens
+      summary: Get trace counts for an app
+      description: Counts the entire requested time range independently of trace pagination.
+      parameters:
+      - name: clientID
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+      - $ref: '#/components/parameters/StartedAfterQuery'
+      - $ref: '#/components/parameters/StartedBeforeQuery'
+      security:
+      - GatewayBearer:
+        - observability.read
+      responses:
+        '200':
+          description: Workspace-scoped app telemetry.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppTraceChartResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/lens/apps/{clientID}/traces/{traceID}/spans:
+    get:
+      operationId: listAppSpans
+      tags:
+      - lens
+      summary: List operations in an app trace
+      parameters:
+      - name: clientID
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+      - name: traceID
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/TraceID'
+      - $ref: '#/components/parameters/LimitQuery'
+      - $ref: '#/components/parameters/PageTokenQuery'
+      security:
+      - GatewayBearer:
+        - observability.read
+      responses:
+        '200':
+          description: Workspace-scoped app telemetry.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListAppSpansResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/lens/apps/{clientID}/operations/{operationID}:
+    get:
+      operationId: getAppOperation
+      tags:
+      - lens
+      summary: Get an app operation and its captured content
+      parameters:
+      - name: clientID
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+      - name: operationID
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 1
+      security:
+      - GatewayBearer:
+        - observability.read
+      responses:
+        '200':
+          description: Workspace-scoped app telemetry.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppOperationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/lens/apps/{clientID}/mcp/graph:
+    get:
+      operationId: getAppMCPGraph
+      tags:
+      - lens
+      summary: Get MCP tool activity for an app
+      parameters:
+      - name: clientID
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+      - $ref: '#/components/parameters/FromDateQuery'
+      - $ref: '#/components/parameters/ToDateQuery'
+      security:
+      - GatewayBearer:
+        - observability.read
+      responses:
+        '200':
+          description: Workspace-scoped app telemetry.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppMCPGraphResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /api/delegations/catalog:
     get:
       operationId: getDelegationCatalog
@@ -5044,6 +5248,351 @@ components:
             $ref: '#/components/schemas/Error'
 
   schemas:
+    LensApp:
+      type: object
+      additionalProperties: false
+      properties:
+        client_id:
+          type: string
+        name:
+          type: string
+      required:
+      - client_id
+      - name
+    ListLensAppsResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        apps:
+          type: array
+          items:
+            $ref: '#/components/schemas/LensApp'
+      required:
+      - apps
+    AppTrace:
+      type: object
+      additionalProperties: false
+      properties:
+        trace_id:
+          $ref: '#/components/schemas/TraceID'
+        root_span_id:
+          $ref: '#/components/schemas/OptionalSpanID'
+        started_at:
+          type: string
+          format: date-time
+        ended_at:
+          type: string
+          format: date-time
+        duration_ns:
+          type: integer
+          format: int64
+          minimum: 0
+        duration_ms:
+          type: number
+          format: double
+          minimum: 0
+        span_count:
+          type: integer
+          format: int64
+          minimum: 0
+        error_count:
+          type: integer
+          format: int64
+          minimum: 0
+        tool_count:
+          type: integer
+          format: int64
+          minimum: 0
+        model_count:
+          type: integer
+          format: int64
+          minimum: 0
+        input_tokens:
+          type: integer
+          format: int64
+          minimum: 0
+          nullable: true
+        output_tokens:
+          type: integer
+          format: int64
+          minimum: 0
+          nullable: true
+        cached_input_tokens:
+          type: integer
+          format: int64
+          minimum: 0
+          nullable: true
+        cached_write_tokens:
+          type: integer
+          format: int64
+          minimum: 0
+          nullable: true
+        cost_usd:
+          type: number
+          format: double
+          minimum: 0
+          nullable: true
+        status_code:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+      required:
+      - trace_id
+      - root_span_id
+      - started_at
+      - ended_at
+      - duration_ns
+      - duration_ms
+      - span_count
+      - error_count
+      - tool_count
+      - model_count
+      - input_tokens
+      - output_tokens
+      - cached_input_tokens
+      - cached_write_tokens
+      - cost_usd
+      - status_code
+      - updated_at
+    AppSpan:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 1
+        session_id:
+          type: string
+        trace_id:
+          $ref: '#/components/schemas/TraceID'
+        span_id:
+          $ref: '#/components/schemas/SpanID'
+        parent_span_id:
+          $ref: '#/components/schemas/OptionalSpanID'
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+        duration_ns:
+          type: integer
+          format: int64
+          minimum: 0
+        duration_ms:
+          type: number
+          format: double
+          minimum: 0
+        name:
+          type: string
+        span_class:
+          type: string
+        operation_name:
+          type: string
+        kind:
+          type: string
+        status_code:
+          type: string
+        error_type:
+          type: string
+        error_message:
+          type: string
+        model:
+          type: string
+        tool_name:
+          type: string
+        input_tokens:
+          type: integer
+          format: int64
+          minimum: 0
+          nullable: true
+        output_tokens:
+          type: integer
+          format: int64
+          minimum: 0
+          nullable: true
+        cached_input_tokens:
+          type: integer
+          format: int64
+          minimum: 0
+          nullable: true
+        cached_write_tokens:
+          type: integer
+          format: int64
+          minimum: 0
+          nullable: true
+        cost_usd:
+          type: number
+          format: double
+          minimum: 0
+          nullable: true
+        ingested_at:
+          type: string
+          format: date-time
+        grant_id:
+          type: string
+        user_id:
+          type: string
+        resource_namespace:
+          type: string
+        resource_name:
+          type: string
+        resource_uid:
+          type: string
+        resource_kind:
+          type: string
+        target_id:
+          type: string
+        reasoning_tokens:
+          type: integer
+          format: int64
+          nullable: true
+      required:
+      - id
+      - session_id
+      - trace_id
+      - span_id
+      - parent_span_id
+      - start_time
+      - end_time
+      - duration_ns
+      - duration_ms
+      - name
+      - span_class
+      - operation_name
+      - kind
+      - status_code
+      - error_type
+      - error_message
+      - model
+      - tool_name
+      - input_tokens
+      - output_tokens
+      - cached_input_tokens
+      - cached_write_tokens
+      - cost_usd
+      - ingested_at
+      - grant_id
+      - user_id
+      - resource_namespace
+      - resource_name
+      - resource_uid
+      - resource_kind
+      - target_id
+      - reasoning_tokens
+    ListAppTracesResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        traces:
+          type: array
+          items:
+            $ref: '#/components/schemas/AppTrace'
+        next_page_token:
+          type: string
+      required:
+      - traces
+      - next_page_token
+    ListAppSpansResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        spans:
+          type: array
+          items:
+            $ref: '#/components/schemas/AppSpan'
+        next_page_token:
+          type: string
+      required:
+      - spans
+      - next_page_token
+    AppPayload:
+      type: object
+      additionalProperties: false
+      description: Serialized JSON documents preserve numeric precision when displayed by browser clients.
+      properties:
+        input_messages:
+          type: string
+        output_messages:
+          type: string
+        tool_arguments:
+          type: string
+        tool_result:
+          type: string
+      required:
+      - input_messages
+      - output_messages
+      - tool_arguments
+      - tool_result
+    AppOperationResponse:
+      type: object
+      additionalProperties: false
+      description: Content fields contain serialized JSON, including the JSON literal null for absent values.
+      properties:
+        span:
+          $ref: '#/components/schemas/AppSpan'
+        resource_attributes:
+          type: string
+        span_attributes:
+          type: string
+        payload:
+          $ref: '#/components/schemas/AppPayload'
+        tool_error:
+          type: string
+      required:
+      - span
+      - resource_attributes
+      - span_attributes
+      - payload
+      - tool_error
+    AppTraceChartPoint:
+      type: object
+      additionalProperties: false
+      properties:
+        time:
+          type: string
+          format: date-time
+        count:
+          type: integer
+          format: int64
+      required:
+      - time
+      - count
+    AppTraceChartResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/AppTraceChartPoint'
+      required:
+      - points
+    AppMCPGraphResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        connections:
+          type: array
+          items:
+            $ref: '#/components/schemas/MCPGraphConnection'
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/MCPGraphTool'
+        edges:
+          type: array
+          items:
+            $ref: '#/components/schemas/MCPGraphEdge'
+        app:
+          $ref: '#/components/schemas/LensApp'
+      required:
+      - app
+      - connections
+      - tools
+      - edges
     DelegationModel:
       type: object
       additionalProperties: false
@@ -8078,7 +8627,7 @@ components:
           type: string
         kind:
           type: string
-          enum: [agent_connection, connection_tool]
+          enum: [agent_connection, app_connection, connection_tool]
         avg_latency_ms:
           type: number
           format: double
