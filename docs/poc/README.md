@@ -2,6 +2,8 @@
 
 This branch proves native Claude Code login against AgentZ, user-bound inference, refresh, revocation, and MCP access. It is throwaway code based on `feat/external-agents` at `e674df00`.
 
+The tested native login uses a private loopback endpoint. It does not meet the later requirement for native AgentZ login and refresh against public `https://agentzharness.ai` with only Claude installed and no proxy or helper. The actual client rejects that public host before device authorization. See [the SaaS feasibility investigation](public-saas-research.md) and [the rejection evidence](evidence/native-public-login-result.json).
+
 Claude Code 2.1.299 was tested against the existing Kind cluster and its Anthropic provider. The real CLI returned `CLAUDE_AGENTZ_NATIVE_OK` through AgentZ inference. A fresh CLI process called the delegated MCP echo tool and returned `AgentZ MCP: CLAUDE_MCP_NATIVE_OK`. After the original access token expired, the CLI refreshed it and returned `POC_NATIVE_REFRESH_OK`.
 
 The protocol and deployment constraints are documented in [the research notes](claude-code-research.md), with links to Anthropic's documentation and the inspected native release. Native gateway login expects a private endpoint by default. Loopback HTTP works for this PoC; a deployed gateway needs private HTTPS.

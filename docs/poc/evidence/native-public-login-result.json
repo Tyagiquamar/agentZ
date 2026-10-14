@@ -1,0 +1,12 @@
+{
+  "tested_at": "2026-10-14T09:13:23.534600+00:00",
+  "client_version": "2.1.299",
+  "gateway": "https://agentzharness.ai/claude",
+  "configuration": {
+    "forceLoginMethod": "gateway",
+    "forceLoginGatewayUrl": "https://agentzharness.ai/claude"
+  },
+  "native_login_accepted": false,
+  "error": "Gateway hosts must be on your organization's private network; agentzharness.ai resolves to the public (or unrecognized) address 134.199.140.182. Connect to your organization's network and try again.",
+  "stage": "Client host validation, before device authorization"
+}

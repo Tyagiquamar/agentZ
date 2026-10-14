@@ -19,6 +19,7 @@ Tested on 2026-10-14 with native Claude Code 2.1.299, the existing Kind cluster,
 | Automatic refresh after access token expiry | POC_NATIVE_REFRESH_OK |
 | Final native inference after reconnecting cluster services | POC_FINAL_HEALTH_OK |
 | Disabled PoC handler | 404, direct handler check |
+| Native login to public agentzharness.ai with only Claude installed | Rejected by client host validation before device authorization; SaaS requirement is unmet |
 
 The native MCP proof is recorded in [native-claude-result.json](evidence/native-claude-result.json). The expiry/refresh proof is in [native-refresh-result.json](evidence/native-refresh-result.json). [The approval screenshot](evidence/device-approval-mcp.png) shows the actual selected models, tool catalog, prompt and resource.
 
