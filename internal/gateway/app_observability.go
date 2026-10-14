@@ -326,10 +326,7 @@ func (s *Service) GetAppMCPGraph(w http.ResponseWriter, r *http.Request, clientI
 		if !connections[connectionID] {
 			connection := gatewayapi.MCPGraphConnection{Id: connectionID, Name: row.ResourceName}
 			object := &agentzv1alpha1.MCPConnection{}
-			err := s.k8sClient.Get(r.Context(), ctrlclient.ObjectKey{
-				Namespace: row.ResourceNamespace,
-				Name:      row.ResourceName,
-			}, object)
+			err := s.k8sClient.Get(r.Context(), ctrlclient.ObjectKey{Namespace: row.ResourceNamespace, Name: row.ResourceName}, object)
 			if err != nil && !apierrors.IsNotFound(err) {
 				apiutil.WriteInternalError(w, r, err)
 				return

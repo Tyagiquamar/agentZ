@@ -24,12 +24,9 @@ func TestSinkDrainsAfterProducersStop(t *testing.T) {
 	events := make(chan event, 2)
 	store := &shutdownStore{}
 	sink := &sink{
-		store: store,
-		stats: &stats{},
-		cfg: Config{
-			BatchSize:     500,
-			FlushInterval: time.Hour,
-		},
+		store:  store,
+		stats:  &stats{},
+		cfg:    Config{BatchSize: 500, FlushInterval: time.Hour},
 		events: events,
 	}
 	done := make(chan struct{})

@@ -188,10 +188,7 @@ func (r *ExtAuthRuntimeReconciler) reconcileDelegationRuntime(ctx context.Contex
 			parameters.Spec.Env = slices.DeleteFunc(parameters.Spec.Env, func(variable corev1.EnvVar) bool {
 				return variable.Name == "OTEL_BSP_MAX_EXPORT_BATCH_SIZE"
 			})
-			parameters.Spec.Env = append(parameters.Spec.Env, corev1.EnvVar{
-				Name:  "OTEL_BSP_MAX_EXPORT_BATCH_SIZE",
-				Value: "1",
-			})
+			parameters.Spec.Env = append(parameters.Spec.Env, corev1.EnvVar{Name: "OTEL_BSP_MAX_EXPORT_BATCH_SIZE", Value: "1"})
 			return nil
 		})
 		if err != nil {
@@ -267,10 +264,7 @@ func (r *ExtAuthRuntimeReconciler) reconcileDelegationTracing(ctx context.Contex
 	}
 	if gateway == inference.GatewayName {
 		attrs = append(attrs,
-			agw.AttributeAdd{
-				Name:       "llm.input_messages",
-				Expression: "json(request.body)",
-			},
+			agw.AttributeAdd{Name: "llm.input_messages", Expression: "json(request.body)"},
 			agw.AttributeAdd{
 				Name:       "gen_ai.request.model",
 				Expression: "default(llm.requestModel, json(request.body).model)",
@@ -287,18 +281,12 @@ func (r *ExtAuthRuntimeReconciler) reconcileDelegationTracing(ctx context.Contex
 				Name:       "tool.parameters",
 				Expression: "default(mcp.tool.arguments, json(request.body).params.arguments)",
 			},
-			agw.AttributeAdd{
-				Name:       "output.value",
-				Expression: "mcp.tool.result",
-			},
+			agw.AttributeAdd{Name: "output.value", Expression: "mcp.tool.result"},
 			agw.AttributeAdd{
 				Name:       "tool.error",
 				Expression: "response.code >= 400 ? default(mcp.tool.error, string(response.body)) : mcp.tool.error",
 			},
-			agw.AttributeAdd{
-				Name:       "mcp.request.id",
-				Expression: "json(request.body).id",
-			},
+			agw.AttributeAdd{Name: "mcp.request.id", Expression: "json(request.body).id"},
 			agw.AttributeAdd{
 				Name:       "mcp.method.name",
 				Expression: "default(mcp.methodName, json(request.body).method)",
