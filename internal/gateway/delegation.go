@@ -117,6 +117,9 @@ func delegatedModelCompatibility(kind agentzv1alpha1.InferenceProviderKind, mode
 		if slices.Contains(endpoints, paths[i]) {
 			compatibility.Support = gatewayapi.Translated
 			compatibility.Warning = "Conversion may omit provider-specific reasoning, media or tool fields. Use the native API for full fidelity."
+			if api == gatewayapi.Responses {
+				compatibility.Warning += " Custom, namespaced and search tools, used by Codex, require a native Responses provider."
+			}
 			native := false
 			switch upstream {
 			case agentzv1alpha1.InferenceModelAPIChatCompletions:
@@ -213,6 +216,7 @@ func (s *Service) delegationCatalog(ctx context.Context, userID, organizationID,
 						continue
 					}
 					compatibility := delegatedModelCompatibility(provider.Spec.Kind, model)
+					metadata := modelsToAPI([]agentzv1alpha1.InferenceModel{model})[0]
 					catalog.Models = append(catalog.Models, gatewayapi.DelegationModel{
 						Id:                  workspaceID + "/" + string(provider.UID) + "/" + model.ID,
 						WorkspaceId:         workspaceID,
@@ -223,6 +227,7 @@ func (s *Service) delegationCatalog(ctx context.Context, userID, organizationID,
 						Model:               model.ID,
 						ModelDisplayName:    model.DisplayName,
 						ApiCompatibility:    &compatibility,
+						ModelInfo:           &metadata,
 					})
 				}
 			}
@@ -436,6 +441,19 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 
 	audience := strings.TrimRight(s.cfg.ExternalJWTIssuer, "/") + resourcePath
 	bearer, err := jwtrequest.BearerExtractor{}.ExtractToken(r)
+	secondary := r.Header.Values("X-AgentZ-Authorization")
+	if len(secondary) == 0 && len(r.Header.Values("Authorization")) != 1 {
+		err = errors.New("provide one bearer credential")
+	}
+	if len(secondary) != 0 {
+		err = errors.New("invalid secondary bearer credential")
+		if len(secondary) == 1 {
+			scheme, token, found := strings.Cut(secondary[0], " ")
+			if found && strings.EqualFold(scheme, "Bearer") && token != "" {
+				bearer, err = token, nil
+			}
+		}
+	}
 	claims := authorization.DelegationClaims{}
 	if err == nil {
 		claims, err = authorization.VerifyDelegationToken(
@@ -548,6 +566,8 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 					if model.ID == selected.Model {
 						compatibility := delegatedModelCompatibility(provider.Spec.Kind, model)
 						selected.ApiCompatibility = &compatibility
+						metadata := modelsToAPI([]agentzv1alpha1.InferenceModel{model})[0]
+						selected.ModelInfo = &metadata
 						break
 					}
 				}

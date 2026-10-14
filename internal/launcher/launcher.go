@@ -48,24 +48,29 @@ func Run(ctx context.Context, command *cli.Command) error {
 		ctx, cancel = signal.NotifyContext(ctx, os.Interrupt)
 		defer cancel()
 	}
-	if command.Name == "launch" {
+	if command.Name == "launch" || command.Name == "login" {
 		args := command.Args().Slice()
-		if len(args) == 0 || args[0] != "claude" {
-			return errors.New("usage: agentz [--config FILE] launch claude [Claude flags]")
+		if len(args) == 0 || !slices.Contains([]string{"claude", "codex"}, args[0]) {
+			return errors.New("usage: agentz [--config FILE] launch claude|codex [native flags]")
 		}
 		if _, err := exec.LookPath(args[0]); err != nil {
-			return fmt.Errorf("install Claude Code before launching it: %w", err)
+			return fmt.Errorf("install %s before launching it: %w", args[0], err)
 		}
 		version, err := exec.CommandContext(ctx, args[0], "--version").Output()
 		if err != nil {
-			return fmt.Errorf("read Claude version: %w", err)
+			return fmt.Errorf("read %s version: %w", args[0], err)
 		}
 		var major, minor, patch int
-		if _, err := fmt.Sscanf(string(version), "%d.%d.%d", &major, &minor, &patch); err != nil {
-			return fmt.Errorf("read Claude version: %w", err)
+		versionText := strings.TrimPrefix(string(version), "codex-cli ")
+		if _, err := fmt.Sscanf(versionText, "%d.%d.%d", &major, &minor, &patch); err != nil {
+			return fmt.Errorf("read %s version: %w", args[0], err)
 		}
-		if major < 2 || major == 2 && (minor < 1 || minor == 1 && patch < 299) {
+		oldClaude := major < 2 || major == 2 && (minor < 1 || minor == 1 && patch < 299)
+		if args[0] == "claude" && oldClaude {
 			return errors.New("AgentZ requires Claude Code 2.1.299 or later; run claude update")
+		}
+		if args[0] == "codex" && major == 0 && (minor < 162 || minor == 162 && patch < 1) {
+			return errors.New("AgentZ requires Codex 0.162.1 or later")
 		}
 	}
 	installed, err := loadInstallation(ctx, command.String("config"))
@@ -86,9 +91,15 @@ func Run(ctx context.Context, command *cli.Command) error {
 		}
 		_, err = io.Copy(command.Writer, response.Body)
 		return err
-	case "launch":
+	case "launch", "login":
 		if err := installed.ensureRelay(ctx); err != nil {
 			return err
+		}
+		if command.Args().First() == "codex" {
+			return installed.codex(ctx, command)
+		}
+		if command.Name == "login" {
+			return errors.New("use agentz launch claude auth login for native Claude login")
 		}
 		profile := filepath.Join(installed.profile, "claude")
 		if err := os.MkdirAll(profile, 0700); err != nil {
@@ -121,17 +132,7 @@ func Run(ctx context.Context, command *cli.Command) error {
 			return err
 		}
 		// Rename protects readers from truncated JSON during concurrent launches.
-		file, err := os.CreateTemp(profile, ".settings-*")
-		if err != nil {
-			return err
-		}
-		defer os.Remove(file.Name())
-		_, writeErr := file.Write(data)
-		err = errors.Join(writeErr, file.Close())
-		if err != nil {
-			return err
-		}
-		if err := os.Rename(file.Name(), settingsPath); err != nil {
+		if err := writeProfileFile(settingsPath, data); err != nil {
 			return err
 		}
 		args := command.Args().Slice()
@@ -159,6 +160,20 @@ func Run(ctx context.Context, command *cli.Command) error {
 	default:
 		return fmt.Errorf("unknown command %q", command.Name)
 	}
+}
+
+func writeProfileFile(name string, data []byte) error {
+	file, err := os.CreateTemp(filepath.Dir(name), ".agentz-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(file.Name())
+	_, writeErr := file.Write(data)
+	err = errors.Join(writeErr, file.Close())
+	if err != nil {
+		return err
+	}
+	return os.Rename(file.Name(), name)
 }
 
 func loadInstallation(ctx context.Context, configPath string) (*installation, error) {

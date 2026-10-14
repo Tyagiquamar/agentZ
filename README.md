@@ -131,6 +131,40 @@ After disconnecting, run `agentz launch claude auth logout` and launch again to
 grant fresh access. Claude's managed model settings choose the first approved
 model as the default on each launch; `/model` selects another approved model.
 
+For Codex, enable Browser login with PKCE and register
+`http://127.0.0.1:8766/callback`. Codex 0.162.1 or later performs login and
+refresh and keeps its credentials encrypted using the OS credential store.
+The credential store must be available and unlocked, including on headless Linux.
+Its browser callback must reach the machine running Codex. Remote SSH sessions
+need callback port forwarding; this native flow has no device-code fallback.
+Codex's browser login expires after three minutes. Rerun `agentz login codex`
+to retry an expired login.
+
+```sh
+agentz launch codex --your-codex-flags
+```
+
+The launcher starts Codex's native app-server login on first use and writes a
+local catalog containing approved models. Codex sends inference directly to
+AgentZ's public `/api/inference/v1/responses` endpoint with its scoped bearer in
+`X-AgentZ-Authorization`. AgentZ accepts the standard `Authorization` bearer
+header too. Neither credential reaches the model provider. The local relay
+forwards OAuth exchanges and saves approved model metadata; Codex alone stores
+and refreshes tokens. Inference remains streamed through AgentGateway.
+
+Codex's custom and namespaced client tools require a native Responses provider.
+Responses-to-Chat conversion cannot support those tools. The launcher includes
+only approved native Responses models that support tool calls. Each launch
+selects the first approved model by default; `/model` can select another.
+Provider-hosted web search and Responses WebSockets are disabled. After
+disconnecting, or to change approved models, run `agentz login codex`.
+
+Codex MCP uses a separate native OAuth grant. Register
+`http://127.0.0.1:8767/callback`, then use the Codex instructions in the existing
+application setup sheet to sign in. The launcher configures the MCP server with
+its resource-specific scopes. Tool, prompt and
+resource grants use the same AgentZ consent and revocation controls as Claude.
+
 ## Open-Source Projects
 
 This project wouldn't have been possible without the many excellent open-source libraries and projects it builds on.

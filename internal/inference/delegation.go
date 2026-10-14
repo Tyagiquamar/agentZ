@@ -16,6 +16,7 @@ import (
 type DelegatedRequest struct {
 	responses          bool
 	endpoint           string
+	nativeTools        bool
 	Model              string               `json:"model"`
 	Instructions       string               `json:"instructions"`
 	Stream             bool                 `json:"stream"`
@@ -66,6 +67,11 @@ func (input *DelegatedRequest) ValidateProvider(kind agentzv1alpha1.InferencePro
 	if !slices.Contains(endpoints, endpoint) {
 		return fmt.Errorf("this model supports %s; choose a supported endpoint", strings.Join(endpoints, ", "))
 	}
+	nativeResponses := kind == agentzv1alpha1.InferenceProviderKindOpenAI ||
+		kind == agentzv1alpha1.InferenceProviderKindAzure || kind == agentzv1alpha1.InferenceProviderKindOpenAICodex
+	if input.nativeTools && !nativeResponses {
+		return errors.New("custom, namespaced and search tools require a native Responses provider")
+	}
 	if kind != agentzv1alpha1.InferenceProviderKindOpenAICodex {
 		return nil
 	}
@@ -79,15 +85,19 @@ func (input *DelegatedRequest) ValidateProvider(kind agentzv1alpha1.InferencePro
 }
 
 type inferenceTool struct {
-	Type string `json:"type"`
+	Type      string          `json:"type"`
+	Execution string          `json:"execution"`
+	Tools     []inferenceTool `json:"tools"`
 }
 
 type inferenceInputItem struct {
-	ID      string          `json:"id"`
-	Type    string          `json:"type"`
-	Content json.RawMessage `json:"content"`
-	Output  json.RawMessage `json:"output"`
-	Audio   json.RawMessage `json:"audio"`
+	ID        string          `json:"id"`
+	Type      string          `json:"type"`
+	Content   json.RawMessage `json:"content"`
+	Output    json.RawMessage `json:"output"`
+	Audio     json.RawMessage `json:"audio"`
+	Execution string          `json:"execution"`
+	Tools     []inferenceTool `json:"tools"`
 }
 
 type inferenceContentPart struct {
@@ -115,11 +125,8 @@ func ValidateDelegatedRequest(body []byte, responses bool) (*DelegatedRequest, e
 	}
 	// A model grant never authorizes the owner's stored data or hosted tools.
 	storedPrompt := len(input.Prompt) != 0 && string(input.Prompt) != "null"
-	hostedTools := slices.ContainsFunc(input.Tools, func(tool inferenceTool) bool {
-		return tool.Type != "function"
-	})
 	hostedSearch := !responses && len(input.WebSearchOptions) != 0 && string(input.WebSearchOptions) != "null"
-	if storedPrompt || hostedTools || hostedSearch {
+	if storedPrompt || hostedSearch {
 		return nil, errors.New("use inline prompts and client-side function tools; provider account resources are unavailable")
 	}
 	items := input.Messages
@@ -133,6 +140,7 @@ func ValidateDelegatedRequest(body []byte, responses bool) (*DelegatedRequest, e
 			}
 		}
 	}
+	tools := slices.Clone(input.Tools)
 	for _, item := range items {
 		if !responses && len(item.Audio) != 0 && string(item.Audio) != "null" {
 			return nil, errors.New("stored audio is unavailable; provide inline audio input")
@@ -152,7 +160,7 @@ func ValidateDelegatedRequest(body []byte, responses bool) (*DelegatedRequest, e
 		}
 		if responses {
 			switch item.Type {
-			case "function_call_output":
+			case "function_call_output", "custom_tool_call_output":
 				// Function output is text or an array of text, images, and files.
 				if len(item.Output) != 0 && item.Output[0] == '[' {
 					var output []inferenceContentPart
@@ -162,6 +170,12 @@ func ValidateDelegatedRequest(body []byte, responses bool) (*DelegatedRequest, e
 					}
 					content = append(content, output...)
 				}
+			case "tool_search_output":
+				if item.Execution != "client" {
+					return nil, errors.New("use client-side tool discovery; provider account tools are unavailable")
+				}
+				input.nativeTools = true
+				tools = append(tools, item.Tools...)
 			case "computer_call_output":
 				var screenshot inferenceContentPart
 				strictErrors, err = kjson.UnmarshalStrict(item.Output, &screenshot, kjson.DisallowDuplicateFields)
@@ -176,6 +190,26 @@ func ValidateDelegatedRequest(body []byte, responses bool) (*DelegatedRequest, e
 				return nil, errors.New("stored provider files are unavailable; provide inline content or a URL")
 			}
 		}
+	}
+	for len(tools) > 0 {
+		tool := tools[len(tools)-1]
+		tools = tools[:len(tools)-1]
+		switch tool.Type {
+		case "function":
+			continue
+		case "tool_search":
+			if responses && tool.Execution == "client" {
+				input.nativeTools = true
+				continue
+			}
+		case "custom", "namespace":
+			if responses {
+				input.nativeTools = true
+				tools = append(tools, tool.Tools...)
+				continue
+			}
+		}
+		return nil, errors.New("use client-side tools; provider account resources are unavailable")
 	}
 	return &input, nil
 }

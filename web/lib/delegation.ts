@@ -91,6 +91,7 @@ export async function checkDelegationSelection(
   user: Pick<typeof schema.users.$inferSelect, "id" | "name">,
   mode: "consent" | "access"
 ) {
+  const approved: DelegationCatalog = { models: [], mcp: [] }
   if (selection.models.length > 256 || selection.mcp.length > 32) {
     throw new Error("Select at most 256 models and 32 MCP connections.")
   }
@@ -157,6 +158,7 @@ export async function checkDelegationSelection(
           message: "A selected model is no longer available for delegation.",
         })
       }
+      approved.models[selection.models.indexOf(model)] = current
     }
     for (const connection of selection.mcp.filter((item) => item.workspace_id === workspaceId)) {
       const current = catalog.mcp.find((item) => item.id === connection.id)
@@ -175,8 +177,15 @@ export async function checkDelegationSelection(
           message: "A selected MCP capability is no longer available for delegation.",
         })
       }
+      approved.mcp[selection.mcp.indexOf(connection)] = {
+        ...current,
+        tools: connection.tools,
+        prompts: connection.prompts,
+        resources: connection.resources,
+      }
     }
   }
+  return approved
 }
 
 /** delegationTransaction verifies the provider's signed query before loading its server-owned transaction. */
@@ -301,6 +310,7 @@ async function approvedDelegation(clientId: string, userId: string, grantId?: st
 /** agentZOAuthProvider uses native OAuth flows with immutable AgentZ resource grants. */
 export function agentZOAuthProvider(issuer: string) {
   const refreshTokenHash = defineRequestState(() => "")
+  const tokenSelection = defineRequestState<DelegationCatalog | undefined>(() => undefined)
   const inferenceResource = `${issuer}/api/inference/v1`
   const mcpResource = `${issuer}/api/mcp`
   const delegationTokenClaims = async ({
@@ -322,15 +332,25 @@ export function agentZOAuthProvider(issuer: string) {
     ) {
       throw new APIError("BAD_REQUEST", { error: "invalid_grant" })
     }
+    let selection = grant.selection
     if (grant.organizationId) {
       try {
-        await checkDelegationSelection(grant.organizationId, grant.selection, user, "access")
+        selection = await checkDelegationSelection(
+          grant.organizationId,
+          grant.selection,
+          user,
+          "access"
+        )
       } catch (error) {
         if (error instanceof APIError && error.body?.error === "access_denied")
           throw new APIError("BAD_REQUEST", { error: "invalid_grant" })
         throw error
       }
     }
+    await tokenSelection.set({
+      models: scopes.includes("inference:use") ? selection.models : [],
+      mcp: [],
+    })
     return { agentz_grant_id: grant.id }
   }
   const provider = oauthProvider({
@@ -353,7 +373,6 @@ export function agentZOAuthProvider(issuer: string) {
     resourcePrivileges: () => false,
     customTokenResponseFields: async ({ grantType, verificationValue, user, scopes }) => {
       // Opaque OAuth grants without openid do not run either JWT claim hook.
-      if (scopes.includes("openid")) return {}
       if (verificationValue && !verificationValue.resource?.length) {
         await delegationTokenClaims({
           user,
@@ -377,7 +396,8 @@ export function agentZOAuthProvider(issuer: string) {
             scopes,
           })
       }
-      return {}
+      const selection = await tokenSelection.get()
+      return selection ? { agentz_grant: selection } : {}
     },
     clientReference: ({ session }) =>
       z.string().nullish().parse(session?.activeOrganizationId) ?? undefined,

@@ -11,6 +11,7 @@ export type DelegationApiCompatibility = {
 }
 
 export type DelegationModel = {
+  model_info?: InferenceModel
   api_compatibility?: Array<DelegationApiCompatibility>
   id: string
   workspace_id: string

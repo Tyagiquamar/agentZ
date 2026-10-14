@@ -31,6 +31,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { CopyButton } from "@/components/ui/copy-button"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Field,
   FieldContent,
@@ -463,46 +464,93 @@ export function Applications({
                   />
                 </div>
               </Field>
-              <Field>
-                <FieldLabel>Launch Claude</FieldLabel>
-                <div className="flex items-center gap-2 rounded-md border p-3">
-                  <code className="flex-1 text-sm">agentz launch claude</code>
-                  <CopyButton content="agentz launch claude" label="Copy Claude command" />
-                </div>
-                <FieldDescription>
-                  Pass your Claude flags after its name. Requires Claude Code 2.1.299 or later.
-                  AgentZ uses a local relay to reach the public SaaS.
-                </FieldDescription>
-                {!setup.grantTypes?.includes("urn:ietf:params:oauth:grant-type:device_code") ? (
-                  <Alert>
-                    <AlertDescription>
-                      Enable Device authorization in this application&apos;s login methods first.
-                    </AlertDescription>
-                  </Alert>
-                ) : null}
-                <FieldDescription>
-                  Allow openid, profile, email, offline_access, inference:use and mcp:use scopes.
-                  The CLI stores the client ID, never a client secret.
-                </FieldDescription>
-              </Field>
-              <Field>
-                <FieldLabel>Connect MCP tools</FieldLabel>
-                <FieldDescription>
-                  Enable Browser login with PKCE and register http://localhost:8765/callback in this
-                  application. MCP has its own native login and refresh.
-                </FieldDescription>
-                <div className="flex items-start gap-2 rounded-md border bg-muted p-3">
-                  <code className="min-w-0 flex-1 text-sm break-all">{`agentz launch claude mcp add --transport http --scope user --client-id ${setup.clientId} --callback-port 8765 agentz ${window.location.origin}/api/mcp`}</code>
-                  <CopyButton
-                    content={`agentz launch claude mcp add --transport http --scope user --client-id ${setup.clientId} --callback-port 8765 agentz ${window.location.origin}/api/mcp`}
-                    label="Copy MCP command"
-                  />
-                </div>
-                <FieldDescription>
-                  Then run agentz launch claude mcp login agentz. Choose the tools to grant in your
-                  browser. No provider keys are copied to Claude.
-                </FieldDescription>
-              </Field>
+              <Tabs defaultValue="claude">
+                <TabsList>
+                  <TabsTrigger value="claude">Claude</TabsTrigger>
+                  <TabsTrigger value="codex">Codex</TabsTrigger>
+                </TabsList>
+                <TabsContent value="claude" className="space-y-6">
+                  <Field>
+                    <FieldLabel>Launch Claude</FieldLabel>
+                    <div className="flex items-center gap-2 rounded-md border p-3">
+                      <code className="flex-1 text-sm">agentz launch claude</code>
+                      <CopyButton content="agentz launch claude" label="Copy Claude command" />
+                    </div>
+                    <FieldDescription>
+                      Pass your Claude flags after its name. Requires Claude Code 2.1.299 or later.
+                      AgentZ uses a local relay to reach the public SaaS.
+                    </FieldDescription>
+                    {!setup.grantTypes?.includes("urn:ietf:params:oauth:grant-type:device_code") ? (
+                      <Alert>
+                        <AlertDescription>
+                          Enable Device authorization in this application&apos;s login methods
+                          first.
+                        </AlertDescription>
+                      </Alert>
+                    ) : null}
+                    <FieldDescription>
+                      Allow openid, profile, email, offline_access, inference:use and mcp:use
+                      scopes. The CLI stores the client ID, never a client secret.
+                    </FieldDescription>
+                  </Field>
+                  <Field>
+                    <FieldLabel>Connect MCP tools</FieldLabel>
+                    <FieldDescription>
+                      Enable Browser login with PKCE and register http://localhost:8765/callback in
+                      this application. MCP has its own native login and refresh.
+                    </FieldDescription>
+                    <div className="flex items-start gap-2 rounded-md border bg-muted p-3">
+                      <code className="min-w-0 flex-1 text-sm break-all">{`agentz launch claude mcp add --transport http --scope user --client-id ${setup.clientId} --callback-port 8765 agentz ${window.location.origin}/api/mcp`}</code>
+                      <CopyButton
+                        content={`agentz launch claude mcp add --transport http --scope user --client-id ${setup.clientId} --callback-port 8765 agentz ${window.location.origin}/api/mcp`}
+                        label="Copy MCP command"
+                      />
+                    </div>
+                    <FieldDescription>
+                      Then run agentz launch claude mcp login agentz. Choose the tools to grant in
+                      your browser. No provider keys are copied to Claude.
+                    </FieldDescription>
+                  </Field>
+                </TabsContent>
+                <TabsContent value="codex" className="space-y-6">
+                  <Field>
+                    <FieldLabel>Launch Codex</FieldLabel>
+                    <div className="flex items-center gap-2 rounded-md border p-3">
+                      <code className="flex-1 text-sm">agentz launch codex</code>
+                      <CopyButton content="agentz launch codex" label="Copy Codex command" />
+                    </div>
+                    <FieldDescription>
+                      Enable Browser login with PKCE and register http://127.0.0.1:8766/callback.
+                      Requires Codex 0.162.1 or later and an unlocked OS credential store. Codex
+                      stores and refreshes its credentials. Inference goes directly to AgentZ.
+                    </FieldDescription>
+                    <FieldDescription>
+                      Choose a native Responses model during consent. The launcher prepares its
+                      model catalog without receiving provider keys. After disconnecting, run agentz
+                      login codex to grant fresh access.
+                    </FieldDescription>
+                  </Field>
+                  <Field>
+                    <FieldLabel>Connect MCP tools</FieldLabel>
+                    <FieldDescription>
+                      Also register http://127.0.0.1:8767/callback. MCP has separate native login
+                      and refresh. The launcher configures the AgentZ MCP server and its scopes.
+                    </FieldDescription>
+                    <div className="flex items-start gap-2 rounded-md border bg-muted p-3">
+                      <code className="min-w-0 flex-1 text-sm break-all">
+                        agentz launch codex mcp login agentz
+                      </code>
+                      <CopyButton
+                        content="agentz launch codex mcp login agentz"
+                        label="Copy Codex MCP command"
+                      />
+                    </div>
+                    <FieldDescription>
+                      Choose the tools to grant in your browser. Run the same command to reconnect.
+                    </FieldDescription>
+                  </Field>
+                </TabsContent>
+              </Tabs>
             </FieldGroup>
           </SheetContent>
         </Sheet>

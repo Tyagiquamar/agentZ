@@ -76,6 +76,10 @@ type relayError struct {
 	Error relayErrorDetail `json:"error"`
 }
 
+type oauthCatalog struct {
+	Grant *gatewayapi.DelegationCatalog `json:"agentz_grant"`
+}
+
 func (installed *installation) serve(ctx context.Context) error {
 	address, err := url.Parse(installed.address)
 	if err != nil {
@@ -334,7 +338,8 @@ func (installed *installation) forwardOAuth(w http.ResponseWriter, r *http.Reque
 	case "/oauth/revoke":
 		path = "/api/auth/oauth2/revoke"
 	case "/oauth/token":
-		if form.Get("grant_type") != "urn:ietf:params:oauth:grant-type:device_code" && form.Get("grant_type") != "refresh_token" {
+		grant := form.Get("grant_type")
+		if !slices.Contains([]string{"authorization_code", "urn:ietf:params:oauth:grant-type:device_code", "refresh_token"}, grant) {
 			http.Error(w, "Unsupported OAuth grant type.", http.StatusBadRequest)
 			return
 		}
@@ -358,10 +363,36 @@ func (installed *installation) forwardOAuth(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "AgentZ authentication redirected unexpectedly.", http.StatusBadGateway)
 		return
 	}
+	data, err := io.ReadAll(io.LimitReader(response.Body, (1<<20)+1))
+	if err != nil || len(data) > 1<<20 {
+		http.Error(w, "Invalid AgentZ authentication response.", http.StatusBadGateway)
+		return
+	}
+	code := form.Get("grant_type") == "authorization_code"
+	refresh := form.Get("grant_type") == "refresh_token" && form.Get("resource") == installed.upstream.String()+"/api/inference/v1"
+	if response.StatusCode == http.StatusOK && (code || refresh) {
+		var metadata oauthCatalog
+		if err := json.Unmarshal(data, &metadata); err != nil {
+			http.Error(w, "Invalid AgentZ authentication response.", http.StatusBadGateway)
+			return
+		}
+		if metadata.Grant != nil {
+			catalog, err := json.Marshal(metadata.Grant)
+			if err != nil {
+				http.Error(w, "Cannot prepare approved model metadata.", http.StatusInternalServerError)
+				return
+			}
+			err = writeProfileFile(filepath.Join(installed.profile, "codex-catalog.json"), catalog)
+			if err != nil {
+				http.Error(w, "Cannot save approved model metadata.", http.StatusInternalServerError)
+				return
+			}
+		}
+	}
 	w.Header().Set("Content-Type", response.Header.Get("Content-Type"))
 	if retry := response.Header.Get("Retry-After"); retry != "" {
 		w.Header().Set("Retry-After", retry)
 	}
 	w.WriteHeader(response.StatusCode)
-	io.Copy(w, io.LimitReader(response.Body, 1<<20))
+	w.Write(data)
 }

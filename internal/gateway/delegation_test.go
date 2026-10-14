@@ -300,6 +300,34 @@ func TestDelegatedAccessRequiresLiveGrantAndAccessToken(t *testing.T) {
 				if response.Code != http.StatusOK {
 					t.Fatalf("case-insensitive bearer scheme rejected: %d", response.Code)
 				}
+				request.Header.Add("Authorization", "Bearer "+signed)
+				response = httptest.NewRecorder()
+				service.handleDelegatedRequest(response, request)
+				if response.Code != http.StatusUnauthorized {
+					t.Fatalf("duplicate primary credentials admitted: %d", response.Code)
+				}
+				// Native agents can reserve Authorization for their own identity.
+				request.Header.Set("Authorization", "Bearer unrelated-agent-identity")
+				request.Header.Set("X-AgentZ-Authorization", "bearer "+signed)
+				response = httptest.NewRecorder()
+				service.handleDelegatedRequest(response, request)
+				if response.Code != http.StatusOK {
+					t.Fatalf("secondary bearer rejected: %d", response.Code)
+				}
+				request.Header.Set("Authorization", "Bearer "+signed)
+				request.Header.Add("X-AgentZ-Authorization", "Bearer "+signed)
+				response = httptest.NewRecorder()
+				service.handleDelegatedRequest(response, request)
+				if response.Code != http.StatusUnauthorized {
+					t.Fatalf("duplicate secondary credentials admitted: %d", response.Code)
+				}
+				request.Header.Set("X-AgentZ-Authorization", "Basic "+signed)
+				response = httptest.NewRecorder()
+				service.handleDelegatedRequest(response, request)
+				if response.Code != http.StatusUnauthorized {
+					t.Fatalf("malformed secondary credential fell back to primary: %d", response.Code)
+				}
+				request.Header.Del("X-AgentZ-Authorization")
 				request.Header.Set("Authorization", "Bearer "+signed)
 				queries.revoked = true
 				response = httptest.NewRecorder()
@@ -1184,6 +1212,7 @@ func TestDelegatedMCPTransportBoundary(t *testing.T) {
 				strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"ping"}`),
 			)
 			request.Header.Set("Authorization", "Bearer "+signed)
+			request.Header.Set("X-AgentZ-Authorization", "Bearer "+signed)
 			request.Header.Set("Cookie", "private-credential")
 			request.Header.Set("X-Api-Key", "private-credential")
 			request.Header.Set("X-AgentZ-User-ID", "spoofed")
@@ -1204,7 +1233,7 @@ func TestDelegatedMCPTransportBoundary(t *testing.T) {
 			if upstream.request.URL.RawQuery != "" {
 				t.Fatal("app query parameters reached the native gateway")
 			}
-			headers := []string{"Authorization", "Cookie", "X-Api-Key", "X-AgentZ-User-ID"}
+			headers := []string{"Authorization", "X-AgentZ-Authorization", "Cookie", "X-Api-Key", "X-AgentZ-User-ID"}
 			for _, header := range headers {
 				if upstream.request.Header.Get(header) != "" {
 					t.Fatalf("app %s reached the native gateway", header)

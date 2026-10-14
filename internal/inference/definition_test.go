@@ -679,3 +679,53 @@ func TestDelegatedMessagesRejectsProviderResourceBypasses(t *testing.T) {
 		})
 	}
 }
+
+func TestDelegatedResponsesClientTools(t *testing.T) {
+	t.Parallel()
+	body := []byte(
+		`{"model":"selected","store":false,"stream":true,"instructions":"Code","tools":[{"type":"namespace","name":"local","tools":[{"type":"custom","name":"patch"},{"type":"function","name":"read"}]}]}`,
+	)
+	input, err := ValidateDelegatedRequest(body, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := input.ValidateProvider(agentzv1alpha1.InferenceProviderKindOpenAI); err != nil {
+		t.Fatal(err)
+	}
+	if err := input.ValidateProvider(agentzv1alpha1.InferenceProviderKindOpenAICompatible); err == nil {
+		t.Fatal("accepted custom tools for Responses to Chat conversion")
+	}
+	if _, err := ValidateDelegatedRequest(body, false); err == nil {
+		t.Fatal("accepted Responses tools in Chat Completions")
+	}
+
+	search := []byte(
+		`{"model":"selected","store":false,"tools":[{"type":"tool_search","execution":"client"}],"input":[{"type":"tool_search_output","execution":"client","tools":[{"type":"function","name":"read"}]}]}`,
+	)
+	input, err = ValidateDelegatedRequest(search, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := input.ValidateProvider(agentzv1alpha1.InferenceProviderKindOpenAI); err != nil {
+		t.Fatal(err)
+	}
+	for _, forbidden := range []string{
+		`{"model":"selected","store":false,"tools":[{"type":"tool_search"}]}`,
+		`{"model":"selected","store":false,"tools":[{"type":"tool_search","execution":"server"}]}`,
+		`{"model":"selected","store":false,"input":[{"type":"tool_search_output","execution":"client","tools":[{"type":"file_search"}]}]}`,
+	} {
+		if _, err := ValidateDelegatedRequest([]byte(forbidden), true); err == nil {
+			t.Fatal("accepted provider-hosted tool discovery")
+		}
+	}
+	hosted := []byte(`{"model":"selected","store":false,"tools":[{"type":"namespace","name":"local","tools":[{"type":"file_search"}]}]}`)
+	if _, err := ValidateDelegatedRequest(hosted, true); err == nil {
+		t.Fatal("accepted hosted tools hidden inside a namespace")
+	}
+	file := []byte(
+		`{"model":"selected","store":false,"input":[{"type":"custom_tool_call_output","output":[{"type":"input_file","file_id":"private"}]}]}`,
+	)
+	if _, err := ValidateDelegatedRequest(file, true); err == nil {
+		t.Fatal("accepted a stored file in custom tool output")
+	}
+}

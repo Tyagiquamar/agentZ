@@ -5077,6 +5077,8 @@ components:
       additionalProperties: false
       required: [id, workspace_id, namespace, provider, provider_display_name, uid, model, model_display_name]
       properties:
+        model_info:
+          $ref: '#/components/schemas/InferenceModel'
         api_compatibility:
           type: array
           items:

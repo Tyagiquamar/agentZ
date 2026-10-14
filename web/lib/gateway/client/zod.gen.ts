@@ -1637,23 +1637,6 @@ export const zDelegationApiCompatibility = z.object({
   warning: z.string(),
 })
 
-export const zDelegationModel = z.object({
-  api_compatibility: z.array(zDelegationApiCompatibility).optional(),
-  id: z.string().min(1),
-  workspace_id: z.string().min(1),
-  namespace: z.string().min(1),
-  provider: z.string().min(1),
-  provider_display_name: z.string(),
-  uid: z.string().min(1),
-  model: z.string().min(1),
-  model_display_name: z.string(),
-})
-
-export const zDelegationCatalog = z.object({
-  models: z.array(zDelegationModel),
-  mcp: z.array(zDelegationMcp),
-})
-
 export const zInferenceModelModality = z.enum(["text", "audio", "image", "video", "pdf"])
 
 export const zInferenceModelCapabilities = z.object({
@@ -1682,6 +1665,24 @@ export const zInferenceModel = z.object({
   limits: zInferenceModelLimits,
   api: zInferenceModelApi.optional(),
   catalog_provider: z.string().min(1).max(128).optional(),
+})
+
+export const zDelegationModel = z.object({
+  model_info: zInferenceModel.optional(),
+  api_compatibility: z.array(zDelegationApiCompatibility).optional(),
+  id: z.string().min(1),
+  workspace_id: z.string().min(1),
+  namespace: z.string().min(1),
+  provider: z.string().min(1),
+  provider_display_name: z.string(),
+  uid: z.string().min(1),
+  model: z.string().min(1),
+  model_display_name: z.string(),
+})
+
+export const zDelegationCatalog = z.object({
+  models: z.array(zDelegationModel),
+  mcp: z.array(zDelegationMcp),
 })
 
 export const zInferenceProviderHeader = z.object({

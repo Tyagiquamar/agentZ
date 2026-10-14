@@ -73,7 +73,9 @@ export function Consent({
   organizations,
   workspaces,
 }: ConsentProps) {
-  const [inferenceAPI, setInferenceAPI] = useState("Messages")
+  const [inferenceAPI, setInferenceAPI] = useState(
+    request.type === "device_code" ? "Messages" : "Responses"
+  )
   const inference = scopes.includes("inference:use")
   const mcp = scopes.includes("mcp:use")
   const resourceAccess = inference || mcp

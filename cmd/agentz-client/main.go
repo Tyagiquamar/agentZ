@@ -29,8 +29,14 @@ func main() {
 		Flags: []cli.Flag{&cli.StringFlag{Name: "config", Usage: "AgentZ configuration file"}},
 		Commands: []*cli.Command{
 			{
-				Name: "launch", Usage: "Launch Claude with its native flags",
+				Name: "launch", Usage: "Launch Claude or Codex with native flags",
 				SkipFlagParsing: true, Action: launcher.Run,
+			},
+			{
+				Name:            "login",
+				Usage:           "Start a fresh native Codex gateway login",
+				SkipFlagParsing: true,
+				Action:          launcher.Run,
 			},
 			{
 				Name: "relay", Usage: "Manage the local AgentZ relay",
