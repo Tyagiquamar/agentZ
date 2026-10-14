@@ -184,7 +184,10 @@ func traceEventsFromOTLPRequest(req *tracev1.ExportTraceServiceRequest) ([]event
 }
 
 func appOperationFromOTLPSpan(sp *tracepb.Span, resourceAttrs map[string]*commonpb.AnyValue) (observerdb.InsertAppOperationParams, error) {
-	if sp.GetKind() != tracepb.Span_SPAN_KIND_SERVER || len(sp.GetTraceId()) != 16 || len(sp.GetSpanId()) != 8 {
+	invalidSpan := sp.GetKind() != tracepb.Span_SPAN_KIND_SERVER ||
+		len(sp.GetTraceId()) != 16 ||
+		len(sp.GetSpanId()) != 8
+	if invalidSpan {
 		return observerdb.InsertAppOperationParams{}, errors.New("invalid app operation span")
 	}
 	attrs := attrsMap(sp.GetAttributes())
@@ -263,7 +266,10 @@ func appOperationFromOTLPSpan(sp *tracepb.Span, resourceAttrs map[string]*common
 	default:
 		return operation, errors.New("unsupported app resource kind")
 	}
-	if attrs["http.response.status_code"].GetIntValue() >= 400 || operation.ErrorType != "" || operation.ErrorMessage != "" {
+	requestFailed := attrs["http.response.status_code"].GetIntValue() >= 400 ||
+		operation.ErrorType != "" ||
+		operation.ErrorMessage != ""
+	if requestFailed {
 		operation.StatusCode = statusError
 	}
 	operation.SpanAttributes = jsonObject(stored)

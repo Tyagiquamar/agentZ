@@ -268,7 +268,10 @@ func TestEvaluationParallelRuns(t *testing.T) {
 			}
 			// Losing a later run must release its slot even while the first run is active.
 			var finished agentzv1alpha1.WorkflowRun
-			key := client.ObjectKey{Namespace: "test", Name: evaluation.Executions[concurrency-1].RunName}
+			key := client.ObjectKey{
+				Namespace: "test",
+				Name:      evaluation.Executions[concurrency-1].RunName,
+			}
 			if err := k8s.Get(ctx, key, &finished); err != nil {
 				t.Fatal(err)
 			}
@@ -463,8 +466,16 @@ func TestEvaluationVariants(t *testing.T) {
 				targetOverride: upstream.URL,
 			}
 			svc.outboundHTTP = upstream.Client()
-			model := gatewayapi.EvaluationModel{ProviderId: "provider", ModelId: "model", Variant: &tt.model}
-			judge := gatewayapi.EvaluationModel{ProviderId: "provider", ModelId: "model", Variant: &tt.judge}
+			model := gatewayapi.EvaluationModel{
+				ProviderId: "provider",
+				ModelId:    "model",
+				Variant:    &tt.model,
+			}
+			judge := gatewayapi.EvaluationModel{
+				ProviderId: "provider",
+				ModelId:    "model",
+				Variant:    &tt.judge,
+			}
 			fields, err := svc.validateEvaluationModels(
 				t.Context(), testWorkspaceNS, agent.Name,
 				[]gatewayapi.EvaluationModel{model, model}, judge,

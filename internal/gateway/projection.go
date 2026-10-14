@@ -33,7 +33,10 @@ func (s *Service) delegationReady(ctx context.Context, grant gatewaydb.Delegatio
 	conditionsReady := func(conditions []metav1.Condition, generation int64, names ...string) bool {
 		for _, name := range names {
 			condition := meta.FindStatusCondition(conditions, name)
-			if condition == nil || condition.Status != metav1.ConditionTrue || condition.ObservedGeneration != generation {
+			unreadyCondition := condition == nil ||
+				condition.Status != metav1.ConditionTrue ||
+				condition.ObservedGeneration != generation
+			if unreadyCondition {
 				return false
 			}
 		}
@@ -51,7 +54,9 @@ func (s *Service) delegationReady(ctx context.Context, grant gatewaydb.Delegatio
 	}
 	ready := false
 	for _, parent := range route.Status.Parents {
-		if parent.ParentRef.Name != gwv1.ObjectName(gateway) || parent.ControllerName != "agentgateway.dev/agentgateway" {
+		foreignParent := parent.ParentRef.Name != gwv1.ObjectName(gateway) ||
+			parent.ControllerName != "agentgateway.dev/agentgateway"
+		if foreignParent {
 			continue
 		}
 		ready = ready || conditionsReady(parent.Conditions, route.Generation,
@@ -65,7 +70,9 @@ func (s *Service) delegationReady(ctx context.Context, grant gatewaydb.Delegatio
 		return err
 	}
 	currentSelection := backend.Annotations["agentz.accuknox.com/selection"] == selection
-	if !currentSelection || !conditionsReady(backend.Status.Conditions, backend.Generation, "Accepted") {
+	unreadyBackend := !currentSelection ||
+		!conditionsReady(backend.Status.Conditions, backend.Generation, "Accepted")
+	if unreadyBackend {
 		return errors.New("backend is not accepted")
 	}
 	tracingPolicy := gateway + "-delegation-tracing"
@@ -202,7 +209,10 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 			})
 		}
 		backend := &agw.AgentgatewayBackend{
-			TypeMeta:   metav1.TypeMeta{APIVersion: agw.GroupVersion.String(), Kind: "AgentgatewayBackend"},
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: agw.GroupVersion.String(),
+				Kind:       "AgentgatewayBackend",
+			},
 			ObjectMeta: metav1.ObjectMeta{Namespace: selected.Namespace, Name: name},
 			Spec: agw.AgentgatewayBackendSpec{
 				AI: &agw.AIBackend{LLM: &target.LLM},
@@ -228,7 +238,10 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 		// Keep the owner route intact through the shared private ingress. Only the
 		// owner gateway rewrites it to the provider's API and injects credentials.
 		forward := &agw.AgentgatewayBackend{
-			TypeMeta:   metav1.TypeMeta{APIVersion: agw.GroupVersion.String(), Kind: "AgentgatewayBackend"},
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: agw.GroupVersion.String(),
+				Kind:       "AgentgatewayBackend",
+			},
 			ObjectMeta: metav1.ObjectMeta{Namespace: s.cfg.DelegationNamespace, Name: name},
 			Spec: agw.AgentgatewayBackendSpec{
 				Static: &agw.StaticBackend{
@@ -252,7 +265,10 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 	if len(selection.Mcp) > 0 {
 		name := "d-" + grant.ID + "-mcp"
 		outer := &agw.AgentgatewayBackend{
-			TypeMeta:   metav1.TypeMeta{APIVersion: agw.GroupVersion.String(), Kind: "AgentgatewayBackend"},
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: agw.GroupVersion.String(),
+				Kind:       "AgentgatewayBackend",
+			},
 			ObjectMeta: metav1.ObjectMeta{Namespace: s.cfg.DelegationNamespace, Name: name},
 			Spec: agw.AgentgatewayBackendSpec{MCP: &agw.MCPBackend{
 				PrefixMode:     agw.PrefixAlways,
@@ -290,7 +306,10 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 				return err
 			}
 			inner := &agw.AgentgatewayBackend{
-				TypeMeta:   metav1.TypeMeta{APIVersion: agw.GroupVersion.String(), Kind: "AgentgatewayBackend"},
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: agw.GroupVersion.String(),
+					Kind:       "AgentgatewayBackend",
+				},
 				ObjectMeta: metav1.ObjectMeta{Namespace: selected.Namespace, Name: innerName},
 				Spec: agw.AgentgatewayBackendSpec{
 					MCP: &agw.MCPBackend{
@@ -315,7 +334,10 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 				},
 			}
 			policy := &agw.AgentgatewayPolicy{
-				TypeMeta:   metav1.TypeMeta{APIVersion: agw.GroupVersion.String(), Kind: "AgentgatewayPolicy"},
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: agw.GroupVersion.String(),
+					Kind:       "AgentgatewayPolicy",
+				},
 				ObjectMeta: metav1.ObjectMeta{Namespace: selected.Namespace, Name: innerName + "-auth"},
 				Spec: agw.AgentgatewayPolicySpec{
 					TargetRefs: []agw.LocalPolicyTargetReferenceWithSectionName{{
@@ -547,7 +569,10 @@ func delegationTelemetry(grant gatewaydb.DelegationGrant, appName string, route 
 	}
 	data, _ := json.Marshal(identity)
 	return &agw.AgentgatewayPolicy{
-		TypeMeta:   metav1.TypeMeta{APIVersion: agw.GroupVersion.String(), Kind: "AgentgatewayPolicy"},
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: agw.GroupVersion.String(),
+			Kind:       "AgentgatewayPolicy",
+		},
 		ObjectMeta: metav1.ObjectMeta{Namespace: route.Namespace, Name: route.Name + "-telemetry"},
 		Spec: agw.AgentgatewayPolicySpec{
 			TargetRefs: []agw.LocalPolicyTargetReferenceWithSectionName{{

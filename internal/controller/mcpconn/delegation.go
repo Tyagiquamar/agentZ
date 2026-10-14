@@ -109,7 +109,10 @@ func (r *ExtAuthRuntimeReconciler) reconcileDelegationRuntime(ctx context.Contex
 				continue
 			}
 			parameters := &agw.AgentgatewayParameters{}
-			key := client.ObjectKey{Namespace: ns, Name: desired.Spec.Infrastructure.ParametersRef.Name}
+			key := client.ObjectKey{
+				Namespace: ns,
+				Name:      desired.Spec.Infrastructure.ParametersRef.Name,
+			}
 			err := r.Get(ctx, key, parameters)
 			if err != nil && !apierrors.IsNotFound(err) {
 				return err
@@ -256,7 +259,10 @@ func (r *ExtAuthRuntimeReconciler) reconcileDelegationTracing(ctx context.Contex
 		}
 	}
 	attrs := []agw.AttributeAdd{}
-	for _, field := range []string{"client_id", "app_name", "grant_id", "user_id", "organization_id", "workspace_id", "resource_kind", "resource_namespace", "resource_name", "resource_uid", "target_id"} {
+	for _, field := range []string{
+		"client_id", "app_name", "grant_id", "user_id", "organization_id", "workspace_id",
+		"resource_kind", "resource_namespace", "resource_name", "resource_uid", "target_id",
+	} {
 		attrs = append(attrs, agw.AttributeAdd{
 			Name:       "agentz." + field,
 			Expression: agw.CELExpression("metadata.agentz_observability." + field),

@@ -1299,7 +1299,10 @@ func (s *Service) importImmutableSkills(ctx context.Context, bundle skill.Bundle
 				"malformed_skill_metadata",
 				"The skill could not be imported.",
 				err,
-				gatewayapi.FieldError{Field: "file:" + tree.Name + "/SKILL.md", Message: err.Error()},
+				gatewayapi.FieldError{
+					Field:   "file:" + tree.Name + "/SKILL.md",
+					Message: err.Error(),
+				},
 			)
 		}
 		current := &agentzv1alpha1.Skill{}
@@ -1318,7 +1321,10 @@ func (s *Service) importImmutableSkills(ctx context.Context, bundle skill.Bundle
 				errBadRequest,
 			)
 		}
-		if action == skill.DecisionOverwrite && !canModify && current.Spec.CreatedByUserID != access.claims.UserID {
+		overwriteDenied := action == skill.DecisionOverwrite &&
+			!canModify &&
+			current.Spec.CreatedByUserID != access.claims.UserID
+		if overwriteDenied {
 			eventTrailAccess := access
 			eventTrailAccess.operation = authorization.OperationUpdateSkill
 			err := s.createSkillEventTrail(ctx, eventTrailAccess, tree.Name, gatewaydb.EventTrailResultDenied)

@@ -286,7 +286,10 @@ func TestDelegationRequiresWorkspaceAuthority(t *testing.T) {
 	for _, resource := range resources {
 		t.Run(string(resource), func(t *testing.T) {
 			t.Parallel()
-			scope := authorization.Scope{OrganizationID: "organization-a", WorkspaceID: "workspace-a"}
+			scope := authorization.Scope{
+				OrganizationID: "organization-a",
+				WorkspaceID:    "workspace-a",
+			}
 			foreignWorkspace := authorization.Scope{
 				OrganizationID: "organization-a",
 				WorkspaceID:    "workspace-b",

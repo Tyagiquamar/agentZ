@@ -49,7 +49,11 @@ type delegationQueries struct {
 }
 
 func (q *delegationQueries) GatewayGetDelegationGrant(_ context.Context, arg gatewaydb.GatewayGetDelegationGrantParams) (gatewaydb.DelegationGrant, error) {
-	if q.revoked || arg.ID != q.grant.ID || arg.ClientID != q.grant.ClientID || arg.UserID != q.grant.UserID {
+	invalidGrant := q.revoked ||
+		arg.ID != q.grant.ID ||
+		arg.ClientID != q.grant.ClientID ||
+		arg.UserID != q.grant.UserID
+	if invalidGrant {
 		return gatewaydb.DelegationGrant{}, pgx.ErrNoRows
 	}
 	if arg.Origin != "" && arg.Origin != "https://app.example" {
@@ -451,7 +455,10 @@ func TestDelegationReadinessRequiresCurrentAcceptedProjection(t *testing.T) {
 		}
 	}
 	service.cfg.DelegationNamespace = "private"
-	grant := gatewaydb.DelegationGrant{ID: "grant-1", Selection: []byte(`{"models":[],"mcp":[]}`)}
+	grant := gatewaydb.DelegationGrant{
+		ID:        "grant-1",
+		Selection: []byte(`{"models":[],"mcp":[]}`),
+	}
 	hash := sha256.Sum256(grant.Selection)
 	metadata := metav1.ObjectMeta{
 		Name:        "d-grant-1-model-0",
@@ -621,7 +628,11 @@ func TestDelegatedInferenceUsesPrivateGateway(t *testing.T) {
 		}
 		if ns != "private" {
 			objects = append(objects, &agw.AgentgatewayPolicy{
-				ObjectMeta: metav1.ObjectMeta{Name: gateway + "-delegation-tracing", Namespace: ns, Generation: 1},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       gateway + "-delegation-tracing",
+					Namespace:  ns,
+					Generation: 1,
+				},
 				Status: gwv1.PolicyStatus{Ancestors: []gwv1.PolicyAncestorStatus{{
 					AncestorRef:    gwv1.ParentReference{Name: gwv1.ObjectName(gateway)},
 					ControllerName: "agentgateway.dev/agentgateway", Conditions: conditions,
@@ -671,7 +682,9 @@ func TestDelegatedInferenceUsesPrivateGateway(t *testing.T) {
 			t.Errorf("upstream CORS header %s: got %q, want %q", header, got, want)
 		}
 	}
-	if upstream.request.URL.Host != "private.example:8080" || upstream.request.URL.Path != "/delegations/grant-1/models/0/chat/completions" {
+	unexpectedTarget := upstream.request.URL.Host != "private.example:8080" ||
+		upstream.request.URL.Path != "/delegations/grant-1/models/0/chat/completions"
+	if unexpectedTarget {
 		t.Fatalf("inference bypassed the configured private gateway: %s", upstream.request.URL)
 	}
 	route := &gwv1.HTTPRoute{ObjectMeta: metav1.ObjectMeta{
@@ -836,7 +849,9 @@ func TestDelegationCORSMethodsHeadersAndMissingOrigins(t *testing.T) {
 	request.Header.Set("Origin", "https://app.example")
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
-	if response.Code != http.StatusServiceUnavailable || response.Header().Get("Access-Control-Allow-Origin") != "" {
+	unexpectedResponse := response.Code != http.StatusServiceUnavailable ||
+		response.Header().Get("Access-Control-Allow-Origin") != ""
+	if unexpectedResponse {
 		t.Fatal("unavailable origin registry did not fail closed")
 	}
 }

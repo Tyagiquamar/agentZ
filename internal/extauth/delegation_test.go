@@ -41,7 +41,12 @@ func TestDelegationCredentialsRequireProjectedResourceRevision(t *testing.T) {
 	if err := agentzv1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
 	}
-	metadata := metav1.ObjectMeta{Name: "selected", Namespace: "owner", UID: "original", Generation: 2}
+	metadata := metav1.ObjectMeta{
+		Name:       "selected",
+		Namespace:  "owner",
+		UID:        "original",
+		Generation: 2,
+	}
 	provider := &agentzv1alpha1.InferenceProvider{
 		ObjectMeta: metadata,
 		Spec:       agentzv1alpha1.InferenceProviderSpec{Kind: agentzv1alpha1.InferenceProviderKindOpenAI},
@@ -97,7 +102,9 @@ func TestDelegationCredentialsRequireProjectedResourceRevision(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					if ordinary.GetStatus().GetCode() != int32(codes.PermissionDenied) || ordinary.GetOkResponse() != nil {
+					unexpectedResponse := ordinary.GetStatus().GetCode() != int32(codes.PermissionDenied) ||
+						ordinary.GetOkResponse() != nil
+					if unexpectedResponse {
 						t.Fatal("ordinary authorization listener admitted delegated credential access")
 					}
 
@@ -147,7 +154,11 @@ func TestOAuthRefreshKeepsConcurrentConnectionCredentialsSeparate(t *testing.T) 
 			if secrets[path] == nil {
 				record := mcp.OAuthSecretRecord{Record: oauth.Record{
 					ClientID: path,
-					Token:    &oauth2.Token{AccessToken: "expired", RefreshToken: path, Expiry: time.Unix(1, 0)},
+					Token: &oauth2.Token{
+						AccessToken:  "expired",
+						RefreshToken: path,
+						Expiry:       time.Unix(1, 0),
+					},
 				}}
 				data, err := json.Marshal(record)
 				if err != nil {
@@ -325,12 +336,18 @@ func TestMCPProbeDiscoversBoundedPaginatedCatalog(t *testing.T) {
 				}
 				return
 			}
-			if len(outcome.tools) != test.count || len(outcome.prompts) != test.count || len(outcome.resources) != test.count {
+			incompleteCatalog := len(outcome.tools) != test.count ||
+				len(outcome.prompts) != test.count ||
+				len(outcome.resources) != test.count
+			if incompleteCatalog {
 				t.Fatalf("incomplete catalog: tools=%d prompts=%d resources=%d", len(outcome.tools), len(outcome.prompts), len(outcome.resources))
 			}
 			for i := range test.count {
 				name := fmt.Sprintf("item-%04d", i)
-				if outcome.tools[i].Name != name || outcome.prompts[i] != name || outcome.resources[i] != "test:///"+name {
+				changedIdentifiers := outcome.tools[i].Name != name ||
+					outcome.prompts[i] != name ||
+					outcome.resources[i] != "test:///"+name
+				if changedIdentifiers {
 					t.Fatalf("catalog identifiers changed: tool=%q prompt=%q resource=%q", outcome.tools[i].Name, outcome.prompts[i], outcome.resources[i])
 				}
 			}

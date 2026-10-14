@@ -96,7 +96,8 @@ func (s *Service) GetDelegationCatalog(w http.ResponseWriter, r *http.Request, p
 		return
 	}
 	catalog, err := s.delegationCatalog(
-		r.Context(), auth.claims.UserID, auth.claims.OrganizationID, auth.claims.WorkspaceID, params.IncludeUnavailable != nil && *params.IncludeUnavailable,
+		r.Context(), auth.claims.UserID, auth.claims.OrganizationID, auth.claims.WorkspaceID,
+		params.IncludeUnavailable != nil && *params.IncludeUnavailable,
 	)
 	if err != nil {
 		apiutil.WriteInternalError(w, r, err)
@@ -183,7 +184,10 @@ func (s *Service) delegationCatalog(ctx context.Context, userID, organizationID,
 			probe := meta.FindStatusCondition(connection.Status.Conditions, mcp.ConditionProbeHealthy)
 			currentCatalog := probe != nil && probe.ObservedGeneration == connection.Generation
 			unavailable := !includeUnavailable && (!connection.Status.ToolCatalogReady || !currentCatalog)
-			if !connection.DeletionTimestamp.IsZero() || connection.Spec.Endpoint.InsecureSkipVerify || unavailable {
+			unusableConnection := !connection.DeletionTimestamp.IsZero() ||
+				connection.Spec.Endpoint.InsecureSkipVerify ||
+				unavailable
+			if unusableConnection {
 				continue
 			}
 			target, err := mcp.ParseTarget(&connection)

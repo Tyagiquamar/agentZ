@@ -306,7 +306,11 @@ func newCodingRepository(ctx context.Context, repository, token string) (*coding
 	if err != nil {
 		return nil, err
 	}
-	repo := &codingRepository{dir: dir, url: "https://github.com/" + repository + ".git", token: token}
+	repo := &codingRepository{
+		dir:   dir,
+		url:   "https://github.com/" + repository + ".git",
+		token: token,
+	}
 	if _, err := repo.run(ctx, false, "init", "--bare", "."); err != nil {
 		os.RemoveAll(dir)
 		return nil, err

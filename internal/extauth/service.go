@@ -873,7 +873,10 @@ func (s *delegationServer) Check(ctx context.Context, request *authv3.CheckReque
 	if operation == "inference" {
 		path := httpRequest.GetPath()
 		responses := strings.HasSuffix(path, "/responses")
-		if httpRequest.GetMethod() != "POST" || (!responses && !strings.HasSuffix(path, "/chat/completions")) {
+		unsupportedEndpoint := httpRequest.GetMethod() != "POST" ||
+			(!responses &&
+				!strings.HasSuffix(path, "/chat/completions"))
+		if unsupportedEndpoint {
 			return denyDecision(
 				codes.PermissionDenied, typev3.StatusCode_Forbidden,
 				"inference endpoint is not delegated", "delegation_endpoint", slog.LevelWarn,

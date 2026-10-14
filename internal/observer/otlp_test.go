@@ -53,7 +53,9 @@ func TestAppOperationContentAndUsage(t *testing.T) {
 	if len(op.InputMessages) < 1<<20 || !bytes.Contains(op.OutputMessages, []byte("9007199254740993")) {
 		t.Fatal("full input or tool call output lost")
 	}
-	if bytes.Contains(op.SpanAttributes, []byte(attrLLMInputMessages)) || bytes.Contains(op.SpanAttributes, []byte(attrLLMOutputMessages)) {
+	duplicatedPayload := bytes.Contains(op.SpanAttributes, []byte(attrLLMInputMessages)) ||
+		bytes.Contains(op.SpanAttributes, []byte(attrLLMOutputMessages))
+	if duplicatedPayload {
 		t.Fatal("payload duplicated in metadata")
 	}
 	span.Kind = tracepb.Span_SPAN_KIND_CLIENT
