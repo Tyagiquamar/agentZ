@@ -1,0 +1,8 @@
+{
+  "client_version": "2.1.299",
+  "gateway": "http://localhost:3000/claude",
+  "model": "claude-haiku-4-5-20251001",
+  "result": "AgentZ MCP: CLAUDE_MCP_NATIVE_OK",
+  "num_turns": 3,
+  "is_error": false
+}

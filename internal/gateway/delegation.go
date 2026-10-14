@@ -563,13 +563,25 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 	if !mcpRequest {
 		responses := strings.HasSuffix(r.URL.Path, "/responses")
 		input, err := inference.ValidateDelegatedRequest(body, responses)
+		if strings.HasSuffix(r.URL.Path, "/messages") || strings.HasSuffix(r.URL.Path, "/messages/count_tokens") {
+			input, err = inference.ValidateDelegatedMessages(body, strings.HasSuffix(r.URL.Path, "/count_tokens"))
+		}
 		if err != nil {
 			s.delegationError(w, r, http.StatusBadRequest, "invalid_request_error", err.Error())
 			return
 		}
-		index := slices.IndexFunc(selection.Models, func(selected gatewayapi.DelegationModel) bool {
-			return selected.Id == input.Model
-		})
+		messages := strings.HasSuffix(r.URL.Path, "/messages") || strings.HasSuffix(r.URL.Path, "/messages/count_tokens")
+		index := -1
+		for candidate, selected := range selection.Models {
+			if selected.Id != input.Model && (!messages || selected.Model != input.Model) {
+				continue
+			}
+			if index >= 0 {
+				s.delegationError(w, r, http.StatusBadRequest, "invalid_request_error", "Use the full AgentZ model ID when multiple selected providers offer this model.")
+				return
+			}
+			index = candidate
+		}
 		if index < 0 {
 			s.delegationError(
 				w,
@@ -932,7 +944,7 @@ func (s *Service) delegationCORS(next http.Handler) http.Handler {
 				methods = []string{http.MethodGet, http.MethodPost, http.MethodDelete}
 			case "/api/inference/v1/models":
 				methods = []string{http.MethodGet}
-			case "/api/inference/v1/chat/completions", "/api/inference/v1/responses":
+			case "/api/inference/v1/chat/completions", "/api/inference/v1/responses", "/api/inference/v1/messages", "/api/inference/v1/messages/count_tokens":
 			default:
 				methods = nil
 			}

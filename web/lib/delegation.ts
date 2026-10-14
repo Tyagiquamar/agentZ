@@ -7,6 +7,7 @@ import {
   getOAuthProviderState,
   getOAuthProviderApi,
   oauthProvider,
+  DEVICE_CODE_GRANT_TYPE,
   verifyOAuthQueryParams,
   type OAuthClaimExtensionInput,
   type OAuthAuthorizationQuery,
@@ -247,10 +248,11 @@ async function approvedDelegation(clientId: string, userId: string, grantId?: st
 }
 
 /** agentZOAuthProvider uses native OAuth flows with immutable AgentZ resource grants. */
-export function agentZOAuthProvider(issuer: string) {
+export function agentZOAuthProvider(issuer: string, enableDeviceGrant = false) {
   const refreshTokenHash = defineRequestState(() => "")
   const inferenceResource = `${issuer}/api/inference/v1`
   const mcpResource = `${issuer}/api/mcp`
+  const accessTokenTtl = enableDeviceGrant ? 600 : 300
   const delegationTokenClaims = async ({
     user,
     client,
@@ -285,15 +287,20 @@ export function agentZOAuthProvider(issuer: string) {
     loginPage: "/signin",
     consentPage: "/oauth/authorize",
     scopes: delegationScopes,
-    grantTypes: ["authorization_code", "refresh_token"],
-    accessTokenExpiresIn: 300,
+    grantTypes: [
+      "authorization_code",
+      "refresh_token",
+      ...(enableDeviceGrant ? [DEVICE_CODE_GRANT_TYPE] : []),
+    ],
+    accessTokenExpiresIn: accessTokenTtl,
     refreshTokenExpiresIn: 30 * 24 * 60 * 60,
+    refreshTokenReuseInterval: enableDeviceGrant ? 10 : 0,
     allowDynamicClientRegistration: false,
     allowPublicWebHttpLoopbackRedirects: process.env.NODE_ENV === "development",
     clientRegistrationAllowedScopes: delegationScopes,
     resources: [
-      { identifier: inferenceResource, allowedScopes: delegationScopes, accessTokenTtl: 300 },
-      { identifier: mcpResource, allowedScopes: delegationScopes, accessTokenTtl: 300 },
+      { identifier: inferenceResource, allowedScopes: delegationScopes, accessTokenTtl },
+      { identifier: mcpResource, allowedScopes: delegationScopes, accessTokenTtl },
     ],
     resourceSeedMode: "overwrite",
     clientRegistrationDefaultResources: [inferenceResource, mcpResource],

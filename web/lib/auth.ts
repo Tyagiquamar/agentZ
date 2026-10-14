@@ -41,6 +41,7 @@ import {
 import { minPasswordLength } from "@/lib/password-policy"
 import { signInReturnTo } from "@/lib/sign-in-redirect"
 import { agentZOAuthProvider } from "@/lib/delegation"
+import { claudeDeviceAuthorization } from "@/lib/claude-device"
 
 // Better Auth uses these internal cookie names for 2FA challenge state and
 // trusted-device bypass. The plugin does not export them publicly, so the
@@ -539,7 +540,8 @@ function buildAuthOptions() {
           },
         }),
       } satisfies BetterAuthPlugin,
-      agentZOAuthProvider(env.BETTER_AUTH_URL),
+      agentZOAuthProvider(env.BETTER_AUTH_URL, env.ENABLE_CLAUDE_GATEWAY_POC),
+      claudeDeviceAuthorization(),
       organization({
         ac: organizationAccessControl,
         allowUserToCreateOrganization: false,

@@ -11,6 +11,23 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core"
 
+export const deviceCodes = pgTable("device_codes", {
+  id: text("id").primaryKey(),
+  deviceCode: text("device_code").notNull().unique(),
+  userCode: text("user_code").notNull().unique(),
+  userId: text("user_id"),
+  expiresAt: timestamp("expires_at").notNull(),
+  status: text("status").notNull(),
+  lastPolledAt: timestamp("last_polled_at"),
+  pollingInterval: integer("polling_interval"),
+  clientId: text("client_id"),
+  scope: text("scope"),
+  resources: text("resources").array(),
+  oauthClientId: text("oauth_client_id"),
+  referenceId: text("reference_id"),
+  sessionId: text("session_id"),
+})
+
 export const users = pgTable("users", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),

@@ -209,6 +209,7 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 				},
 			},
 		}
+		backend.Spec.Policies.ExtAuth.GRPC.ContextExtensions["agentz.model"] = selected.Model
 		route := delegationRoute(
 			selected.Namespace,
 			inference.GatewayName,

@@ -1,0 +1,81 @@
+{
+  "tested_at": "2026-10-14T07:45:13.977Z",
+  "results": [
+    {
+      "name": "native request without client ID",
+      "status": 200
+    },
+    {
+      "name": "verification discloses no unauthenticated scope",
+      "status": 200
+    },
+    {
+      "name": "unauthenticated approval",
+      "status": 401
+    },
+    {
+      "name": "unauthenticated denial",
+      "status": 401
+    },
+    {
+      "name": "pending authorization",
+      "status": 400
+    },
+    {
+      "name": "polling too quickly",
+      "status": 400
+    },
+    {
+      "name": "expired device code",
+      "status": 400
+    },
+    {
+      "name": "unknown device code",
+      "status": 400
+    },
+    {
+      "name": "missing device code",
+      "status": 400
+    },
+    {
+      "name": "unknown public client",
+      "status": 400
+    },
+    {
+      "name": "device endpoint wrong method",
+      "status": 405
+    },
+    {
+      "name": "token endpoint wrong method",
+      "status": 405
+    },
+    {
+      "name": "oversized authorization input",
+      "status": 413
+    },
+    {
+      "name": "disabled device client",
+      "status": 400
+    },
+    {
+      "name": "fresh device for denial",
+      "status": 200
+    },
+    {
+      "name": "signed-in verification",
+      "status": 200
+    },
+    {
+      "name": "signed-in denial",
+      "status": 200
+    },
+    {
+      "name": "denied device cannot obtain token",
+      "status": 400
+    },
+    {
+      "name": "throttling maps to RFC slow_down",
+      "status": 429
+    }
+  ]
+}

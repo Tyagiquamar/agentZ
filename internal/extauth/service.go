@@ -867,7 +867,8 @@ func (s *delegationServer) Check(ctx context.Context, request *authv3.CheckReque
 	if operation == "inference" {
 		path := httpRequest.GetPath()
 		responses := strings.HasSuffix(path, "/responses")
-		if httpRequest.GetMethod() != "POST" || (!responses && !strings.HasSuffix(path, "/chat/completions")) {
+		messages := strings.HasSuffix(path, "/messages") || strings.HasSuffix(path, "/messages/count_tokens")
+		if httpRequest.GetMethod() != "POST" || (!responses && !messages && !strings.HasSuffix(path, "/chat/completions")) {
 			return denyDecision(codes.PermissionDenied, typev3.StatusCode_Forbidden, "inference endpoint is not delegated", "delegation_endpoint", slog.LevelWarn).response, nil
 		}
 		body := httpRequest.GetRawBody()
@@ -875,7 +876,10 @@ func (s *delegationServer) Check(ctx context.Context, request *authv3.CheckReque
 			body = []byte(httpRequest.GetBody())
 		}
 		input, err := inference.ValidateDelegatedRequest(body, responses)
-		if err != nil || input.Model != extensions["agentz.target"] {
+		if messages {
+			input, err = inference.ValidateDelegatedMessages(body, strings.HasSuffix(path, "/count_tokens"))
+		}
+		if err != nil || input.Model != extensions["agentz.target"] && (!messages || input.Model != extensions["agentz.model"]) {
 			return denyDecision(codes.PermissionDenied, typev3.StatusCode_Forbidden, "invalid delegated inference request", "delegation_body", slog.LevelWarn).response, nil
 		}
 	}

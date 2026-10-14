@@ -15,6 +15,7 @@ import (
 // DelegatedRequest contains validated inference input for a delegated model.
 type DelegatedRequest struct {
 	responses          bool
+	endpoint           string
 	Model              string               `json:"model"`
 	Instructions       string               `json:"instructions"`
 	Stream             bool                 `json:"stream"`
@@ -37,8 +38,9 @@ func DelegatedProviderEndpoints(kind agentzv1alpha1.InferenceProviderKind) []str
 	case agentzv1alpha1.InferenceProviderKindOpenAICodex:
 		return []string{"/responses"}
 	case agentzv1alpha1.InferenceProviderKindAnthropic,
-		agentzv1alpha1.InferenceProviderKindAnthropicCompatible,
-		agentzv1alpha1.InferenceProviderKindGemini,
+		agentzv1alpha1.InferenceProviderKindAnthropicCompatible:
+		return []string{"/chat/completions", "/messages", "/messages/count_tokens"}
+	case agentzv1alpha1.InferenceProviderKindGemini,
 		agentzv1alpha1.InferenceProviderKindVertexAI:
 		return []string{"/chat/completions"}
 	case agentzv1alpha1.InferenceProviderKindOpenAI,
@@ -57,6 +59,9 @@ func (input *DelegatedRequest) ValidateProvider(kind agentzv1alpha1.InferencePro
 	endpoint := "/chat/completions"
 	if input.responses {
 		endpoint = "/responses"
+	}
+	if input.endpoint != "" {
+		endpoint = input.endpoint
 	}
 	endpoints := DelegatedProviderEndpoints(kind)
 	if len(endpoints) == 0 {

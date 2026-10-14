@@ -1,0 +1,200 @@
+{
+  "tested_at": "2026-10-14T07:31:35.571Z",
+  "results": [
+    {
+      "name": "unauthenticated discovery",
+      "status": 200,
+      "duration_ms": 169
+    },
+    {
+      "name": "missing bearer",
+      "status": 401,
+      "duration_ms": 28
+    },
+    {
+      "name": "malformed bearer",
+      "status": 401,
+      "duration_ms": 25
+    },
+    {
+      "name": "modified signature",
+      "status": 401,
+      "duration_ms": 34
+    },
+    {
+      "name": "expired bearer",
+      "status": 401,
+      "duration_ms": 31
+    },
+    {
+      "name": "wrong issuer",
+      "status": 401,
+      "duration_ms": 19
+    },
+    {
+      "name": "wrong audience",
+      "status": 401,
+      "duration_ms": 14
+    },
+    {
+      "name": "missing inference scope",
+      "status": 403,
+      "duration_ms": 11
+    },
+    {
+      "name": "authorized model discovery",
+      "status": 200,
+      "duration_ms": 32
+    },
+    {
+      "name": "managed policy fallback",
+      "status": 404,
+      "duration_ms": 36
+    },
+    {
+      "name": "unauthenticated telemetry",
+      "status": 401,
+      "duration_ms": 25
+    },
+    {
+      "name": "authenticated telemetry",
+      "status": 200,
+      "duration_ms": 38
+    },
+    {
+      "name": "unknown route",
+      "status": 404,
+      "duration_ms": 27
+    },
+    {
+      "name": "wrong Messages method",
+      "status": 405,
+      "duration_ms": 24
+    },
+    {
+      "name": "malformed Messages JSON",
+      "status": 400,
+      "duration_ms": 28
+    },
+    {
+      "name": "duplicate model",
+      "status": 400,
+      "duration_ms": 16
+    },
+    {
+      "name": "unselected model",
+      "status": 400,
+      "duration_ms": 15
+    },
+    {
+      "name": "hosted MCP denied",
+      "status": 400,
+      "duration_ms": 43
+    },
+    {
+      "name": "provider file denied",
+      "status": 400,
+      "duration_ms": 40
+    },
+    {
+      "name": "hosted search denied",
+      "status": 400,
+      "duration_ms": 27
+    },
+    {
+      "name": "real Anthropic token count",
+      "status": 200,
+      "duration_ms": 499
+    },
+    {
+      "name": "real non-streaming inference",
+      "status": 200,
+      "duration_ms": 738
+    },
+    {
+      "name": "real streaming inference",
+      "status": 200,
+      "duration_ms": 767
+    },
+    {
+      "name": "disabled application",
+      "status": 401,
+      "duration_ms": 118
+    },
+    {
+      "name": "disabled application restored",
+      "status": 200,
+      "duration_ms": 115
+    },
+    {
+      "name": "organization delegation disabled",
+      "status": 401,
+      "duration_ms": 75
+    },
+    {
+      "name": "organization delegation disabled restored",
+      "status": 200,
+      "duration_ms": 50
+    },
+    {
+      "name": "disabled member",
+      "status": 401,
+      "duration_ms": 32
+    },
+    {
+      "name": "disabled member restored",
+      "status": 200,
+      "duration_ms": 73
+    },
+    {
+      "name": "revoked grant",
+      "status": 401,
+      "duration_ms": 28
+    },
+    {
+      "name": "revoked grant restored",
+      "status": 200,
+      "duration_ms": 30
+    },
+    {
+      "name": "refresh rotation",
+      "status": 200,
+      "duration_ms": 256
+    },
+    {
+      "name": "refreshed bearer accepted",
+      "status": 200,
+      "duration_ms": 25
+    },
+    {
+      "name": "unknown refresh",
+      "status": 401,
+      "duration_ms": 27
+    },
+    {
+      "name": "unsupported grant",
+      "status": 400,
+      "duration_ms": 31
+    },
+    {
+      "name": "unknown revocation is idempotent",
+      "status": 200,
+      "duration_ms": 62
+    },
+    {
+      "name": "logout revokes access grant",
+      "status": 200,
+      "duration_ms": 39
+    },
+    {
+      "name": "revoked JWT immediately denied",
+      "status": 401,
+      "duration_ms": 25
+    },
+    {
+      "name": "revoked refresh denied",
+      "status": 401,
+      "duration_ms": 22
+    }
+  ]
+}

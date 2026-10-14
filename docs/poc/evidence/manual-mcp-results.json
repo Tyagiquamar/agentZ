@@ -1,0 +1,125 @@
+{
+  "tested_at": "2026-10-14T08:46:16.457Z",
+  "results": [
+    {
+      "name": "initialize",
+      "status": 200
+    },
+    {
+      "name": "notifications/initialized",
+      "status": 202
+    },
+    {
+      "name": "tools/list",
+      "status": 200
+    },
+    {
+      "name": "tools/call",
+      "status": 200
+    },
+    {
+      "name": "prompts/list",
+      "status": 200
+    },
+    {
+      "name": "prompts/get",
+      "status": 200
+    },
+    {
+      "name": "resources/list",
+      "status": 200
+    },
+    {
+      "name": "resources/read",
+      "status": 200
+    },
+    {
+      "name": "tools/list",
+      "status": 404
+    },
+    {
+      "name": "initialize",
+      "status": 503
+    },
+    {
+      "name": "initialize",
+      "status": 503
+    },
+    {
+      "name": "initialize",
+      "status": 503
+    },
+    {
+      "name": "initialize",
+      "status": 503
+    },
+    {
+      "name": "initialize",
+      "status": 503
+    },
+    {
+      "name": "initialize",
+      "status": 503
+    },
+    {
+      "name": "initialize",
+      "status": 503
+    },
+    {
+      "name": "initialize",
+      "status": 503
+    },
+    {
+      "name": "initialize",
+      "status": 200
+    },
+    {
+      "name": "tools/list",
+      "status": 200
+    },
+    {
+      "name": "tools/call",
+      "status": 200
+    },
+    {
+      "name": "tools/call",
+      "status": 400
+    },
+    {
+      "name": "prompts/list",
+      "status": 200
+    },
+    {
+      "name": "prompts/get",
+      "status": 400
+    },
+    {
+      "name": "resources/list",
+      "status": 200
+    },
+    {
+      "name": "resources/read",
+      "status": 400
+    },
+    {
+      "name": "initialize",
+      "status": 200
+    },
+    {
+      "name": "tools/call",
+      "status": 500
+    },
+    {
+      "name": "sampling/createMessage",
+      "status": 200
+    },
+    {
+      "name": "session deletion",
+      "status": 202
+    },
+    {
+      "name": "tools/list",
+      "status": 404
+    }
+  ]
+}
