@@ -489,12 +489,16 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 		for _, model := range selection.Models {
 			key := ctrlclient.ObjectKey{Namespace: model.Namespace, Name: model.Provider}
 			provider := resources.providers[key]
+			endpoints := inference.DelegatedProviderEndpoints(provider.Spec.Kind)
+			if s.cfg.EnableCodexGatewayPOC && (provider.Spec.Kind == agentzv1alpha1.InferenceProviderKindAnthropic || provider.Spec.Kind == agentzv1alpha1.InferenceProviderKindAnthropicCompatible) {
+				endpoints = append(endpoints, "/responses")
+			}
 			models.Data = append(models.Data, openAIModel{
 				ID:                 model.Id,
 				Object:             "model",
 				Created:            grant.CreatedAt.Time.Unix(),
 				OwnedBy:            model.Provider,
-				SupportedEndpoints: inference.DelegatedProviderEndpoints(provider.Spec.Kind),
+				SupportedEndpoints: endpoints,
 				StreamingOnly:      provider.Spec.Kind == agentzv1alpha1.InferenceProviderKindOpenAICodex,
 			})
 		}
@@ -559,6 +563,7 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 	}
 
 	initializingMCP := false
+	var bridge *codexResponsesBridge
 	path := "/delegations/" + claims.GrantID + "/mcp"
 	if !mcpRequest {
 		responses := strings.HasSuffix(r.URL.Path, "/responses")
@@ -570,10 +575,9 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 			s.delegationError(w, r, http.StatusBadRequest, "invalid_request_error", err.Error())
 			return
 		}
-		messages := strings.HasSuffix(r.URL.Path, "/messages") || strings.HasSuffix(r.URL.Path, "/messages/count_tokens")
 		index := -1
 		for candidate, selected := range selection.Models {
-			if selected.Id != input.Model && (!messages || selected.Model != input.Model) {
+			if selected.Id != input.Model && selected.Model != input.Model {
 				continue
 			}
 			if index >= 0 {
@@ -606,6 +610,18 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 		}
 		key := ctrlclient.ObjectKey{Namespace: selected.Namespace, Name: selected.Provider}
 		provider := resources.providers[key]
+		if responses && s.cfg.EnableCodexGatewayPOC && (provider.Spec.Kind == agentzv1alpha1.InferenceProviderKindAnthropic || provider.Spec.Kind == agentzv1alpha1.InferenceProviderKindAnthropicCompatible) {
+			bridge, body, err = newCodexResponsesBridge(body)
+			if err == nil {
+				input, err = inference.ValidateDelegatedRequest(body, false)
+			}
+			if err != nil {
+				s.delegationError(w, r, http.StatusBadRequest, "invalid_request_error", err.Error())
+				return
+			}
+			r.Body = io.NopCloser(bytes.NewReader(body))
+			r.ContentLength = int64(len(body))
+		}
 		err = input.ValidateProvider(provider.Spec.Kind)
 		if err != nil {
 			s.delegationError(w, r, http.StatusBadRequest, "invalid_request_error", err.Error())
@@ -635,6 +651,9 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		path = fmt.Sprintf("/delegations/%s/models/%d%s", claims.GrantID, index, strings.TrimPrefix(r.URL.Path, resourcePath))
+		if bridge != nil {
+			path = fmt.Sprintf("/delegations/%s/models/%d/chat/completions", claims.GrantID, index)
+		}
 	}
 	if mcpRequest {
 		if r.Method != http.MethodPost {
@@ -821,6 +840,9 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 				return nil
 			}
 			if !mcpRequest {
+				if bridge != nil {
+					return bridge.modifyResponse(response)
+				}
 				return nil
 			}
 			if r.Method == http.MethodDelete {

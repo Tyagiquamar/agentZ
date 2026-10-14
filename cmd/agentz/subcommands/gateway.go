@@ -22,6 +22,10 @@ var gatewayServeCmd = &cli.Command{
 	Name:  "serve",
 	Usage: "Run the gateway HTTP server",
 	Flags: []cli.Flag{
+		&cli.BoolFlag{
+			Name:  "enable-codex-gateway-poc",
+			Usage: "Enable buffered Responses translation for Anthropic in the Codex PoC",
+		},
 		&cli.StringFlag{
 			Name:  "delegation-namespace",
 			Usage: "Private native MCP aggregator namespace",
@@ -205,6 +209,7 @@ var gatewayServeCmd = &cli.Command{
 		return gateway.Serve(
 			ctx,
 			gateway.Config{
+				EnableCodexGatewayPOC:          c.Bool("enable-codex-gateway-poc"),
 				Addr:                           c.String("addr"),
 				CodingGitHubClientID:           c.String("coding-github-client-id"),
 				CodingGitHubClientSecret:       c.String("coding-github-client-secret"),

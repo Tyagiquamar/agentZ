@@ -1,0 +1,8 @@
+{
+  "go_race": "ok  \tgithub.com/accuknox/agentz/internal/inference\t(cached)\nok  \tgithub.com/accuknox/agentz/internal/gateway\t4.570s\nok  \tgithub.com/accuknox/agentz/internal/extauth\t(cached)",
+  "next_production_build": "passed",
+  "typescript": "passed",
+  "eslint": "passed",
+  "disabled_adapter_status": 404,
+  "diff_check": "passed"
+}

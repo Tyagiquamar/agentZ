@@ -1,0 +1,16 @@
+{
+  "tested_at": "2026-10-14T10:17:33.911Z",
+  "mcp_unexpired_access_status": 403,
+  "mcp_revoked_refresh_status": 400,
+  "grants": [
+    {
+      "client_id": "agentz-codex-anthropic-poc",
+      "revoked_at": "2026-10-14T10:16:44.309Z"
+    },
+    {
+      "client_id": "agentz-codex-mcp-poc",
+      "revoked_at": "2026-10-14T10:17:08.629Z"
+    }
+  ],
+  "tokens": []
+}

@@ -82,6 +82,7 @@ const cleanupMaxAttempts = 8
 
 // Config describes how to start the gateway.
 type Config struct {
+	EnableCodexGatewayPOC          bool
 	CodingGitHubClientID           string
 	CodingGitHubClientSecret       string
 	CodingGitHubEncryptionKey      string

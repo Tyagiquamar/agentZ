@@ -1,0 +1,177 @@
+{
+  "tested_at": "2026-10-14T10:38:01.652Z",
+  "results": [
+    {
+      "name": "missing secondary bearer",
+      "status": 401
+    },
+    {
+      "name": "primary bearer cannot authenticate",
+      "status": 401
+    },
+    {
+      "name": "malformed secondary bearer",
+      "status": 401
+    },
+    {
+      "name": "changed token signature",
+      "status": 401
+    },
+    {
+      "name": "expired bearer",
+      "status": 401
+    },
+    {
+      "name": "wrong issuer",
+      "status": 401
+    },
+    {
+      "name": "wrong audience",
+      "status": 401
+    },
+    {
+      "name": "missing required scope",
+      "status": 403
+    },
+    {
+      "name": "unknown grant",
+      "status": 403
+    },
+    {
+      "name": "wrong client binding",
+      "status": 403
+    },
+    {
+      "name": "wrong user binding",
+      "status": 403
+    },
+    {
+      "name": "selected model discovery",
+      "status": 200
+    },
+    {
+      "name": "irrelevant primary bearer is stripped",
+      "status": 200
+    },
+    {
+      "name": "unknown client API",
+      "status": 404
+    },
+    {
+      "name": "wrong Responses method",
+      "status": 405
+    },
+    {
+      "name": "malformed JSON",
+      "status": 400
+    },
+    {
+      "name": "duplicate model",
+      "status": 400
+    },
+    {
+      "name": "unselected model",
+      "status": 404
+    },
+    {
+      "name": "stored response",
+      "status": 400
+    },
+    {
+      "name": "implicit stored response",
+      "status": 400
+    },
+    {
+      "name": "previous response",
+      "status": 400
+    },
+    {
+      "name": "stored conversation",
+      "status": 400
+    },
+    {
+      "name": "stored prompt",
+      "status": 400
+    },
+    {
+      "name": "background work",
+      "status": 400
+    },
+    {
+      "name": "hosted MCP",
+      "status": 400
+    },
+    {
+      "name": "hosted search",
+      "status": 400
+    },
+    {
+      "name": "hosted namespace child",
+      "status": 400
+    },
+    {
+      "name": "provider file",
+      "status": 400
+    },
+    {
+      "name": "unsupported image bridge",
+      "status": 400
+    },
+    {
+      "name": "unsupported reasoning bridge",
+      "status": 400
+    },
+    {
+      "name": "real non-streaming Anthropic Responses",
+      "status": 200
+    },
+    {
+      "name": "real buffered Responses SSE",
+      "status": 200
+    },
+    {
+      "name": "disabled application",
+      "status": 403
+    },
+    {
+      "name": "disabled application restored",
+      "status": 200
+    },
+    {
+      "name": "disabled organization delegation",
+      "status": 403
+    },
+    {
+      "name": "disabled organization delegation restored",
+      "status": 200
+    },
+    {
+      "name": "disabled member",
+      "status": 403
+    },
+    {
+      "name": "disabled member restored",
+      "status": 200
+    },
+    {
+      "name": "revoked fixture grant",
+      "status": 403
+    },
+    {
+      "name": "revoked fixture grant restored",
+      "status": 200
+    },
+    {
+      "name": "unknown refresh token",
+      "status": 400
+    },
+    {
+      "name": "unknown authorization code",
+      "status": 400
+    },
+    {
+      "name": "unsupported password grant",
+      "status": 400
+    }
+  ]
+}

@@ -83,7 +83,8 @@ func (input *DelegatedRequest) ValidateProvider(kind agentzv1alpha1.InferencePro
 }
 
 type inferenceTool struct {
-	Type string `json:"type"`
+	Type  string          `json:"type"`
+	Tools []inferenceTool `json:"tools"`
 }
 
 type inferenceInputItem struct {
@@ -119,9 +120,7 @@ func ValidateDelegatedRequest(body []byte, responses bool) (*DelegatedRequest, e
 	}
 	// A model grant never authorizes the owner's stored data or hosted tools.
 	storedPrompt := len(input.Prompt) != 0 && string(input.Prompt) != "null"
-	hostedTools := slices.ContainsFunc(input.Tools, func(tool inferenceTool) bool {
-		return tool.Type != "function"
-	})
+	hostedTools := hasHostedTools(input.Tools, responses, 0)
 	hostedSearch := !responses && len(input.WebSearchOptions) != 0 && string(input.WebSearchOptions) != "null"
 	if storedPrompt || hostedTools || hostedSearch {
 		return nil, errors.New("use inline prompts and client-side function tools; provider account resources are unavailable")
@@ -156,7 +155,7 @@ func ValidateDelegatedRequest(body []byte, responses bool) (*DelegatedRequest, e
 		}
 		if responses {
 			switch item.Type {
-			case "function_call_output":
+			case "function_call_output", "custom_tool_call_output":
 				// Function output is text or an array of text, images, and files.
 				if len(item.Output) != 0 && item.Output[0] == '[' {
 					var output []inferenceContentPart
@@ -182,4 +181,28 @@ func ValidateDelegatedRequest(body []byte, responses bool) (*DelegatedRequest, e
 		}
 	}
 	return &input, nil
+}
+
+// Responses custom tools and namespaces execute in the client. Inspect every
+// namespace member so a client cannot wrap an unauthorized provider tool.
+func hasHostedTools(tools []inferenceTool, responses bool, depth int) bool {
+	if depth > 8 {
+		return true
+	}
+	for _, tool := range tools {
+		switch tool.Type {
+		case "function":
+		case "custom":
+			if !responses {
+				return true
+			}
+		case "namespace":
+			if !responses || hasHostedTools(tool.Tools, responses, depth+1) {
+				return true
+			}
+		default:
+			return true
+		}
+	}
+	return false
 }

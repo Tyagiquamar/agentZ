@@ -62,6 +62,6 @@ export const config = {
       source: "/((?!_next/static|_next/image|.*\\..*).*)",
       has: [{ type: "header", key: "next-action" }],
     },
-    "/((?!join|signin|signup|oauth/authorize|claude|api/auth|api/mcp|api/inference|_next/static|_next/image|.*\\..*).*)",
+    "/((?!join|signin|signup|oauth/authorize|claude|codex|api/auth|api/mcp|api/inference|_next/static|_next/image|.*\\..*).*)",
   ],
 }

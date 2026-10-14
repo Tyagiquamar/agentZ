@@ -1,0 +1,10 @@
+{
+  "wrong_state_callback_http": 200,
+  "native_mcp_cli_exit": 1,
+  "native_mcp_error": "Authorization state not found",
+  "wrong_pkce_status": 401,
+  "wrong_pkce_response": {
+    "error_description": "code verification failed",
+    "error": "invalid_request"
+  }
+}

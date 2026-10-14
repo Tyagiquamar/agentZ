@@ -1,0 +1,264 @@
+{
+  "client": "codex-cli 0.162.1",
+  "provider": "ip-245104a51f5f",
+  "model": "claude-haiku-4-5-20251001",
+  "results": {
+    "native_inference": [
+      {
+        "type": "thread.started",
+        "thread_id": "01a139e3-a1ca-7490-8413-519875eb5d35"
+      },
+      {
+        "type": "turn.started"
+      },
+      {
+        "type": "item.completed",
+        "item": {
+          "id": "item_0",
+          "type": "agent_message",
+          "text": "AGENTZ_ANTHROPIC_PUBLIC_OK"
+        }
+      },
+      {
+        "type": "turn.completed",
+        "usage": {
+          "input_tokens": 9804,
+          "cached_input_tokens": 0,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 15,
+          "reasoning_output_tokens": 0
+        }
+      }
+    ],
+    "native_mcp": [
+      {
+        "type": "thread.started",
+        "thread_id": "01a139e5-8ed5-7201-9720-bb7e4046b90d"
+      },
+      {
+        "type": "turn.started"
+      },
+      {
+        "type": "item.completed",
+        "item": {
+          "id": "item_0",
+          "type": "agent_message",
+          "text": "I'll use the agentz MCP echo tool to echo that text."
+        }
+      },
+      {
+        "type": "item.started",
+        "item": {
+          "id": "item_1",
+          "type": "mcp_tool_call",
+          "server": "agentz",
+          "tool": "mcp-46e84b71984a95556d04e03491961c4a_echo",
+          "arguments": {
+            "message": "AGENTZ_CODEX_MCP_REAL_OK"
+          },
+          "result": null,
+          "error": null,
+          "status": "in_progress"
+        }
+      },
+      {
+        "type": "item.completed",
+        "item": {
+          "id": "item_1",
+          "type": "mcp_tool_call",
+          "server": "agentz",
+          "tool": "mcp-46e84b71984a95556d04e03491961c4a_echo",
+          "arguments": {
+            "message": "AGENTZ_CODEX_MCP_REAL_OK"
+          },
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "AgentZ MCP: AGENTZ_CODEX_MCP_REAL_OK"
+              }
+            ],
+            "structured_content": null
+          },
+          "error": null,
+          "status": "completed"
+        }
+      },
+      {
+        "type": "item.completed",
+        "item": {
+          "id": "item_2",
+          "type": "agent_message",
+          "text": "AgentZ MCP: AGENTZ_CODEX_MCP_REAL_OK"
+        }
+      },
+      {
+        "type": "turn.completed",
+        "usage": {
+          "input_tokens": 19810,
+          "cached_input_tokens": 0,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 110,
+          "reasoning_output_tokens": 0
+        }
+      }
+    ],
+    "native_expiry_refresh": [
+      {
+        "type": "thread.started",
+        "thread_id": "01a139e9-c401-7622-8637-07c02ee00e27"
+      },
+      {
+        "type": "turn.started"
+      },
+      {
+        "type": "item.completed",
+        "item": {
+          "id": "item_0",
+          "type": "agent_message",
+          "text": "AGENTZ_CODEX_EXPIRED_REFRESH_OK"
+        }
+      },
+      {
+        "type": "turn.completed",
+        "usage": {
+          "input_tokens": 9808,
+          "cached_input_tokens": 0,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 19,
+          "reasoning_output_tokens": 0
+        }
+      }
+    ],
+    "native_revocation": [
+      {
+        "type": "thread.started",
+        "thread_id": "01a139ea-1238-7663-a668-6b6351cee55c"
+      },
+      {
+        "type": "turn.started"
+      },
+      {
+        "type": "error",
+        "message": "unexpected status 403 Forbidden: This authorization is no longer available., url: https://agentz-codex-poc.89.167.100.143.sslip.io:3443/codex/v1/responses"
+      },
+      {
+        "type": "turn.failed",
+        "error": {
+          "message": "unexpected status 403 Forbidden: This authorization is no longer available., url: https://agentz-codex-poc.89.167.100.143.sslip.io:3443/codex/v1/responses"
+        }
+      }
+    ],
+    "native_local_browser": [
+      {
+        "type": "thread.started",
+        "thread_id": "01a139f4-217e-7bd1-a7cd-1101f415be0f"
+      },
+      {
+        "type": "turn.started"
+      },
+      {
+        "type": "item.completed",
+        "item": {
+          "id": "item_0",
+          "type": "agent_message",
+          "text": "AGENTZ_CODEX_LOCAL_BROWSER_OK"
+        }
+      },
+      {
+        "type": "turn.completed",
+        "usage": {
+          "input_tokens": 9807,
+          "cached_input_tokens": 0,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 18,
+          "reasoning_output_tokens": 0
+        }
+      }
+    ],
+    "native_final": [
+      {
+        "type": "thread.started",
+        "thread_id": "01a139ff-5744-7a13-bd33-5a86f0efab9f"
+      },
+      {
+        "type": "turn.started"
+      },
+      {
+        "type": "item.started",
+        "item": {
+          "id": "item_0",
+          "type": "mcp_tool_call",
+          "server": "agentz",
+          "tool": "mcp-46e84b71984a95556d04e03491961c4a_echo",
+          "arguments": {
+            "message": "AGENTZ_CODEX_FINAL_OK"
+          },
+          "result": null,
+          "error": null,
+          "status": "in_progress"
+        }
+      },
+      {
+        "type": "item.completed",
+        "item": {
+          "id": "item_0",
+          "type": "mcp_tool_call",
+          "server": "agentz",
+          "tool": "mcp-46e84b71984a95556d04e03491961c4a_echo",
+          "arguments": {
+            "message": "AGENTZ_CODEX_FINAL_OK"
+          },
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "AgentZ MCP: AGENTZ_CODEX_FINAL_OK"
+              }
+            ],
+            "structured_content": null
+          },
+          "error": null,
+          "status": "completed"
+        }
+      },
+      {
+        "type": "item.completed",
+        "item": {
+          "id": "item_1",
+          "type": "agent_message",
+          "text": "AgentZ MCP: AGENTZ_CODEX_FINAL_OK"
+        }
+      },
+      {
+        "type": "turn.completed",
+        "usage": {
+          "input_tokens": 19768,
+          "cached_input_tokens": 0,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 88,
+          "reasoning_output_tokens": 0
+        }
+      }
+    ],
+    "openai_quota_recheck": [
+      {
+        "type": "thread.started",
+        "thread_id": "01a139e2-ba8d-70e3-ae1d-8fb171602522"
+      },
+      {
+        "type": "turn.started"
+      },
+      {
+        "type": "error",
+        "message": "Quota exceeded. Check your plan and billing details."
+      },
+      {
+        "type": "turn.failed",
+        "error": {
+          "message": "Quota exceeded. Check your plan and billing details."
+        }
+      }
+    ]
+  }
+}

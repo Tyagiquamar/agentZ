@@ -879,7 +879,7 @@ func (s *delegationServer) Check(ctx context.Context, request *authv3.CheckReque
 		if messages {
 			input, err = inference.ValidateDelegatedMessages(body, strings.HasSuffix(path, "/count_tokens"))
 		}
-		if err != nil || input.Model != extensions["agentz.target"] && (!messages || input.Model != extensions["agentz.model"]) {
+		if err != nil || input.Model != extensions["agentz.target"] && input.Model != extensions["agentz.model"] {
 			return denyDecision(codes.PermissionDenied, typev3.StatusCode_Forbidden, "invalid delegated inference request", "delegation_body", slog.LevelWarn).response, nil
 		}
 	}

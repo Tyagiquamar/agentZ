@@ -1,3 +1,5 @@
+The current Codex PoC is documented in [codex/README.md](codex/README.md). The Claude report below is retained as the baseline investigation.
+
 # Claude Code gateway PoC
 
 This branch proves native Claude Code login against AgentZ, user-bound inference, refresh, revocation, and MCP access. It is throwaway code based on `feat/external-agents` at `e674df00`.
