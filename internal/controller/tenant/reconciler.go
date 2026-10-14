@@ -114,9 +114,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		if err := r.Patch(ctx, &tenant, client.MergeFrom(base)); err != nil {
 			return ctrl.Result{}, fmt.Errorf("migrate Tenant quotas: %w", err)
 		}
-		return ctrl.Result{
-			RequeueAfter: time.Millisecond,
-		}, nil
+		return ctrl.Result{RequeueAfter: time.Millisecond}, nil
 	}
 	organizationLabel := agentzv1alpha1.ScopeNamespace(
 		agentzv1alpha1.ResourceScopeOrganisation,
@@ -183,9 +181,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 				err,
 			)
 		}
-		return ctrl.Result{
-			RequeueAfter: 2 * time.Second,
-		}, err
+		return ctrl.Result{RequeueAfter: 2 * time.Second}, err
 	}
 	if err := r.reconcileNixStorePVC(ctx, &tenant, nsName); err != nil {
 		log.Error(err, "tenant nix store pvc reconcile failed", "tenant", tenant.Name)
@@ -213,14 +209,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		if errors.Is(err, sinjectorca.ErrOwnershipConflict) {
 			return r.failTenant(ctx, &tenant, "Organisation certificate could not be reconciled safely", err)
 		}
-		return ctrl.Result{
-			RequeueAfter: 2 * time.Second,
-		}, err
+		return ctrl.Result{RequeueAfter: 2 * time.Second}, err
 	}
 	if !certReady {
-		return ctrl.Result{
-			RequeueAfter: 2 * time.Second,
-		}, nil
+		return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
 	}
 	if err := r.reconcileIsolationPolicy(ctx, &tenant, nsName); err != nil {
 		log.Error(err, "tenant isolation policy reconcile failed", "tenant", tenant.Name)
@@ -336,9 +328,7 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 			&agentzv1alpha1.Agent{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
 				var namespace corev1.Namespace
-				key := client.ObjectKey{
-					Name: obj.GetNamespace(),
-				}
+				key := client.ObjectKey{Name: obj.GetNamespace()}
 				if err := r.directClient().Get(ctx, key, &namespace); err != nil {
 					return nil
 				}
@@ -346,11 +336,7 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 				if tenantName == "" {
 					return nil
 				}
-				return []reconcile.Request{{
-					NamespacedName: client.ObjectKey{
-						Name: tenantName,
-					},
-				}}
+				return []reconcile.Request{{NamespacedName: client.ObjectKey{Name: tenantName}}}
 			}),
 			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
 		).
@@ -369,11 +355,7 @@ func tenantChangePredicate() predicate.Predicate {
 }
 
 func (r *Reconciler) reconcileNamespace(ctx context.Context, tenant *agentzv1alpha1.Tenant, nsName string) error {
-	ns := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: nsName,
-		},
-	}
+	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: nsName}}
 	_, err := controllerutil.CreateOrPatch(
 		ctx,
 		r.directClient(),
@@ -456,10 +438,7 @@ func (r *Reconciler) reconcileNixStorePVC(ctx context.Context, tenant *agentzv1a
 
 func (r *Reconciler) reconcileIsolationPolicy(ctx context.Context, tenant *agentzv1alpha1.Tenant, nsName string) error {
 	namespace := &corev1.Namespace{}
-	err := r.directClient().Get(ctx, client.ObjectKey{
-		Name: nsName,
-	}, namespace)
-	if err != nil {
+	if err := r.directClient().Get(ctx, client.ObjectKey{Name: nsName}, namespace); err != nil {
 		return err
 	}
 	if err := networkpolicy.ReconcileRuntimeIsolation(ctx, r.directClient(), namespace); err != nil {
@@ -471,7 +450,7 @@ func (r *Reconciler) reconcileIsolationPolicy(ctx context.Context, tenant *agent
 			Namespace: nsName,
 		},
 	}
-	_, err = controllerutil.CreateOrPatch(
+	_, err := controllerutil.CreateOrPatch(
 		ctx,
 		r.directClient(),
 		policy,
@@ -570,14 +549,8 @@ func (r *Reconciler) reconcileIsolationPolicy(ctx context.Context, tenant *agent
 						ToPorts: []ciliumpolicyapi.PortRule{
 							{
 								Ports: []ciliumpolicyapi.PortProtocol{
-									{
-										Port:     "53",
-										Protocol: "UDP",
-									},
-									{
-										Port:     "53",
-										Protocol: "TCP",
-									},
+									{Port: "53", Protocol: "UDP"},
+									{Port: "53", Protocol: "TCP"},
 								},
 							},
 						},
@@ -604,9 +577,7 @@ func (r *Reconciler) reconcileGatewayAccess(ctx context.Context, tenant *agentzv
 
 	roleName := tenant.Name + "-gateway-use"
 	role := &rbacv1.ClusterRole{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: roleName,
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: roleName},
 	}
 	_, err := controllerutil.CreateOrPatch(
 		ctx,
@@ -634,9 +605,7 @@ func (r *Reconciler) reconcileGatewayAccess(ctx context.Context, tenant *agentzv
 	}
 
 	binding := &rbacv1.ClusterRoleBinding{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: roleName,
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: roleName},
 	}
 	_, err = controllerutil.CreateOrPatch(
 		ctx,
@@ -720,10 +689,7 @@ func (r *Reconciler) updateStatus(ctx context.Context, name string, mutate func(
 		retry.DefaultRetry,
 		func() error {
 			var tenant agentzv1alpha1.Tenant
-			err := r.Get(ctx, client.ObjectKey{
-				Name: name,
-			}, &tenant)
-			if err != nil {
+			if err := r.Get(ctx, client.ObjectKey{Name: name}, &tenant); err != nil {
 				return err
 			}
 			mutate(&tenant)

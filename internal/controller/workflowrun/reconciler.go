@@ -80,9 +80,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 
 	var workspace agentzv1alpha1.Workspace
-	err = r.Get(ctx, client.ObjectKey{
-		Name: run.Namespace,
-	}, &workspace)
+	err = r.Get(ctx, client.ObjectKey{Name: run.Namespace}, &workspace)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("get workflow Workspace: %w", err)
 	}
@@ -96,9 +94,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("add workflow run finalizer: %w", err)
 		}
-		return ctrl.Result{
-			RequeueAfter: time.Millisecond,
-		}, nil
+		return ctrl.Result{RequeueAfter: time.Millisecond}, nil
 	}
 
 	terminal := run.Status.Phase.Terminal()
@@ -124,9 +120,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("initialize workflow run status: %w", err)
 		}
-		return ctrl.Result{
-			RequeueAfter: time.Millisecond,
-		}, nil
+		return ctrl.Result{RequeueAfter: time.Millisecond}, nil
 	}
 
 	if run.Status.StartedAt != nil && run.Spec.TimeoutSeconds > 0 {
@@ -278,9 +272,7 @@ func (r *Reconciler) finalizeRun(ctx context.Context, run *agentzv1alpha1.Workfl
 func (r *Reconciler) reconcilePending(ctx context.Context, run *agentzv1alpha1.WorkflowRun) (ctrl.Result, error) {
 	err := r.startRun(ctx, run)
 	if err == nil {
-		return ctrl.Result{
-			RequeueAfter: runRequeueInterval,
-		}, nil
+		return ctrl.Result{RequeueAfter: runRequeueInterval}, nil
 	}
 
 	failErr := r.failRun(
@@ -297,9 +289,20 @@ func (r *Reconciler) reconcilePending(ctx context.Context, run *agentzv1alpha1.W
 
 func (r *Reconciler) reconcileRunning(ctx context.Context, run *agentzv1alpha1.WorkflowRun) (ctrl.Result, error) {
 	if run.Status.ExecutionID == "" {
-		return ctrl.Result{}, r.failRun(ctx, run, agentzv1alpha1.WorkflowRunReasonGatewayError, "Workflow run has no tracked execution")
+		return ctrl.Result{}, r.failRun(
+			ctx,
+			run,
+			agentzv1alpha1.WorkflowRunReasonGatewayError,
+			"Workflow run has no tracked execution",
+		)
 	}
-	response, err := r.GatewayClient.GetWorkflowExecutionWithResponse(ctx, run.Spec.AgentName, run.Spec.WorkflowName, run.Name, gwreq.RequestEditor(r.TokenPath, run.Namespace))
+	response, err := r.GatewayClient.GetWorkflowExecutionWithResponse(
+		ctx,
+		run.Spec.AgentName,
+		run.Spec.WorkflowName,
+		run.Name,
+		gwreq.RequestEditor(r.TokenPath, run.Namespace),
+	)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("read workflow execution: %w", err)
 	}
@@ -308,21 +311,27 @@ func (r *Reconciler) reconcileRunning(ctx context.Context, run *agentzv1alpha1.W
 	}
 	execution := response.JSON200.Execution
 	if execution == nil {
-		admitted, err := r.GatewayClient.StartWorkflowExecutionWithResponse(ctx, run.Spec.AgentName, run.Spec.WorkflowName, run.Name, gatewayapi.StartWorkflowExecutionJSONRequestBody{
-			RunUid: string(run.UID),
-		}, gwreq.RequestEditor(r.TokenPath, run.Namespace))
+		admitted, err := r.GatewayClient.StartWorkflowExecutionWithResponse(
+			ctx,
+			run.Spec.AgentName,
+			run.Spec.WorkflowName,
+			run.Name,
+			gatewayapi.StartWorkflowExecutionJSONRequestBody{RunUid: string(run.UID)},
+			gwreq.RequestEditor(r.TokenPath, run.Namespace),
+		)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("admit workflow execution: %w", err)
 		}
 		if admitted.JSON202 == nil {
 			return ctrl.Result{}, fmt.Errorf("admit workflow execution returned status %d", admitted.StatusCode())
 		}
-		return ctrl.Result{
-			RequeueAfter: runRequeueInterval,
-		}, nil
+		return ctrl.Result{RequeueAfter: runRequeueInterval}, nil
 	}
 	switch execution.State {
-	case gatewayapi.ConversationExecutionStateAdmitting, gatewayapi.ConversationExecutionStateRunning, gatewayapi.ConversationExecutionStateRecovering, gatewayapi.ConversationExecutionStateBlocked:
+	case gatewayapi.ConversationExecutionStateAdmitting,
+		gatewayapi.ConversationExecutionStateRunning,
+		gatewayapi.ConversationExecutionStateRecovering,
+		gatewayapi.ConversationExecutionStateBlocked:
 		recovering := execution.State == gatewayapi.ConversationExecutionStateRecovering
 		condition := apimeta.FindStatusCondition(run.Status.Conditions, agentzv1alpha1.WorkflowRunConditionRecovering)
 		desired := metav1.ConditionFalse
@@ -347,9 +356,7 @@ func (r *Reconciler) reconcileRunning(ctx context.Context, run *agentzv1alpha1.W
 				return ctrl.Result{}, err
 			}
 		}
-		return ctrl.Result{
-			RequeueAfter: runRequeueInterval,
-		}, nil
+		return ctrl.Result{RequeueAfter: runRequeueInterval}, nil
 	case gatewayapi.ConversationExecutionStateFailed, gatewayapi.ConversationExecutionStateCancelled:
 		return ctrl.Result{}, r.failRun(ctx, run, agentzv1alpha1.WorkflowRunReasonGatewayError, execution.Message)
 	}
@@ -403,10 +410,7 @@ func (r *Reconciler) startRun(ctx context.Context, run *agentzv1alpha1.WorkflowR
 	}
 
 	agt := &agentzv1alpha1.Agent{}
-	agtKey := client.ObjectKey{
-		Name:      run.Spec.AgentName,
-		Namespace: run.Namespace,
-	}
+	agtKey := client.ObjectKey{Name: run.Spec.AgentName, Namespace: run.Namespace}
 	err := r.Get(ctx, agtKey, agt)
 	if err != nil {
 		return fmt.Errorf("get agent %q: %w", run.Spec.AgentName, err)
@@ -518,9 +522,7 @@ func (r *Reconciler) startRun(ctx context.Context, run *agentzv1alpha1.WorkflowR
 	}
 	response, err := r.GatewayClient.StartWorkflowExecutionWithResponse(
 		ctx, run.Spec.AgentName, run.Spec.WorkflowName, run.Name,
-		gatewayapi.StartWorkflowExecutionJSONRequestBody{
-			RunUid: string(run.UID),
-		},
+		gatewayapi.StartWorkflowExecutionJSONRequestBody{RunUid: string(run.UID)},
 		gwreq.RequestEditor(r.TokenPath, run.Namespace),
 	)
 	if err != nil {

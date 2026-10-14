@@ -65,9 +65,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 
 	var workspace agentzv1alpha1.Workspace
-	err = r.Get(ctx, client.ObjectKey{
-		Name: schedule.Namespace,
-	}, &workspace)
+	err = r.Get(ctx, client.ObjectKey{Name: schedule.Namespace}, &workspace)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("get workflow Workspace: %w", err)
 	}
@@ -111,9 +109,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	err = r.refreshStatus(ctx, schedule, cronJobName)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			return ctrl.Result{
-				RequeueAfter: time.Second,
-			}, nil
+			return ctrl.Result{RequeueAfter: time.Second}, nil
 		}
 		return ctrl.Result{}, fmt.Errorf("refresh schedule status: %w", err)
 	}

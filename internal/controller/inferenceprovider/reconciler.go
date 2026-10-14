@@ -104,10 +104,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, errors.Join(err, r.updateStatus(ctx, provider, runtime, err))
 	}
 	currentBackend := &agentgatewayv1alpha1.AgentgatewayBackend{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      provider.Name,
-			Namespace: provider.Namespace,
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: provider.Name, Namespace: provider.Namespace},
 	}
 	_, err = ctrlutil.CreateOrPatch(
 		ctx,
@@ -158,10 +155,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 	if runtime.ExternalSecret != nil {
 		currentExternalSecret := &externalsecretsv1.ExternalSecret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      provider.Name,
-				Namespace: provider.Namespace,
-			},
+			ObjectMeta: metav1.ObjectMeta{Name: provider.Name, Namespace: provider.Namespace},
 		}
 		_, err = ctrlutil.CreateOrPatch(
 			ctx,
@@ -239,9 +233,7 @@ func (r *Reconciler) reconcileDelete(ctx context.Context, provider *agentzv1alph
 			if resolveErr == nil && ns == provider.Namespace {
 				err := fmt.Errorf("provider is still referenced by sandbox %q", sandboxes.Items[i].Name)
 				err = r.blockDeletion(ctx, provider, "DeletionBlocked", err)
-				return ctrl.Result{
-					RequeueAfter: 5 * time.Second,
-				}, err
+				return ctrl.Result{RequeueAfter: 5 * time.Second}, err
 			}
 		}
 	}
@@ -276,9 +268,7 @@ func (r *Reconciler) reconcileDelete(ctx context.Context, provider *agentzv1alph
 			if resolveErr == nil && ns == provider.Namespace {
 				err := fmt.Errorf("provider is still referenced by pool %q", pools.Items[i].Name)
 				err = r.blockDeletion(ctx, provider, "DeletionBlocked", err)
-				return ctrl.Result{
-					RequeueAfter: 5 * time.Second,
-				}, err
+				return ctrl.Result{RequeueAfter: 5 * time.Second}, err
 			}
 		}
 	}
@@ -289,10 +279,7 @@ func (r *Reconciler) reconcileDelete(ctx context.Context, provider *agentzv1alph
 		)
 	}
 	backend := &agentgatewayv1alpha1.AgentgatewayBackend{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      provider.Name,
-			Namespace: provider.Namespace,
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: provider.Name, Namespace: provider.Namespace},
 	}
 	err = r.Get(ctx, client.ObjectKeyFromObject(backend), backend)
 	if err == nil && !metav1.IsControlledBy(backend, provider) {
@@ -326,9 +313,7 @@ func (r *Reconciler) reconcileDelete(ctx context.Context, provider *agentzv1alph
 	for _, obj := range controlled {
 		err := r.Get(ctx, client.ObjectKeyFromObject(provider), obj)
 		if err == nil {
-			return ctrl.Result{
-				RequeueAfter: 500 * time.Millisecond,
-			}, nil
+			return ctrl.Result{RequeueAfter: 500 * time.Millisecond}, nil
 		}
 		if !apierrors.IsNotFound(err) {
 			err = fmt.Errorf("confirm provider runtime cleanup: %w", err)
@@ -410,10 +395,7 @@ func (r *Reconciler) blockDeletion(ctx context.Context, provider *agentzv1alpha1
 
 func (r *Reconciler) deleteCredentialResources(ctx context.Context, provider *agentzv1alpha1.InferenceProvider) error {
 	externalSecret := &externalsecretsv1.ExternalSecret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      provider.Name,
-			Namespace: provider.Namespace,
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: provider.Name, Namespace: provider.Namespace},
 	}
 	err := r.Get(ctx, client.ObjectKeyFromObject(externalSecret), externalSecret)
 	if err == nil && !metav1.IsControlledBy(externalSecret, provider) {
@@ -427,10 +409,7 @@ func (r *Reconciler) deleteCredentialResources(ctx context.Context, provider *ag
 		return fmt.Errorf("read provider external secret for cleanup: %w", err)
 	}
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      provider.Name,
-			Namespace: provider.Namespace,
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: provider.Name, Namespace: provider.Namespace},
 	}
 	err = r.Get(ctx, client.ObjectKeyFromObject(secret), secret)
 	switch {
@@ -670,17 +649,12 @@ func (r *Reconciler) providerForSecret(ctx context.Context, obj client.Object) [
 		return nil
 	}
 	provider := &agentzv1alpha1.InferenceProvider{}
-	key := types.NamespacedName{
-		Name:      providerName,
-		Namespace: obj.GetNamespace(),
-	}
+	key := types.NamespacedName{Name: providerName, Namespace: obj.GetNamespace()}
 	if err := r.Get(ctx, key, provider); err != nil {
 		if !apierrors.IsNotFound(err) {
 			slog.ErrorContext(ctx, "resolve provider target secret", slog.Any("err", err))
 		}
 		return nil
 	}
-	return []reconcile.Request{{
-		NamespacedName: key,
-	}}
+	return []reconcile.Request{{NamespacedName: key}}
 }

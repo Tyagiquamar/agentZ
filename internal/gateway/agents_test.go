@@ -21,10 +21,7 @@ func TestAgentModelCatalog(t *testing.T) {
 	s := sandboxTestService(t, nil)
 	org := agentzv1alpha1.ScopeNamespace(agentzv1alpha1.ResourceScopeOrganisation, testOrganizationID)
 	var inherited agentzv1alpha1.InferenceProvider
-	key := client.ObjectKey{
-		Namespace: org,
-		Name:      "provider",
-	}
+	key := client.ObjectKey{Namespace: org, Name: "provider"}
 	err := s.k8sClient.Get(t.Context(), key, &inherited)
 	if err != nil {
 		t.Fatal(err)
@@ -34,22 +31,14 @@ func TestAgentModelCatalog(t *testing.T) {
 		t.Fatal(err)
 	}
 	local := &agentzv1alpha1.InferenceProvider{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "provider",
-			Namespace: testWorkspaceNS,
-		},
-		Spec: agentzv1alpha1.InferenceProviderSpec{
-			CatalogProvider: "anthropic",
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: "provider", Namespace: testWorkspaceNS},
+		Spec:       agentzv1alpha1.InferenceProviderSpec{CatalogProvider: "anthropic"},
 	}
 	if err := s.k8sClient.Create(t.Context(), local); err != nil {
 		t.Fatal(err)
 	}
 	pool := &agentzv1alpha1.InferencePool{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "mixed",
-			Namespace: testWorkspaceNS,
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: "mixed", Namespace: testWorkspaceNS},
 		Spec: agentzv1alpha1.InferencePoolSpec{
 			Members: []agentzv1alpha1.InferencePoolMember{
 				{
@@ -74,10 +63,7 @@ func TestAgentModelCatalog(t *testing.T) {
 		t.Fatal(err)
 	}
 	inheritedPool := &agentzv1alpha1.InferencePool{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "inherited",
-			Namespace: org,
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: "inherited", Namespace: org},
 		Spec: agentzv1alpha1.InferencePoolSpec{
 			Members: []agentzv1alpha1.InferencePoolMember{
 				{
@@ -132,9 +118,7 @@ func TestAgentModelCatalog(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			sandbox := &agentzv1alpha1.Sandbox{
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace: testWorkspaceNS,
-				},
+				ObjectMeta: metav1.ObjectMeta{Namespace: testWorkspaceNS},
 				Spec: agentzv1alpha1.SandboxSpec{
 					Inference: agentzv1alpha1.SandboxInference{
 						Models: []agentzv1alpha1.InferenceModelRef{tt.model},
@@ -157,9 +141,7 @@ func TestAgentModelCatalog(t *testing.T) {
 	}
 	t.Run("unselected organization provider", func(t *testing.T) {
 		var workspace agentzv1alpha1.Workspace
-		key := client.ObjectKey{
-			Name: testWorkspaceNS,
-		}
+		key := client.ObjectKey{Name: testWorkspaceNS}
 		err := s.k8sClient.Get(t.Context(), key, &workspace)
 		if err != nil {
 			t.Fatal(err)
@@ -169,9 +151,7 @@ func TestAgentModelCatalog(t *testing.T) {
 			t.Fatal(err)
 		}
 		sandbox := &agentzv1alpha1.Sandbox{
-			ObjectMeta: metav1.ObjectMeta{
-				Namespace: testWorkspaceNS,
-			},
+			ObjectMeta: metav1.ObjectMeta{Namespace: testWorkspaceNS},
 			Spec: agentzv1alpha1.SandboxSpec{
 				Inference: agentzv1alpha1.SandboxInference{
 					Models: []agentzv1alpha1.InferenceModelRef{{

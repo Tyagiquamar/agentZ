@@ -50,9 +50,7 @@ var _ admission.Validator[*agentzv1alpha1.Agent] = &Validator{}
 
 // NewValidator builds an Agent validator.
 func NewValidator(reader client.Reader) *Validator {
-	return &Validator{
-		reader: reader,
-	}
+	return &Validator{reader: reader}
 }
 
 // ValidateCreate validates Agent creation.
@@ -113,9 +111,7 @@ func (v *Validator) validateAgent(ctx context.Context, agt *agentzv1alpha1.Agent
 
 	if agt.Spec.Memory.Enabled {
 		var workspace agentzv1alpha1.Workspace
-		err := v.reader.Get(ctx, client.ObjectKey{
-			Name: agt.Namespace,
-		}, &workspace)
+		err := v.reader.Get(ctx, client.ObjectKey{Name: agt.Namespace}, &workspace)
 		if err != nil {
 			return append(allErrs, field.InternalError(specPath.Child("memory"), err))
 		}
@@ -170,10 +166,7 @@ func (v *Validator) validateAgent(ctx context.Context, agt *agentzv1alpha1.Agent
 			return allErrs
 		}
 		sandbox := &agentzv1alpha1.Sandbox{}
-		key := client.ObjectKey{
-			Namespace: namespace,
-			Name:      agt.Spec.SandboxRef.Name,
-		}
+		key := client.ObjectKey{Namespace: namespace, Name: agt.Spec.SandboxRef.Name}
 		err = v.reader.Get(ctx, key, sandbox)
 		switch {
 		case apierrors.IsNotFound(err):

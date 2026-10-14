@@ -54,10 +54,7 @@ var emptyDelegationMCP = func() http.Handler {
 	})
 	return mcpsdk.NewStreamableHTTPHandler(func(*http.Request) *mcpsdk.Server {
 		return server
-	}, &mcpsdk.StreamableHTTPOptions{
-		Stateless:    true,
-		JSONResponse: true,
-	})
+	}, &mcpsdk.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
 }()
 
 type delegatedMCPMessage struct {
@@ -99,7 +96,11 @@ func (s *Service) GetDelegationCatalog(w http.ResponseWriter, r *http.Request, p
 		return
 	}
 	catalog, err := s.delegationCatalog(
-		r.Context(), auth.claims.UserID, auth.claims.OrganizationID, auth.claims.WorkspaceID, params.IncludeUnavailable != nil && *params.IncludeUnavailable,
+		r.Context(),
+		auth.claims.UserID,
+		auth.claims.OrganizationID,
+		auth.claims.WorkspaceID,
+		params.IncludeUnavailable != nil && *params.IncludeUnavailable,
 	)
 	if err != nil {
 		apiutil.WriteInternalError(w, r, err)
@@ -130,10 +131,7 @@ func (s *Service) delegationCatalog(ctx context.Context, userID, organizationID,
 	if err != nil {
 		return catalog, err
 	}
-	selectedScope := authorization.Scope{
-		OrganizationID: organizationID,
-		WorkspaceID:    workspaceID,
-	}
+	selectedScope := authorization.Scope{OrganizationID: organizationID, WorkspaceID: workspaceID}
 	workspaceNamespace := agentzv1alpha1.ScopeNamespace(agentzv1alpha1.ResourceScopeWorkspace, workspaceID)
 	organizationNamespace := agentzv1alpha1.ScopeNamespace(agentzv1alpha1.ResourceScopeOrganisation, organizationID)
 	namespaces := []string{workspaceNamespace, organizationNamespace}
@@ -296,10 +294,7 @@ func (s *Service) resolveDelegation(ctx context.Context, grant gatewaydb.Delegat
 		if err != nil {
 			return nil, err
 		}
-		key := ctrlclient.ObjectKey{
-			Namespace: model.Namespace,
-			Name:      model.Provider,
-		}
+		key := ctrlclient.ObjectKey{Namespace: model.Namespace, Name: model.Provider}
 		provider := resources.providers[key]
 		if provider == nil {
 			provider = &agentzv1alpha1.InferenceProvider{}
@@ -330,10 +325,7 @@ func (s *Service) resolveDelegation(ctx context.Context, grant gatewaydb.Delegat
 		if err != nil {
 			return nil, err
 		}
-		key := ctrlclient.ObjectKey{
-			Namespace: selected.Namespace,
-			Name:      selected.Connection,
-		}
+		key := ctrlclient.ObjectKey{Namespace: selected.Namespace, Name: selected.Connection}
 		connection := resources.mcp[key]
 		if connection == nil {
 			connection = &agentzv1alpha1.MCPConnection{}
@@ -492,22 +484,14 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if r.URL.Path == "/api/inference/v1/models" {
-		resources, err := s.resolveDelegation(r.Context(), grant, gatewayapi.DelegationCatalog{
-			Models: selection.Models,
-		})
+		resources, err := s.resolveDelegation(r.Context(), grant, gatewayapi.DelegationCatalog{Models: selection.Models})
 		if err != nil {
 			deny(err, false)
 			return
 		}
-		models := openAIModels{
-			Object: "list",
-			Data:   []openAIModel{},
-		}
+		models := openAIModels{Object: "list", Data: []openAIModel{}}
 		for _, model := range selection.Models {
-			key := ctrlclient.ObjectKey{
-				Namespace: model.Namespace,
-				Name:      model.Provider,
-			}
+			key := ctrlclient.ObjectKey{Namespace: model.Namespace, Name: model.Provider}
 			provider := resources.providers[key]
 			models.Data = append(models.Data, openAIModel{
 				ID:                 model.Id,
@@ -522,9 +506,7 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if mcpRequest {
-		_, err := s.resolveDelegation(r.Context(), grant, gatewayapi.DelegationCatalog{
-			Mcp: selection.Mcp,
-		})
+		_, err := s.resolveDelegation(r.Context(), grant, gatewayapi.DelegationCatalog{Mcp: selection.Mcp})
 		if err != nil {
 			deny(err, false)
 			return
@@ -614,10 +596,7 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 			deny(err, false)
 			return
 		}
-		key := ctrlclient.ObjectKey{
-			Namespace: selected.Namespace,
-			Name:      selected.Provider,
-		}
+		key := ctrlclient.ObjectKey{Namespace: selected.Namespace, Name: selected.Provider}
 		provider := resources.providers[key]
 		err = input.ValidateProvider(provider.Spec.Kind)
 		if err != nil {
@@ -749,7 +728,8 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 			return
 		}
 	}
-	if err := controller.SetReadDeadline(time.Time{}); err != nil && !errors.Is(err, http.ErrNotSupported) {
+	err = controller.SetReadDeadline(time.Time{})
+	if err != nil && !errors.Is(err, http.ErrNotSupported) {
 		s.delegationError(
 			w,
 			r,

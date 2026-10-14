@@ -127,10 +127,7 @@ func TestEvaluationReferencesFreezeBeforeJudgment(t *testing.T) {
 		if evaluation.Executions[i].Score != nil {
 			t.Fatal("execution received score without judgment")
 		}
-		evaluation.Executions[i].Judgment = &gatewayapi.EvaluationJudgment{
-			Correctness: 4,
-			Efficiency:  4,
-		}
+		evaluation.Executions[i].Judgment = &gatewayapi.EvaluationJudgment{Correctness: 4, Efficiency: 4}
 	}
 	scoreEvaluation(&evaluation)
 	if *evaluation.Executions[0].Score <= *evaluation.Executions[3].Score {
@@ -156,9 +153,7 @@ func TestEvaluationReferencesWaitForExecution(t *testing.T) {
 				Tokens:    new(100.0),
 				ToolCalls: new(2),
 			},
-			{
-				State: gatewayapi.EvaluationExecutionStateRunning,
-			},
+			{State: gatewayapi.EvaluationExecutionStateRunning},
 		},
 	}
 	scoreEvaluation(&evaluation)
@@ -178,10 +173,7 @@ func TestEvaluationScoreIgnoresDuration(t *testing.T) {
 				Tokens:          new(100.0),
 				ToolCalls:       new(4),
 				DurationSeconds: duration,
-				Judgment: &gatewayapi.EvaluationJudgment{
-					Correctness: 4,
-					Efficiency:  4,
-				},
+				Judgment:        &gatewayapi.EvaluationJudgment{Correctness: 4, Efficiency: 4},
 			}},
 		}
 		scoreEvaluation(&evaluation)
@@ -201,9 +193,7 @@ func TestEvaluationParallelRuns(t *testing.T) {
 				t.Fatal(err)
 			}
 			k8s := fake.NewClientBuilder().WithScheme(scheme).Build()
-			service := &Service{
-				k8sClient: k8s,
-			}
+			service := &Service{k8sClient: k8s}
 			job := workflowdb.WorkflowRunEvaluation{
 				TenantNamespace: "test",
 				AgentName:       "agent",
@@ -220,10 +210,7 @@ func TestEvaluationParallelRuns(t *testing.T) {
 				evaluation.Executions = append(evaluation.Executions, gatewayapi.EvaluationExecution{
 					RunName: fmt.Sprintf("eval-%s-%d", evaluation.Id, i),
 					State:   gatewayapi.EvaluationExecutionStateQueued,
-					Model: gatewayapi.EvaluationModel{
-						ProviderId: "provider",
-						ModelId:    fmt.Sprint(i),
-					},
+					Model:   gatewayapi.EvaluationModel{ProviderId: "provider", ModelId: fmt.Sprint(i)},
 				})
 			}
 			ctx := t.Context()
@@ -332,9 +319,7 @@ func TestEvaluationDeletion(t *testing.T) {
 		t.Fatal(err)
 	}
 	k8s := fake.NewClientBuilder().WithScheme(scheme).Build()
-	service := &Service{
-		k8sClient: k8s,
-	}
+	service := &Service{k8sClient: k8s}
 	job := workflowdb.WorkflowRunEvaluation{
 		ID:              uuid.New(),
 		TenantNamespace: "test",
@@ -398,10 +383,7 @@ type evaluationVariantCase struct {
 func TestEvaluationVariants(t *testing.T) {
 	catalog := `{"providers":[{"id":"provider","models":{"model":{"variants":{"low":{}}}}}]}`
 	tests := []evaluationVariantCase{
-		{
-			name:   "base needs no catalog",
-			status: 503,
-		},
+		{name: "base needs no catalog", status: 503},
 		{
 			name:   "fetch once for executions and judge",
 			body:   catalog,
@@ -473,10 +455,7 @@ func TestEvaluationVariants(t *testing.T) {
 			defer upstream.Close()
 			svc := sandboxTestService(t, nil)
 			var sandbox agentzv1alpha1.Sandbox
-			key := client.ObjectKey{
-				Namespace: testWorkspaceNS,
-				Name:      "workspace-sandbox",
-			}
+			key := client.ObjectKey{Namespace: testWorkspaceNS, Name: "workspace-sandbox"}
 			err := svc.k8sClient.Get(t.Context(), key, &sandbox)
 			if err != nil {
 				t.Fatal(err)
@@ -684,13 +663,9 @@ func TestEvaluationJudgeSchema(t *testing.T) {
 				instructions = " \n\t "
 			}
 			evaluation := gatewayapi.WorkflowEvaluation{
-				Id: uuid.New(),
-				Workflow: gatewayapi.Workflow{
-					AgentName: "agent",
-				},
-				Request: gatewayapi.WorkflowEvaluationRequest{
-					JudgeInstructions: &instructions,
-				},
+				Id:       uuid.New(),
+				Workflow: gatewayapi.Workflow{AgentName: "agent"},
+				Request:  gatewayapi.WorkflowEvaluationRequest{JudgeInstructions: &instructions},
 			}
 			if mode == "omitted" {
 				evaluation.Request.JudgeInstructions = nil

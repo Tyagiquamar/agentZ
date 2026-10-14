@@ -40,10 +40,7 @@ var opencodeRouteMatcher = newOpenCodeRouteMatcher()
 var opencodeRouteIndex = func() map[opencodeRouteKey]opencodeRoute {
 	routes := make(map[opencodeRouteKey]opencodeRoute, len(opencodeRoutes))
 	for _, route := range opencodeRoutes {
-		key := opencodeRouteKey{
-			method: route.Method,
-			path:   route.Path,
-		}
+		key := opencodeRouteKey{method: route.Method, path: route.Path}
 		routes[key] = route
 	}
 	return routes
@@ -163,7 +160,9 @@ func (s *Service) handleOpenCodeProxy(w http.ResponseWriter, r *http.Request) {
 		r.Body = http.MaxBytesReader(w, r.Body, opencodeProxyBodyLimitBytes)
 	}
 	switch route.ID {
-	case "session.command", "session.shell", "session.summarize", "v2.session.compact", "session.revert", "session.unrevert", "session.delete", "v2.session.revert.stage", "v2.session.revert.commit", "v2.session.revert.clear":
+	case "session.command", "session.shell", "session.summarize", "v2.session.compact",
+		"session.revert", "session.unrevert", "session.delete",
+		"v2.session.revert.stage", "v2.session.revert.commit", "v2.session.revert.clear":
 		err := s.cancelChatExecution(r.Context(), gatewaydb.GatewayCancelChatExecutionParams{
 			WorkspaceID: access.workspaceID,
 			AgentName:   agentName,
@@ -444,9 +443,7 @@ func (s *Service) streamOpenCodeEvents(w http.ResponseWriter, r *http.Request, r
 	}
 	upstream := *target
 	upstream.Path = ""
-	for frame, err := range sse.Read(resp.Body, &sse.ReadConfig{
-		MaxEventSize: opencodeProxyBodyLimitBytes,
-	}) {
+	for frame, err := range sse.Read(resp.Body, &sse.ReadConfig{MaxEventSize: opencodeProxyBodyLimitBytes}) {
 		if err != nil {
 			if r.Context().Err() == nil {
 				slog.ErrorContext(r.Context(), "read agent events", "agent", agentName, "error", err)
@@ -866,10 +863,7 @@ func (s *Service) recordOpenCodePrompt(ctx context.Context, route *opencodeRoute
 			AgentName:   agentName,
 			SessionID:   route.Params["sessionID"],
 			UserID:      auth.userID,
-			MessagedAt: pgtype.Timestamptz{
-				Time:  time.Now().UTC(),
-				Valid: true,
-			},
+			MessagedAt:  pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
 		},
 	)
 	if err != nil {
@@ -968,12 +962,9 @@ func (s *Service) refreshOpenCodeSession(ctx context.Context, target *url.URL, w
 			return err
 		}
 		err = s.queries.GatewayDeleteChatSession(ctx, gatewaydb.GatewayDeleteChatSessionParams{
-			WorkspaceID: workspaceID,
-			AgentName:   agentName,
-			SessionID: pgtype.Text{
-				String: sessionID,
-				Valid:  true,
-			},
+			WorkspaceID:     workspaceID,
+			AgentName:       agentName,
+			SessionID:       pgtype.Text{String: sessionID, Valid: true},
 			TenantNamespace: namespace,
 		})
 		if err != nil {
@@ -998,10 +989,7 @@ func (s *Service) refreshOpenCodeSession(ctx context.Context, target *url.URL, w
 func (s *Service) storeOpenCodeSession(ctx context.Context, workspaceID, agentName string, kind gatewaydb.ChatSessionKind, session gatewayapi.OpencodeSession) error {
 	var parentID pgtype.Text
 	if session.ParentID != nil {
-		parentID = pgtype.Text{
-			String: *session.ParentID,
-			Valid:  true,
-		}
+		parentID = pgtype.Text{String: *session.ParentID, Valid: true}
 	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -1034,10 +1022,7 @@ func (s *Service) storeOpenCodeSession(ctx context.Context, workspaceID, agentNa
 				WorkspaceID: workspaceID,
 				AgentName:   agentName,
 				WorktreeID:  tree.ID,
-				SessionID: pgtype.Text{
-					String: session.Id,
-					Valid:  true,
-				},
+				SessionID:   pgtype.Text{String: session.Id, Valid: true},
 			})
 			if err != nil {
 				return err
@@ -1131,10 +1116,7 @@ func matchOpenCodeRoute(method string, path string) (*opencodeRouteMatch, bool) 
 		for i, key := range rctx.URLParams.Keys {
 			params[key] = rctx.URLParams.Values[i]
 		}
-		route := opencodeRouteIndex[opencodeRouteKey{
-			method: method,
-			path:   rctx.RoutePattern(),
-		}]
+		route := opencodeRouteIndex[opencodeRouteKey{method: method, path: rctx.RoutePattern()}]
 		return &opencodeRouteMatch{
 			Method:    method,
 			Path:      route.Path,

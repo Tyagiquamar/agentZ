@@ -67,16 +67,10 @@ func TestReconcileMCPAgentRouteIdentity(t *testing.T) {
 	}
 
 	sandbox := &agentzv1alpha1.Sandbox{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      sandboxName,
-			Namespace: namespace,
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: sandboxName, Namespace: namespace},
 	}
 	agt := &agentzv1alpha1.Agent{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      agentName,
-			Namespace: namespace,
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: agentName, Namespace: namespace},
 		Spec: agentzv1alpha1.AgentSpec{
 			SandboxRef: agentzv1alpha1.ResourceReference{
 				Scope: agentzv1alpha1.ResourceScopeWorkspace,
@@ -131,10 +125,7 @@ func TestReconcileMCPAgentRouteIdentity(t *testing.T) {
 	}
 
 	route := &gwv1.HTTPRoute{}
-	key := client.ObjectKey{
-		Name:      mcp.SandboxRouteName(sandboxName),
-		Namespace: namespace,
-	}
+	key := client.ObjectKey{Name: mcp.SandboxRouteName(sandboxName), Namespace: namespace}
 	if err := k8sClient.Get(ctx, key, route); err != nil {
 		t.Fatalf("get MCP HTTPRoute: %v", err)
 	}
@@ -147,10 +138,7 @@ func TestReconcileMCPAgentRouteIdentity(t *testing.T) {
 	}
 
 	policy := &ciliumv2.CiliumNetworkPolicy{}
-	key = client.ObjectKey{
-		Name:      mcp.GatewayName,
-		Namespace: namespace,
-	}
+	key = client.ObjectKey{Name: mcp.GatewayName, Namespace: namespace}
 	if err := k8sClient.Get(ctx, key, policy); err != nil {
 		t.Fatalf("get MCP CiliumNetworkPolicy: %v", err)
 	}
@@ -185,10 +173,7 @@ func TestReconcileMCPAgentRouteIdentity(t *testing.T) {
 	if err := r.reconcileRoute(ctx, sandbox); err != nil {
 		t.Fatalf("reconcileRoute() after Agent deletion error = %v", err)
 	}
-	key = client.ObjectKey{
-		Name:      mcp.SandboxRouteName(sandboxName),
-		Namespace: namespace,
-	}
+	key = client.ObjectKey{Name: mcp.SandboxRouteName(sandboxName), Namespace: namespace}
 	if err := k8sClient.Get(ctx, key, route); !apierrors.IsNotFound(err) {
 		t.Fatalf("get MCP HTTPRoute after Agent deletion error = %v, want not found", err)
 	}
@@ -261,9 +246,7 @@ func TestReconcileInferenceGatewayExtAuthEgress(t *testing.T) {
 					},
 				},
 				&agentzv1alpha1.Workspace{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: workspaceNamespace,
-					},
+					ObjectMeta: metav1.ObjectMeta{Name: workspaceNamespace},
 					Spec: agentzv1alpha1.WorkspaceSpec{
 						WorkspaceID:    workspaceID,
 						OrganizationID: organizationID,
@@ -324,10 +307,7 @@ func TestReconcileInferenceGatewayExtAuthEgress(t *testing.T) {
 			}
 
 			policy := &ciliumv2.CiliumNetworkPolicy{}
-			key := client.ObjectKey{
-				Name:      inference.GatewayName,
-				Namespace: workspaceNamespace,
-			}
+			key := client.ObjectKey{Name: inference.GatewayName, Namespace: workspaceNamespace}
 			if err := k8sClient.Get(context.Background(), key, policy); err != nil {
 				t.Fatalf("get inference CiliumNetworkPolicy: %v", err)
 			}
@@ -411,9 +391,7 @@ func TestReconcileDeletionFindsOrganisationSandboxAgentAcrossWorkspaces(t *testi
 			},
 		},
 		&agentzv1alpha1.Workspace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: workspaceNamespace,
-			},
+			ObjectMeta: metav1.ObjectMeta{Name: workspaceNamespace},
 			Spec: agentzv1alpha1.WorkspaceSpec{
 				WorkspaceID:    workspaceID,
 				OrganizationID: organizationID,
@@ -423,10 +401,7 @@ func TestReconcileDeletionFindsOrganisationSandboxAgentAcrossWorkspaces(t *testi
 			},
 		},
 		&agentzv1alpha1.Agent{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "organisation-agent",
-				Namespace: workspaceNamespace,
-			},
+			ObjectMeta: metav1.ObjectMeta{Name: "organisation-agent", Namespace: workspaceNamespace},
 			Spec: agentzv1alpha1.AgentSpec{
 				SandboxRef: agentzv1alpha1.ResourceReference{
 					Scope: agentzv1alpha1.ResourceScopeOrganisation,
@@ -435,10 +410,7 @@ func TestReconcileDeletionFindsOrganisationSandboxAgentAcrossWorkspaces(t *testi
 			},
 		},
 		&agentzv1alpha1.Agent{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "workspace-agent",
-				Namespace: workspaceNamespace,
-			},
+			ObjectMeta: metav1.ObjectMeta{Name: "workspace-agent", Namespace: workspaceNamespace},
 			Spec: agentzv1alpha1.AgentSpec{
 				SandboxRef: agentzv1alpha1.ResourceReference{
 					Scope: agentzv1alpha1.ResourceScopeWorkspace,
@@ -459,10 +431,7 @@ func TestReconcileDeletionFindsOrganisationSandboxAgentAcrossWorkspaces(t *testi
 			},
 		).
 		Build()
-	r := &Reconciler{
-		Client: k8sClient,
-		Scheme: scheme,
-	}
+	r := &Reconciler{Client: k8sClient, Scheme: scheme}
 	referencing, err := r.referencingAgents(context.Background(), sandbox)
 	if err != nil {
 		t.Fatalf("referencingAgents() error = %v", err)

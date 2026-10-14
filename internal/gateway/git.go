@@ -168,9 +168,7 @@ func (s *Service) codingIdentity(ctx context.Context, userID string) (codingIden
 	}
 	identity.client, err = github.NewClient(
 		github.WithAuthToken(identity.token),
-		github.WithHTTPClient(&http.Client{
-			Timeout: 30 * time.Second,
-		}),
+		github.WithHTTPClient(&http.Client{Timeout: 30 * time.Second}),
 	)
 	if err != nil {
 		return identity, err
@@ -194,9 +192,7 @@ func (s *Service) codingIdentity(ctx context.Context, userID string) (codingIden
 // Public repository metadata alone does not establish installation access.
 func (identity codingIdentity) repositories(ctx context.Context) iter.Seq2[*github.Repository, error] {
 	return func(yield func(*github.Repository, error) bool) {
-		opts := &github.ListOptions{
-			PerPage: 100,
-		}
+		opts := &github.ListOptions{PerPage: 100}
 		for installation, err := range identity.client.Apps.ListUserInstallationsIter(ctx, opts) {
 			if err != nil {
 				yield(nil, err)

@@ -51,7 +51,9 @@ var baseOperationCapabilities = map[string][]string{
 		"listSecrets", "watchSecrets",
 	},
 	"agent.use_shared": {
-		"getChatExecution", "getWorkflowExecution", "startWorkflowExecution",
+		"getChatExecution",
+		"getWorkflowExecution",
+		"startWorkflowExecution",
 		"listChatInputs",
 		"submitChatInput",
 		"updateChatInput",
@@ -78,8 +80,11 @@ var baseOperationCapabilities = map[string][]string{
 		"createAgentFile",
 		"createWorkflow",
 		"listAgentModelCatalog",
-		"createWorkflowEvaluation", "listWorkflowEvaluations",
-		"getWorkflowEvaluation", "updateWorkflowEvaluation", "deleteWorkflowEvaluation",
+		"createWorkflowEvaluation",
+		"listWorkflowEvaluations",
+		"getWorkflowEvaluation",
+		"updateWorkflowEvaluation",
+		"deleteWorkflowEvaluation",
 		"createWorkflowRun",
 		"createWorkflowSchedule",
 		"deleteAgent",
@@ -343,9 +348,7 @@ func rewriteOpenCode(doc map[string]any) (map[string]any, routeManifest, error) 
 	rewriteRefs(doc, refMap)
 
 	filteredPaths := make(map[string]any)
-	manifest := routeManifest{
-		Routes: make([]routeSpec, 0),
-	}
+	manifest := routeManifest{Routes: make([]routeSpec, 0)}
 	for path, itemAny := range paths {
 		item, ok := itemAny.(map[string]any)
 		if !ok {
@@ -423,10 +426,7 @@ func applyBaseCapabilities(doc map[string]any) error {
 			if _, exists := capabilities[operation]; exists {
 				return fmt.Errorf("base operation %q has multiple capability mappings", operation)
 			}
-			capabilities[operation] = operationCapability{
-				Scheme: scheme,
-				Scope:  scope,
-			}
+			capabilities[operation] = operationCapability{Scheme: scheme, Scope: scope}
 		}
 	}
 

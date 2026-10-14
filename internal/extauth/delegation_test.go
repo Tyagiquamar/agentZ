@@ -53,9 +53,7 @@ func TestDelegationCredentialsRequireProjectedResourceRevision(t *testing.T) {
 			Kind: agentzv1alpha1.InferenceProviderKindOpenAI,
 		},
 	}
-	connection := &agentzv1alpha1.MCPConnection{
-		ObjectMeta: metadata,
-	}
+	connection := &agentzv1alpha1.MCPConnection{ObjectMeta: metadata}
 	service := &Service{
 		namespace: "owner",
 		kube:      fake.NewClientBuilder().WithScheme(scheme).WithObjects(provider, connection).Build(),
@@ -70,17 +68,8 @@ func TestDelegationCredentialsRequireProjectedResourceRevision(t *testing.T) {
 					generation: strconv.FormatInt(metadata.Generation, 10),
 					want:       codes.OK,
 				},
-				{
-					name:       "stale spec",
-					uid:        "original",
-					generation: "1",
-					want:       codes.Unavailable,
-				},
-				{
-					name: "missing revision",
-					uid:  "original",
-					want: codes.Unavailable,
-				},
+				{name: "stale spec", uid: "original", generation: "1", want: codes.Unavailable},
+				{name: "missing revision", uid: "original", want: codes.Unavailable},
 				{
 					name:       "wrong owner",
 					uid:        "original",
@@ -128,9 +117,7 @@ func TestDelegationCredentialsRequireProjectedResourceRevision(t *testing.T) {
 						t.Fatal("ordinary authorization listener admitted delegated credential access")
 					}
 
-					response, err := (&delegationServer{
-						Service: service,
-					}).Check(t.Context(), request)
+					response, err := (&delegationServer{Service: service}).Check(t.Context(), request)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -193,9 +180,7 @@ func TestOAuthRefreshKeepsConcurrentConnectionCredentialsSeparate(t *testing.T) 
 					return nil, err
 				}
 			}
-			payload = baoapi.Secret{
-				Data: map[string]any{"data": secrets[path]},
-			}
+			payload = baoapi.Secret{Data: map[string]any{"data": secrets[path]}}
 		case "8.8.8.8":
 			if err := r.ParseForm(); err != nil {
 				return nil, err
@@ -224,20 +209,13 @@ func TestOAuthRefreshKeepsConcurrentConnectionCredentialsSeparate(t *testing.T) 
 		}, nil
 	})
 	bao, err := baoapi.NewClient(&baoapi.Config{
-		Address: "http://bao.invalid",
-		HttpClient: &http.Client{
-			Transport: transport,
-		},
+		Address:    "http://bao.invalid",
+		HttpClient: &http.Client{Transport: transport},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	service := &Service{
-		kv: bao.KVv2("secrets"),
-		http: &http.Client{
-			Transport: transport,
-		},
-	}
+	service := &Service{kv: bao.KVv2("secrets"), http: &http.Client{Transport: transport}}
 	old := &agentzv1alpha1.MCPConnection{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "selected",
@@ -249,10 +227,7 @@ func TestOAuthRefreshKeepsConcurrentConnectionCredentialsSeparate(t *testing.T) 
 			Auth: &agentzv1alpha1.MCPConnectionAuth{
 				OAuth: &agentzv1alpha1.MCPConnectionOAuthAuth{
 					TokenEndpoint: "https://8.8.8.8/token",
-					SecretRef: &agentzv1alpha1.MCPConnectionSecretRef{
-						Path: "old",
-						Key:  "credentials",
-					},
+					SecretRef:     &agentzv1alpha1.MCPConnectionSecretRef{Path: "old", Key: "credentials"},
 				},
 			},
 		},
@@ -334,30 +309,14 @@ type probeCatalogCase struct {
 
 func TestMCPProbeDiscoversBoundedPaginatedCatalog(t *testing.T) {
 	cases := []probeCatalogCase{
-		{
-			name:    "empty",
-			healthy: true,
-		},
-		{
-			name:    "multiple pages",
-			count:   5,
-			healthy: true,
-		},
-		{
-			name:  "item limit",
-			count: maxProbeCatalogItems + 1,
-		},
-		{
-			name:    "byte limit",
-			count:   2,
-			uriSize: maxProbeCatalogBytes / 2,
-		},
+		{name: "empty", healthy: true},
+		{name: "multiple pages", count: 5, healthy: true},
+		{name: "item limit", count: maxProbeCatalogItems + 1},
+		{name: "byte limit", count: 2, uriSize: maxProbeCatalogBytes / 2},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
-			server := mcpsdk.NewServer(&mcpsdk.Implementation{
-				Name: "probe-test",
-			}, &mcpsdk.ServerOptions{
+			server := mcpsdk.NewServer(&mcpsdk.Implementation{Name: "probe-test"}, &mcpsdk.ServerOptions{
 				PageSize: 2,
 				Capabilities: &mcpsdk.ServerCapabilities{
 					Tools:     &mcpsdk.ToolCapabilities{},
@@ -367,32 +326,19 @@ func TestMCPProbeDiscoversBoundedPaginatedCatalog(t *testing.T) {
 			})
 			for i := range test.count {
 				name := fmt.Sprintf("item-%04d", i)
-				server.AddTool(&mcpsdk.Tool{
-					Name:        name,
-					InputSchema: json.RawMessage(`{"type":"object"}`),
-				}, nil)
-				server.AddPrompt(&mcpsdk.Prompt{
-					Name: name,
-				}, nil)
-				server.AddResource(&mcpsdk.Resource{
-					URI: "test:///" + name + strings.Repeat("x", test.uriSize),
-				}, nil)
+				server.AddTool(&mcpsdk.Tool{Name: name, InputSchema: json.RawMessage(`{"type":"object"}`)}, nil)
+				server.AddPrompt(&mcpsdk.Prompt{Name: name}, nil)
+				server.AddResource(&mcpsdk.Resource{URI: "test:///" + name + strings.Repeat("x", test.uriSize)}, nil)
 			}
 			upstream := httptest.NewServer(mcpsdk.NewStreamableHTTPHandler(
 				func(*http.Request) *mcpsdk.Server { return server },
-				&mcpsdk.StreamableHTTPOptions{
-					JSONResponse: true,
-				},
+				&mcpsdk.StreamableHTTPOptions{JSONResponse: true},
 			))
 			defer upstream.Close()
-			service := &Service{
-				probeTimeout: 10 * time.Second,
-			}
+			service := &Service{probeTimeout: 10 * time.Second}
 			connection := &agentzv1alpha1.MCPConnection{
 				Spec: agentzv1alpha1.MCPConnectionSpec{
-					Endpoint: agentzv1alpha1.MCPConnectionEndpoint{
-						URL: upstream.URL,
-					},
+					Endpoint: agentzv1alpha1.MCPConnectionEndpoint{URL: upstream.URL},
 				},
 			}
 			outcome := service.probeMCPConnectionOnce(t.Context(), connection)
@@ -460,9 +406,7 @@ func TestMCPProbeCatalogRequiresCurrentResourceRevision(t *testing.T) {
 					Generation: 2,
 				},
 				Status: agentzv1alpha1.MCPConnectionStatus{
-					Tools: []agentzv1alpha1.MCPConnectionTool{{
-						Name: "current",
-					}},
+					Tools:         []agentzv1alpha1.MCPConnectionTool{{Name: "current"}},
 					LastProbeTime: new(metav1.NewTime(time.Unix(2, 0))),
 				},
 			}
@@ -475,14 +419,13 @@ func TestMCPProbeCatalogRequiresCurrentResourceRevision(t *testing.T) {
 				healthy:       true,
 				reason:        mcp.ReasonReady,
 				lastProbeTime: metav1.NewTime(test.probeTime),
-				tools: []agentzv1alpha1.MCPConnectionTool{{
-					Name: "probed",
-				}},
+				tools:         []agentzv1alpha1.MCPConnectionTool{{Name: "probed"}},
 			}
 			if err := service.writeMCPProbeStatus(t.Context(), probed, outcome); err != nil {
 				t.Fatal(err)
 			}
-			if err := service.kube.Get(t.Context(), client.ObjectKeyFromObject(current), current); err != nil {
+			err := service.kube.Get(t.Context(), client.ObjectKeyFromObject(current), current)
+			if err != nil {
 				t.Fatal(err)
 			}
 			want := "current"

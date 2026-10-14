@@ -590,10 +590,7 @@ func (s *Service) DeleteSandbox(w http.ResponseWriter, r *http.Request, sandboxN
 				"invalid_request",
 				"request validation failed",
 				errBadRequest,
-				gatewayapi.FieldError{
-					Field:   "name",
-					Message: "required",
-				},
+				gatewayapi.FieldError{Field: "name", Message: "required"},
 			),
 		)
 		return
@@ -939,9 +936,7 @@ func (s *Service) UpdateSandbox(w http.ResponseWriter, r *http.Request, sandboxN
 	}
 	desiredInference := sandboxInferenceFromAPI(req.Inference)
 	dependencies := &agentzv1alpha1.Sandbox{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: access.namespace,
-		},
+		ObjectMeta: metav1.ObjectMeta{Namespace: access.namespace},
 		Spec: agentzv1alpha1.SandboxSpec{
 			MCPConnectionRefs: mcpConnectionRefs,
 			Skills:            resourceReferencesToCRD(skills),
@@ -1285,10 +1280,7 @@ func validateSandboxInferenceScopes(inference gatewayapi.SandboxInference, works
 func validateSandboxName(name string) []gatewayapi.FieldError {
 	fields := []gatewayapi.FieldError{}
 	if name == "" {
-		fields = append(fields, gatewayapi.FieldError{
-			Field:   "name",
-			Message: "required",
-		})
+		fields = append(fields, gatewayapi.FieldError{Field: "name", Message: "required"})
 	}
 	if len(name) > 32 {
 		fields = append(
@@ -1352,10 +1344,7 @@ func validateMCPConnectionRefList(refs []gatewayapi.MCPConnectionRef, workspace 
 			)
 			continue
 		}
-		key := gatewayapi.ResourceReference{
-			Scope: ref.Scope,
-			Name:  name,
-		}
+		key := gatewayapi.ResourceReference{Scope: ref.Scope, Name: name}
 		if first, ok := seen[key]; ok {
 			fields = append(
 				fields,
@@ -1577,10 +1566,7 @@ func (s *Service) validateSandboxDependencies(ctx context.Context, access resour
 				continue
 			}
 			pool := &agentzv1alpha1.InferencePool{}
-			err = s.k8sClient.Get(ctx, ctrlclient.ObjectKey{
-				Namespace: ns,
-				Name:      ref.Model,
-			}, pool)
+			err = s.k8sClient.Get(ctx, ctrlclient.ObjectKey{Namespace: ns, Name: ref.Model}, pool)
 			if apierrors.IsNotFound(err) {
 				fields = append(
 					fields,
@@ -1636,10 +1622,7 @@ func (s *Service) validateSandboxDependencies(ctx context.Context, access resour
 			continue
 		}
 		provider := &agentzv1alpha1.InferenceProvider{}
-		err = s.k8sClient.Get(ctx, ctrlclient.ObjectKey{
-			Namespace: ns,
-			Name:      ref.Provider,
-		}, provider)
+		err = s.k8sClient.Get(ctx, ctrlclient.ObjectKey{Namespace: ns, Name: ref.Provider}, provider)
 		if apierrors.IsNotFound(err) {
 			fields = append(
 				fields,

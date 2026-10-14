@@ -133,9 +133,7 @@ func Serve(ctx context.Context, cfg Config) error {
 		return fmt.Errorf("load kube config: %w", err)
 	}
 
-	kubeClient, err := ctrlclient.New(kubeCfg, ctrlclient.Options{
-		Scheme: scheme,
-	})
+	kubeClient, err := ctrlclient.New(kubeCfg, ctrlclient.Options{Scheme: scheme})
 	if err != nil {
 		return fmt.Errorf("create kube client: %w", err)
 	}
@@ -249,9 +247,7 @@ func Serve(ctx context.Context, cfg Config) error {
 		}
 		defer delegatedListener.Close()
 		delegatedServer = grpc.NewServer(grpc.MaxRecvMsgSize(34 << 20))
-		authv3.RegisterAuthorizationServer(delegatedServer, &delegationServer{
-			Service: svc,
-		})
+		authv3.RegisterAuthorizationServer(delegatedServer, &delegationServer{Service: svc})
 	}
 	srv := grpc.NewServer()
 	authv3.RegisterAuthorizationServer(srv, svc)
@@ -788,11 +784,8 @@ func injectionForLocation(location *agentzv1alpha1.MCPConnectionAuthLocation, to
 		return injectedRequest{
 			headers: []*corev3.HeaderValueOption{{
 				Header: &corev3.HeaderValue{
-					Key: "Cookie",
-					Value: (&http.Cookie{
-						Name:  location.Cookie.Name,
-						Value: token,
-					}).String(),
+					Key:   "Cookie",
+					Value: (&http.Cookie{Name: location.Cookie.Name, Value: token}).String(),
 				},
 			}},
 		}, nil
@@ -864,18 +857,36 @@ func (s *delegationServer) Check(ctx context.Context, request *authv3.CheckReque
 	defer cancel()
 	extensions := request.GetAttributes().GetContextExtensions()
 	if extensions["agentz.namespace"] != s.namespace {
-		return denyDecision(codes.PermissionDenied, typev3.StatusCode_Forbidden, "delegation owner mismatch", "delegation_owner", slog.LevelWarn).response, nil
+		return denyDecision(
+			codes.PermissionDenied,
+			typev3.StatusCode_Forbidden,
+			"delegation owner mismatch",
+			"delegation_owner",
+			slog.LevelWarn,
+		).response, nil
 	}
 	httpRequest := request.GetAttributes().GetRequest().GetHttp()
 	if httpRequest == nil {
-		return denyDecision(codes.PermissionDenied, typev3.StatusCode_Forbidden, "delegation HTTP request missing", "delegation_request", slog.LevelWarn).response, nil
+		return denyDecision(
+			codes.PermissionDenied,
+			typev3.StatusCode_Forbidden,
+			"delegation HTTP request missing",
+			"delegation_request",
+			slog.LevelWarn,
+		).response, nil
 	}
 	operation := extensions["agentz.operation"]
 	if operation == "inference" {
 		path := httpRequest.GetPath()
 		responses := strings.HasSuffix(path, "/responses")
 		if httpRequest.GetMethod() != "POST" || (!responses && !strings.HasSuffix(path, "/chat/completions")) {
-			return denyDecision(codes.PermissionDenied, typev3.StatusCode_Forbidden, "inference endpoint is not delegated", "delegation_endpoint", slog.LevelWarn).response, nil
+			return denyDecision(
+				codes.PermissionDenied,
+				typev3.StatusCode_Forbidden,
+				"inference endpoint is not delegated",
+				"delegation_endpoint",
+				slog.LevelWarn,
+			).response, nil
 		}
 		body := httpRequest.GetRawBody()
 		if len(body) == 0 {
@@ -883,17 +894,20 @@ func (s *delegationServer) Check(ctx context.Context, request *authv3.CheckReque
 		}
 		input, err := inference.ValidateDelegatedRequest(body, responses)
 		if err != nil || input.Model != extensions["agentz.target"] {
-			return denyDecision(codes.PermissionDenied, typev3.StatusCode_Forbidden, "invalid delegated inference request", "delegation_body", slog.LevelWarn).response, nil
+			return denyDecision(
+				codes.PermissionDenied,
+				typev3.StatusCode_Forbidden,
+				"invalid delegated inference request",
+				"delegation_body",
+				slog.LevelWarn,
+			).response, nil
 		}
 	}
 	// A spec change must reach the native route before it can receive current
 	// credentials. UIDs alone do not bind credentials to an upstream endpoint.
 	var injection *authv3.OkHttpResponse
 	var err error
-	key := ctrlclient.ObjectKey{
-		Namespace: s.namespace,
-		Name:      extensions["agentz.name"],
-	}
+	key := ctrlclient.ObjectKey{Namespace: s.namespace, Name: extensions["agentz.name"]}
 	switch operation {
 	case "inference":
 		provider := &agentzv1alpha1.InferenceProvider{}
@@ -931,11 +945,7 @@ func (s *delegationServer) Check(ctx context.Context, request *authv3.CheckReque
 		).response, nil
 	}
 	return &authv3.CheckResponse{
-		Status: &statuspb.Status{
-			Code: int32(codes.OK),
-		},
-		HttpResponse: &authv3.CheckResponse_OkResponse{
-			OkResponse: injection,
-		},
+		Status:       &statuspb.Status{Code: int32(codes.OK)},
+		HttpResponse: &authv3.CheckResponse_OkResponse{OkResponse: injection},
 	}, nil
 }

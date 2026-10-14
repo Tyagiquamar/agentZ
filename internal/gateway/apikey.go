@@ -311,10 +311,7 @@ func (s *Service) validateAPIKeyTargets(ctx context.Context, scope apiKeyScope, 
 }
 
 func (s *Service) revokeAPIKeyScope(ctx context.Context, scope apiKeyScope, reason string) error {
-	now := pgtype.Timestamptz{
-		Time:  time.Now().UTC(),
-		Valid: true,
-	}
+	now := pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true}
 	_, err := s.queries.GatewayRevokeScopedAPIKey(
 		ctx,
 		gatewaydb.GatewayRevokeScopedAPIKeyParams{
@@ -323,14 +320,8 @@ func (s *Service) revokeAPIKeyScope(ctx context.Context, scope apiKeyScope, reas
 			OrganizationID: scope.OrganizationID,
 			WorkspaceID:    scope.WorkspaceID,
 			RevokedAt:      now,
-			RevokedReason: pgtype.Text{
-				String: reason,
-				Valid:  true,
-			},
-			UpdatedAt: pgtype.Timestamp{
-				Time:  now.Time,
-				Valid: true,
-			},
+			RevokedReason:  pgtype.Text{String: reason, Valid: true},
+			UpdatedAt:      pgtype.Timestamp{Time: now.Time, Valid: true},
 		},
 	)
 	if err != nil {

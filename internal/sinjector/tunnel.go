@@ -69,17 +69,11 @@ func (p *proxy) handleConnect(w http.ResponseWriter, r *http.Request) {
 	br := bufio.NewReader(client)
 	peek, err := br.Peek(8)
 	if err != nil {
-		relay(&readBufferedConn{
-			Conn: client,
-			r:    br,
-		}, upstream)
+		relay(&readBufferedConn{Conn: client, r: br}, upstream)
 		return
 	}
 
-	clientBuf := &readBufferedConn{
-		Conn: client,
-		r:    br,
-	}
+	clientBuf := &readBufferedConn{Conn: client, r: br}
 
 	switch {
 	case looksLikeTLS(peek):
@@ -121,17 +115,11 @@ func (p *proxy) handleTLS(ctx context.Context, client net.Conn, upstream net.Con
 	tlsBr := bufio.NewReader(tlsClient)
 	tlsPeek, err := tlsBr.Peek(8)
 	if err != nil {
-		relay(&readBufferedConn{
-			Conn: tlsClient,
-			r:    tlsBr,
-		}, tlsUpstream)
+		relay(&readBufferedConn{Conn: tlsClient, r: tlsBr}, tlsUpstream)
 		return
 	}
 
-	tlsClientBuf := &readBufferedConn{
-		Conn: tlsClient,
-		r:    tlsBr,
-	}
+	tlsClientBuf := &readBufferedConn{Conn: tlsClient, r: tlsBr}
 
 	if looksLikeHTTP(tlsPeek) {
 		_ = tlsUpstream.Close()

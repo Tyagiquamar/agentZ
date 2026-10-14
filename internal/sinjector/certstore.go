@@ -49,10 +49,7 @@ func (s *certStore) Get(hostname string, gen func() (*tls.Certificate, error)) (
 		entry := elem.Value.(certEntry)
 		return entry.cert, nil
 	}
-	elem := s.order.PushFront(certEntry{
-		host: hostname,
-		cert: cert,
-	})
+	elem := s.order.PushFront(certEntry{host: hostname, cert: cert})
 	s.items[hostname] = elem
 	for s.limit > 0 && s.order.Len() > s.limit {
 		back := s.order.Back()

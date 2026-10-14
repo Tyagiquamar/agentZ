@@ -70,10 +70,7 @@ func TestResolvePoolContract(t *testing.T) {
 	}
 	reader := poolTestReader(t, scheme, primary, secondary)
 	pool := &agentzv1alpha1.InferencePool{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "pool",
-			Namespace: "default",
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: "pool", Namespace: "default"},
 		Spec: agentzv1alpha1.InferencePoolSpec{
 			Members: []agentzv1alpha1.InferencePoolMember{
 				{
@@ -144,10 +141,7 @@ func TestResolvePoolRejectsUnsupportedAPIConversion(t *testing.T) {
 	}
 	reader := poolTestReader(t, scheme, primary, secondary)
 	pool := &agentzv1alpha1.InferencePool{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "pool",
-			Namespace: "default",
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: "pool", Namespace: "default"},
 		Spec: agentzv1alpha1.InferencePoolSpec{
 			Members: []agentzv1alpha1.InferencePoolMember{
 				{
@@ -184,10 +178,7 @@ func TestResolvePoolRejectsInvalidMembership(t *testing.T) {
 		t.Fatal(err)
 	}
 	tests := []resolvePoolInvalidMembershipCase{
-		{
-			name:  "empty",
-			field: "members",
-		},
+		{name: "empty", field: "members"},
 		{
 			name: "unavailable workspace scope",
 			members: []agentzv1alpha1.InferencePoolMember{{
@@ -289,13 +280,8 @@ func TestResolvePoolRejectsInvalidMembership(t *testing.T) {
 			func(t *testing.T) {
 				reader := poolTestReader(t, scheme, provider.DeepCopy())
 				pool := &agentzv1alpha1.InferencePool{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "pool",
-						Namespace: "default",
-					},
-					Spec: agentzv1alpha1.InferencePoolSpec{
-						Members: test.members,
-					},
+					ObjectMeta: metav1.ObjectMeta{Name: "pool", Namespace: "default"},
+					Spec:       agentzv1alpha1.InferencePoolSpec{Members: test.members},
 				}
 				_, issues, err := ResolvePool(context.Background(), reader, pool)
 				if err != nil {
@@ -315,13 +301,8 @@ func TestRenderPoolBackend(t *testing.T) {
 	primary := poolProvider("primary", agentzv1alpha1.InferenceProviderKindOpenAI)
 	secondary := poolProvider("secondary", agentzv1alpha1.InferenceProviderKindAnthropic)
 	pool := &agentzv1alpha1.InferencePool{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "logical",
-			Namespace: "default",
-		},
-		Spec: agentzv1alpha1.InferencePoolSpec{
-			AutomaticFailover: true,
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: "logical", Namespace: "default"},
+		Spec:       agentzv1alpha1.InferencePoolSpec{AutomaticFailover: true},
 	}
 	definition := PoolDefinition{
 		Members: []ResolvedPoolMember{
@@ -457,11 +438,8 @@ func TestRenderSandboxPoolTarget(t *testing.T) {
 
 func poolProvider(name string, kind agentzv1alpha1.InferenceProviderKind) *agentzv1alpha1.InferenceProvider {
 	return &agentzv1alpha1.InferenceProvider{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: "default",
-		},
-		Spec: providerSpec(kind),
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+		Spec:       providerSpec(kind),
 	}
 }
 

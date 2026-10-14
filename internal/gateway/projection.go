@@ -39,10 +39,7 @@ func (s *Service) delegationReady(ctx context.Context, grant gatewaydb.Delegatio
 		}
 		return true
 	}
-	key := ctrlclient.ObjectKey{
-		Namespace: namespace,
-		Name:      name,
-	}
+	key := ctrlclient.ObjectKey{Namespace: namespace, Name: name}
 	hash := sha256.Sum256(grant.Selection)
 	selection := fmt.Sprintf("%x", hash)
 	route := &gwv1.HTTPRoute{}
@@ -180,19 +177,14 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 	ownerEgress := make(map[string][]networkpolicy.Target)
 	var aggregationEgress []ciliumapi.EgressRule
 	for index, selected := range selection.Models {
-		key := ctrlclient.ObjectKey{
-			Namespace: selected.Namespace,
-			Name:      selected.Provider,
-		}
+		key := ctrlclient.ObjectKey{Namespace: selected.Namespace, Name: selected.Provider}
 		provider := resources.providers[key]
 		target, err := inference.RenderProviderTarget(provider, selected.Model)
 		if err != nil {
 			return err
 		}
 		// Plaintext HTTP/2 must not dictate the external provider's protocol.
-		target.Policies.HTTP = &agw.BackendHTTP{
-			Version: new(agw.HTTPVersion1),
-		}
+		target.Policies.HTTP = &agw.BackendHTTP{Version: new(agw.HTTPVersion1)}
 		name := fmt.Sprintf("d-%s-model-%d", grant.ID, index)
 		ownerEgress[selected.Namespace] = append(ownerEgress[selected.Namespace], networkpolicy.Target{
 			Host: target.LLM.Host,
@@ -209,14 +201,9 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 				APIVersion: agw.GroupVersion.String(),
 				Kind:       "AgentgatewayBackend",
 			},
-			ObjectMeta: metav1.ObjectMeta{
-				Namespace: selected.Namespace,
-				Name:      name,
-			},
+			ObjectMeta: metav1.ObjectMeta{Namespace: selected.Namespace, Name: name},
 			Spec: agw.AgentgatewayBackendSpec{
-				AI: &agw.AIBackend{
-					LLM: &target.LLM,
-				},
+				AI: &agw.AIBackend{LLM: &target.LLM},
 				Policies: &agw.BackendFull{
 					BackendSimple:  target.Policies.BackendSimple,
 					AI:             target.Policies.AI,
@@ -240,21 +227,14 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 				APIVersion: agw.GroupVersion.String(),
 				Kind:       "AgentgatewayBackend",
 			},
-			ObjectMeta: metav1.ObjectMeta{
-				Namespace: s.cfg.DelegationNamespace,
-				Name:      name,
-			},
+			ObjectMeta: metav1.ObjectMeta{Namespace: s.cfg.DelegationNamespace, Name: name},
 			Spec: agw.AgentgatewayBackendSpec{
 				Static: &agw.StaticBackend{
 					Host: "inference." + selected.Namespace + ".svc.cluster.local",
 					Port: 8080,
 				},
 				Policies: &agw.BackendFull{
-					BackendSimple: agw.BackendSimple{
-						HTTP: &agw.BackendHTTP{
-							Version: new(agw.HTTPVersion2),
-						},
-					},
+					BackendSimple: agw.BackendSimple{HTTP: &agw.BackendHTTP{Version: new(agw.HTTPVersion2)}},
 				},
 			},
 		}
@@ -276,10 +256,7 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 				APIVersion: agw.GroupVersion.String(),
 				Kind:       "AgentgatewayBackend",
 			},
-			ObjectMeta: metav1.ObjectMeta{
-				Namespace: s.cfg.DelegationNamespace,
-				Name:      name,
-			},
+			ObjectMeta: metav1.ObjectMeta{Namespace: s.cfg.DelegationNamespace, Name: name},
 			Spec: agw.AgentgatewayBackendSpec{
 				MCP: &agw.MCPBackend{
 					PrefixMode:     agw.PrefixAlways,
@@ -289,10 +266,7 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 			},
 		}
 		for index, selected := range selection.Mcp {
-			key := ctrlclient.ObjectKey{
-				Namespace: selected.Namespace,
-				Name:      selected.Connection,
-			}
+			key := ctrlclient.ObjectKey{Namespace: selected.Namespace, Name: selected.Connection}
 			connection := resources.mcp[key]
 			target, err := mcp.ParseTarget(connection)
 			if err != nil {
@@ -304,9 +278,7 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 			})
 			aggregationEgress = append(aggregationEgress, networkpolicy.ServiceEgress(selected.Namespace, mcp.GatewayName, 8080)...)
 			transport := &agw.BackendSimple{
-				TLS: &agw.BackendTLS{
-					Sni: &target.Host,
-				},
+				TLS: &agw.BackendTLS{Sni: &target.Host},
 				HTTP: &agw.BackendHTTP{
 					Version: new(agw.HTTPVersion1),
 				},
@@ -327,10 +299,7 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 					APIVersion: agw.GroupVersion.String(),
 					Kind:       "AgentgatewayBackend",
 				},
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace: selected.Namespace,
-					Name:      innerName,
-				},
+				ObjectMeta: metav1.ObjectMeta{Namespace: selected.Namespace, Name: innerName},
 				Spec: agw.AgentgatewayBackendSpec{
 					MCP: &agw.MCPBackend{
 						PrefixMode:     agw.PrefixConditional,
@@ -351,9 +320,7 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 						MCP: &agw.BackendMCP{
 							Authorization: &agw.Authorization{
 								Action: agw.AuthorizationPolicyActionAllow,
-								Policy: agw.AuthorizationPolicy{
-									MatchExpressions: expressions,
-								},
+								Policy: agw.AuthorizationPolicy{MatchExpressions: expressions},
 							},
 						},
 					},
@@ -364,10 +331,7 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 					APIVersion: agw.GroupVersion.String(),
 					Kind:       "AgentgatewayPolicy",
 				},
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace: selected.Namespace,
-					Name:      innerName + "-auth",
-				},
+				ObjectMeta: metav1.ObjectMeta{Namespace: selected.Namespace, Name: innerName + "-auth"},
 				Spec: agw.AgentgatewayPolicySpec{
 					TargetRefs: []agw.LocalPolicyTargetReferenceWithSectionName{{
 						LocalPolicyTargetReference: agw.LocalPolicyTargetReference{
@@ -377,9 +341,7 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 						},
 						SectionName: &section,
 					}},
-					Backend: &agw.BackendFull{
-						ExtAuth: delegatedExtAuth(selected.Id, connection, "mcp"),
-					},
+					Backend: &agw.BackendFull{ExtAuth: delegatedExtAuth(selected.Id, connection, "mcp")},
 				},
 			}
 			path := "/delegations/" + grant.ID + "/mcp/" + selected.Id
@@ -409,14 +371,8 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 	}
 	if len(aggregationEgress) > 0 {
 		objects = append(objects, &ciliumv2.CiliumNetworkPolicy{
-			TypeMeta: metav1.TypeMeta{
-				APIVersion: "cilium.io/v2",
-				Kind:       "CiliumNetworkPolicy",
-			},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "d-" + grant.ID,
-				Namespace: s.cfg.DelegationNamespace,
-			},
+			TypeMeta:   metav1.TypeMeta{APIVersion: "cilium.io/v2", Kind: "CiliumNetworkPolicy"},
+			ObjectMeta: metav1.ObjectMeta{Name: "d-" + grant.ID, Namespace: s.cfg.DelegationNamespace},
 			Spec: &ciliumapi.Rule{
 				EndpointSelector: ciliumapi.NewESFromLabels(ciliumlabels.NewLabel(
 					"gateway.networking.k8s.io/gateway-name",
@@ -430,14 +386,8 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 
 	for namespace, targets := range ownerEgress {
 		policy := &ciliumv2.CiliumNetworkPolicy{
-			TypeMeta: metav1.TypeMeta{
-				APIVersion: "cilium.io/v2",
-				Kind:       "CiliumNetworkPolicy",
-			},
-			ObjectMeta: metav1.ObjectMeta{
-				Namespace: namespace,
-				Name:      "d-" + grant.ID,
-			},
+			TypeMeta:   metav1.TypeMeta{APIVersion: "cilium.io/v2", Kind: "CiliumNetworkPolicy"},
+			ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: "d-" + grant.ID},
 			Spec: &ciliumapi.Rule{
 				EndpointSelector: ciliumapi.NewESFromLabels(ciliumlabels.NewLabel(
 					"gateway.networking.k8s.io/gateway-name",
@@ -564,11 +514,7 @@ func delegatedExtAuth(target string, owner ctrlclient.Object, operation string) 
 	}
 	if operation == "inference" {
 		limit := resource.MustParse("32Mi")
-		policy.ForwardBody = &agw.ExtAuthBody{
-			MaxSize: agw.ByteSize{
-				Value: &limit,
-			},
-		}
+		policy.ForwardBody = &agw.ExtAuthBody{MaxSize: agw.ByteSize{Value: &limit}}
 	}
 	return policy
 }
@@ -587,14 +533,8 @@ func delegationRoute(namespace, gateway, name, path string, matchType gwv1.PathM
 		filters = nil
 	}
 	return &gwv1.HTTPRoute{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: gwv1.GroupVersion.String(),
-			Kind:       "HTTPRoute",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: namespace,
-			Name:      name,
-		},
+		TypeMeta:   metav1.TypeMeta{APIVersion: gwv1.GroupVersion.String(), Kind: "HTTPRoute"},
+		ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: name},
 		Spec: gwv1.HTTPRouteSpec{
 			CommonRouteSpec: gwv1.CommonRouteSpec{
 				ParentRefs: []gwv1.ParentReference{{
@@ -603,12 +543,10 @@ func delegationRoute(namespace, gateway, name, path string, matchType gwv1.PathM
 				}},
 			},
 			Rules: []gwv1.HTTPRouteRule{{
-				Matches: []gwv1.HTTPRouteMatch{{
-					Path: &gwv1.HTTPPathMatch{
-						Type:  &matchType,
-						Value: &path,
-					},
-				}},
+				Matches: []gwv1.HTTPRouteMatch{{Path: &gwv1.HTTPPathMatch{
+					Type:  &matchType,
+					Value: &path,
+				}}},
 				Filters: filters,
 				BackendRefs: []gwv1.HTTPBackendRef{{
 					BackendRef: gwv1.BackendRef{

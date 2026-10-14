@@ -249,10 +249,7 @@ func (r *Reconciler) updateStatus(ctx context.Context, sandbox *agentzv1alpha1.S
 		retry.DefaultRetry,
 		func() error {
 			current := &agentzv1alpha1.Sandbox{}
-			key := types.NamespacedName{
-				Namespace: sandbox.Namespace,
-				Name:      sandbox.Name,
-			}
+			key := types.NamespacedName{Namespace: sandbox.Namespace, Name: sandbox.Name}
 			if err := r.Get(ctx, key, current); err != nil {
 				return client.IgnoreNotFound(err)
 			}
@@ -1313,18 +1310,9 @@ func (r *Reconciler) reconcileGatewayNetworkPolicy(ctx context.Context, namespac
 								}},
 								Rules: &ciliumapi.L7Rules{
 									HTTP: ciliumapi.PortRulesHTTP{
-										{
-											Method: "GET",
-											Path:   path,
-										},
-										{
-											Method: "POST",
-											Path:   path,
-										},
-										{
-											Method: "DELETE",
-											Path:   path,
-										},
+										{Method: "GET", Path: path},
+										{Method: "POST", Path: path},
+										{Method: "DELETE", Path: path},
 									},
 								},
 							}},
@@ -1453,9 +1441,7 @@ func (r *Reconciler) ensureAgentgatewayParameters(ctx context.Context, namespace
 	desiredSpec := agentgatewayv1alpha1.AgentgatewayParametersSpec{
 		AgentgatewayParametersOverlays: agentgatewayv1alpha1.AgentgatewayParametersOverlays{
 			Service: &agentgatewayv1alpha1.KubernetesResourceOverlay{
-				Spec: &apiextensionsv1.JSON{
-					Raw: specBytes,
-				},
+				Spec: &apiextensionsv1.JSON{Raw: specBytes},
 			},
 		},
 	}

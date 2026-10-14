@@ -28,10 +28,7 @@ const (
 // Gateway returns the isolated namespace-local inference Gateway.
 func Gateway(namespace string) *gwv1.Gateway {
 	return &gwv1.Gateway{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      GatewayName,
-			Namespace: namespace,
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: GatewayName, Namespace: namespace},
 		Spec: gwv1.GatewaySpec{
 			GatewayClassName: gwv1.ObjectName("agentgateway"),
 			Infrastructure: &gwv1.GatewayInfrastructure{
@@ -103,11 +100,7 @@ func RenderSandboxTarget(namespace, sandboxName string, target SandboxTarget) Sa
 	}
 	maps.Copy(labels, target.Labels)
 	route := &gwv1.HTTPRoute{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			Labels:    labels,
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Labels: labels},
 		Spec: gwv1.HTTPRouteSpec{
 			CommonRouteSpec: gwv1.CommonRouteSpec{
 				ParentRefs: []gwv1.ParentReference{{
@@ -117,10 +110,7 @@ func RenderSandboxTarget(namespace, sandboxName string, target SandboxTarget) Sa
 			},
 			Rules: []gwv1.HTTPRouteRule{{
 				Matches: []gwv1.HTTPRouteMatch{{
-					Path: &gwv1.HTTPPathMatch{
-						Type:  &pathType,
-						Value: &target.Path,
-					},
+					Path: &gwv1.HTTPPathMatch{Type: &pathType, Value: &target.Path},
 				}},
 				BackendRefs: []gwv1.HTTPBackendRef{{
 					BackendRef: gwv1.BackendRef{
@@ -167,11 +157,7 @@ func RenderSandboxTarget(namespace, sandboxName string, target SandboxTarget) Sa
 		strings.Join(quoted, ", "),
 	))
 	policy := &agentgatewayv1alpha1.AgentgatewayPolicy{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			Labels:    labels,
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Labels: labels},
 		Spec: agentgatewayv1alpha1.AgentgatewayPolicySpec{
 			TargetRefs: []agentgatewayv1alpha1.LocalPolicyTargetReferenceWithSectionName{{
 				LocalPolicyTargetReference: agentgatewayv1alpha1.LocalPolicyTargetReference{
@@ -204,8 +190,5 @@ func RenderSandboxTarget(namespace, sandboxName string, target SandboxTarget) Sa
 			Condition: &condition,
 		}
 	}
-	return SandboxTargetRuntime{
-		Route:  route,
-		Policy: policy,
-	}
+	return SandboxTargetRuntime{Route: route, Policy: policy}
 }

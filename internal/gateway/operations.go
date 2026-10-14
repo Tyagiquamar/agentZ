@@ -77,10 +77,7 @@ func (s *Service) StartCodingOperation(w http.ResponseWriter, r *http.Request) {
 		gatewaydb.GatewayGetCodingThreadParams{
 			WorkspaceID: access.workspaceID,
 			AgentName:   input.AgentName,
-			SessionID: pgtype.Text{
-				String: input.SessionId,
-				Valid:  true,
-			},
+			SessionID:   pgtype.Text{String: input.SessionId, Valid: true},
 		},
 	)
 	if err != nil {
@@ -418,10 +415,7 @@ func (s *Service) executeCodingOperation(ctx context.Context, job gatewaydb.Codi
 		gatewaydb.GatewayGetCodingThreadParams{
 			WorkspaceID: job.WorkspaceID,
 			AgentName:   input.AgentName,
-			SessionID: pgtype.Text{
-				String: input.SessionId,
-				Valid:  true,
-			},
+			SessionID:   pgtype.Text{String: input.SessionId, Valid: true},
 		},
 	)
 	if err != nil {
@@ -491,10 +485,7 @@ func (s *Service) executeCodingOperation(ctx context.Context, job gatewaydb.Codi
 			row.CodingWorktree,
 			row.CodingProject,
 			row.CodingThread.SessionID.String,
-			gatewayapi.CodingTextRequest{
-				Purpose: gatewayapi.CodingTextBranch,
-				Text:    &text,
-			},
+			gatewayapi.CodingTextRequest{Purpose: gatewayapi.CodingTextBranch, Text: &text},
 		)
 		if err != nil {
 			return err
@@ -737,11 +728,9 @@ func (s *Service) executeCodingOperation(ctx context.Context, job gatewaydb.Codi
 
 	owner, name := repository.GetOwner().GetLogin(), repository.GetName()
 	filter := &github.PullRequestListOptions{
-		Head:  owner + ":" + current.Branch,
-		State: "open",
-		ListOptions: github.ListOptions{
-			PerPage: 1,
-		},
+		Head:        owner + ":" + current.Branch,
+		State:       "open",
+		ListOptions: github.ListOptions{PerPage: 1},
 	}
 	pulls, _, err := identity.client.PullRequests.List(ctx, owner, name, filter)
 	if err != nil {
@@ -792,10 +781,7 @@ func (s *Service) executeCodingOperation(ctx context.Context, job gatewaydb.Codi
 		row.CodingWorktree,
 		row.CodingProject,
 		row.CodingThread.SessionID.String,
-		gatewayapi.CodingTextRequest{
-			Purpose: gatewayapi.CodingTextPR,
-			Text:    &text,
-		},
+		gatewayapi.CodingTextRequest{Purpose: gatewayapi.CodingTextPR, Text: &text},
 	)
 	if err != nil || suggestion.PullRequest == nil {
 		return errors.New("could not generate PR content")
@@ -835,10 +821,7 @@ func (s *Service) executeCodingOperation(ctx context.Context, job gatewaydb.Codi
 		}
 		pr = pulls[0]
 	}
-	result.PullRequest = &gatewayapi.CodingPullRequest{
-		Number: pr.GetNumber(),
-		Url:    pr.GetHTMLURL(),
-	}
+	result.PullRequest = &gatewayapi.CodingPullRequest{Number: pr.GetNumber(), Url: pr.GetHTMLURL()}
 	return nil
 }
 
@@ -858,10 +841,7 @@ func (s *Service) nameCodingBranch(ctx context.Context, job gatewaydb.CodingOper
 		gatewaydb.GatewayGetCodingThreadParams{
 			WorkspaceID: job.WorkspaceID,
 			AgentName:   input.AgentName,
-			SessionID: pgtype.Text{
-				String: input.SessionId,
-				Valid:  true,
-			},
+			SessionID:   pgtype.Text{String: input.SessionId, Valid: true},
 		},
 	)
 	if err != nil {

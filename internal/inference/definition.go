@@ -114,10 +114,7 @@ type serviceAccount struct {
 func ValidateProvider(spec agentzv1alpha1.InferenceProviderSpec) []Issue {
 	issues := []Issue{}
 	if strings.TrimSpace(spec.CatalogProvider) == "" {
-		issues = append(issues, Issue{
-			Field:   "catalog_provider",
-			Message: "field is required",
-		})
+		issues = append(issues, Issue{Field: "catalog_provider", Message: "field is required"})
 	}
 	isCompatible := spec.Kind == agentzv1alpha1.InferenceProviderKindOpenAICompatible ||
 		spec.Kind == agentzv1alpha1.InferenceProviderKindAnthropicCompatible
@@ -138,16 +135,10 @@ func ValidateProvider(spec agentzv1alpha1.InferenceProviderSpec) []Issue {
 		)
 	}
 	if strings.TrimSpace(spec.DisplayName) == "" {
-		issues = append(issues, Issue{
-			Field:   "display_name",
-			Message: "field is required",
-		})
+		issues = append(issues, Issue{Field: "display_name", Message: "field is required"})
 	}
 	if len(spec.Models) == 0 {
-		issues = append(issues, Issue{
-			Field:   "models",
-			Message: "at least one model is required",
-		})
+		issues = append(issues, Issue{Field: "models", Message: "at least one model is required"})
 	}
 
 	var arms int
@@ -487,10 +478,7 @@ func ValidateProvider(spec agentzv1alpha1.InferenceProviderSpec) []Issue {
 				)
 			}
 			if _, exists := seen[header.Name]; exists {
-				issues = append(issues, Issue{
-					Field:   headerField,
-					Message: "header name must be unique",
-				})
+				issues = append(issues, Issue{Field: headerField, Message: "header name must be unique"})
 			}
 			seen[header.Name] = struct{}{}
 			_, controlled := gatewayControlledHeaders[header.Name]
@@ -716,10 +704,7 @@ func validateEndpoint(field, value string, allowPrivateEndpoint, skipTLSVerify b
 	issues := []Issue{}
 	parsed, err := url.Parse(value)
 	if err != nil || !parsed.IsAbs() || parsed.Hostname() == "" {
-		return []Issue{{
-			Field:   field,
-			Message: "must be an absolute endpoint url",
-		}}
+		return []Issue{{Field: field, Message: "must be an absolute endpoint url"}}
 	}
 	if parsed.User != nil {
 		issues = append(
@@ -815,20 +800,14 @@ func CredentialsForCreate(spec agentzv1alpha1.InferenceProviderSpec, values Cred
 	isCompatible := spec.Kind == agentzv1alpha1.InferenceProviderKindOpenAICompatible ||
 		spec.Kind == agentzv1alpha1.InferenceProviderKindAnthropicCompatible
 	if !changed && !isCompatible {
-		return nil, &InputError{
-			Field:   "credentials",
-			Message: "complete credentials are required",
-		}
+		return nil, &InputError{Field: "credentials", Message: "complete credentials are required"}
 	}
 	cfg := spec.OpenAICompatible
 	if spec.AnthropicCompatible != nil {
 		cfg = spec.AnthropicCompatible
 	}
 	if !changed && cfg != nil && cfg.AuthMode == agentzv1alpha1.CompatibleProviderAuthModeAPIKey {
-		return nil, &InputError{
-			Field:   "credentials.api_key",
-			Message: "field is required",
-		}
+		return nil, &InputError{Field: "credentials.api_key", Message: "field is required"}
 	}
 	return record, nil
 }
@@ -1016,10 +995,7 @@ func CredentialsForUpdate(spec agentzv1alpha1.InferenceProviderSpec, values Cred
 		}
 		return map[string]any{credentialAPIKey: values.APIKey}, true, nil
 	default:
-		return nil, false, &InputError{
-			Field:   "kind",
-			Message: "unsupported provider kind",
-		}
+		return nil, false, &InputError{Field: "kind", Message: "unsupported provider kind"}
 	}
 }
 

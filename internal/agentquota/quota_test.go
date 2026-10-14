@@ -109,23 +109,13 @@ func TestResources(t *testing.T) {
 			wantRequests: true,
 			wantLimits:   true,
 		},
-		{
-			name:         "burstable",
-			qos:          corev1.PodQOSBurstable,
-			wantRequests: true,
-		},
-		{
-			name: "best effort",
-			qos:  corev1.PodQOSBestEffort,
-		},
+		{name: "burstable", qos: corev1.PodQOSBurstable, wantRequests: true},
+		{name: "best effort", qos: corev1.PodQOSBestEffort},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := Resources(agentzv1alpha1.AgentDefaults{
-				Resources: resources,
-				QoSClass:  tt.qos,
-			})
+			got := Resources(agentzv1alpha1.AgentDefaults{Resources: resources, QoSClass: tt.qos})
 			if (len(got.Requests) > 0) != tt.wantRequests {
 				t.Errorf("Requests present = %t, want %t", len(got.Requests) > 0, tt.wantRequests)
 			}

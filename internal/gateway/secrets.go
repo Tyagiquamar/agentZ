@@ -304,10 +304,7 @@ func (s *Service) DeleteSecret(w http.ResponseWriter, r *http.Request, agentName
 				"invalid_request",
 				"request validation failed",
 				errBadRequest,
-				gatewayapi.FieldError{
-					Field:   "keys",
-					Message: "must contain at least one key",
-				},
+				gatewayapi.FieldError{Field: "keys", Message: "must contain at least one key"},
 			),
 		)
 		return
@@ -569,9 +566,7 @@ func (s *Service) WatchSecrets(w http.ResponseWriter, r *http.Request, agentName
 			return true
 		}
 
-		raw, err := json.Marshal(gatewayapi.WatchSecretsEvent{
-			Items: items,
-		})
+		raw, err := json.Marshal(gatewayapi.WatchSecretsEvent{Items: items})
 		if err != nil {
 			apiutil.RecordRequestError(w, "internal_error", err)
 			return false
@@ -723,20 +718,15 @@ func (s *Service) secretFromRequest(ns string, tenant *agentzv1alpha1.Tenant, ag
 				"conflict",
 				"secret already exists",
 				errBadRequest,
-				gatewayapi.FieldError{
-					Field:   "key",
-					Message: "secret key already exists",
-				},
+				gatewayapi.FieldError{Field: "key", Message: "secret key already exists"},
 			)
 		}
 	}
 
 	spec := agentzv1alpha1.SecretSpec{
-		AgentRef: agentzv1alpha1.SecretAgentRef{
-			Name: agtName,
-		},
-		Key:   key,
-		Hosts: make([]string, 0, len(req.Hosts)),
+		AgentRef: agentzv1alpha1.SecretAgentRef{Name: agtName},
+		Key:      key,
+		Hosts:    make([]string, 0, len(req.Hosts)),
 	}
 	spec.Hosts = append(spec.Hosts, req.Hosts...)
 
@@ -752,10 +742,7 @@ func (s *Service) secretFromRequest(ns string, tenant *agentzv1alpha1.Tenant, ag
 				"invalid_request",
 				"request validation failed",
 				errBadRequest,
-				gatewayapi.FieldError{
-					Field:   "value",
-					Message: "required",
-				},
+				gatewayapi.FieldError{Field: "value", Message: "required"},
 			)
 		}
 		spec.Type = agentzv1alpha1.SecretTypeStatic
@@ -774,10 +761,7 @@ func (s *Service) secretFromRequest(ns string, tenant *agentzv1alpha1.Tenant, ag
 				"invalid_request",
 				"request validation failed",
 				errBadRequest,
-				gatewayapi.FieldError{
-					Field:   "oauth",
-					Message: "required",
-				},
+				gatewayapi.FieldError{Field: "oauth", Message: "required"},
 			)
 		}
 
@@ -862,10 +846,7 @@ func (s *Service) secretFromRequest(ns string, tenant *agentzv1alpha1.Tenant, ag
 			"invalid_request",
 			"request validation failed",
 			errBadRequest,
-			gatewayapi.FieldError{
-				Field:   "type",
-				Message: "must be static or oauth",
-			},
+			gatewayapi.FieldError{Field: "type", Message: "must be static or oauth"},
 		)
 	}
 
@@ -1044,10 +1025,7 @@ func (s *Service) syncAgentEnv(ctx context.Context, agentName, userID string, ad
 					continue
 				}
 				changed = true
-				env = append(env, corev1.EnvVar{
-					Name:  item.Name,
-					Value: value,
-				})
+				env = append(env, corev1.EnvVar{Name: item.Name, Value: value})
 			}
 
 			keys := make([]string, 0, len(addSet))
@@ -1057,10 +1035,7 @@ func (s *Service) syncAgentEnv(ctx context.Context, agentName, userID string, ad
 			slices.Sort(keys)
 			for _, key := range keys {
 				changed = true
-				env = append(env, corev1.EnvVar{
-					Name:  key,
-					Value: addSet[key],
-				})
+				env = append(env, corev1.EnvVar{Name: key, Value: addSet[key]})
 			}
 			if !changed {
 				return nil

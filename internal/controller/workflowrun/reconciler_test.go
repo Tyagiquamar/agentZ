@@ -39,27 +39,18 @@ func TestRunningWorkflowTracksExecution(t *testing.T) {
 			executionID := uuid.New()
 			run := &agentzv1alpha1.WorkflowRun{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "run",
-					Namespace: "workspace",
-					UID:       "run-uid",
+					Name: "run", Namespace: "workspace", UID: "run-uid",
 				},
 				Spec: agentzv1alpha1.WorkflowRunSpec{
-					AgentName:    "agent",
-					WorkflowName: "workflow",
+					AgentName: "agent", WorkflowName: "workflow",
 				},
 				Status: agentzv1alpha1.WorkflowRunStatus{
 					Phase:       agentzv1alpha1.WorkflowRunPhaseRunning,
 					SessionID:   "session",
 					ExecutionID: executionID.String(),
 					Nodes: []agentzv1alpha1.WorkflowRunNodeStatus{
-						{
-							Name:  "first",
-							Phase: agentzv1alpha1.WorkflowRunNodePhaseSucceeded,
-						},
-						{
-							Name:  "second",
-							Phase: agentzv1alpha1.WorkflowRunNodePhaseRunning,
-						},
+						{Name: "first", Phase: agentzv1alpha1.WorkflowRunNodePhaseSucceeded},
+						{Name: "second", Phase: agentzv1alpha1.WorkflowRunNodePhaseRunning},
 					},
 				},
 			}
@@ -95,11 +86,7 @@ func TestRunningWorkflowTracksExecution(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			r := &Reconciler{
-				Client:        kube,
-				GatewayClient: gateway,
-				TokenPath:     token,
-			}
+			r := &Reconciler{Client: kube, GatewayClient: gateway, TokenPath: token}
 			result, err := r.reconcileRunning(t.Context(), run)
 			if err != nil {
 				t.Fatal(err)

@@ -343,9 +343,7 @@ func (c *Client) UploadVersion(ctx context.Context, namespace string, tree Tree,
 			}
 			return errors.Join(fmt.Errorf("upload immutable skill version: %w", err), cleanupErr)
 		}
-		uploaded = append(uploaded, s3types.ObjectIdentifier{
-			Key: aws.String(key),
-		})
+		uploaded = append(uploaded, s3types.ObjectIdentifier{Key: aws.String(key)})
 	}
 	return nil
 }
@@ -440,9 +438,7 @@ func (c *Client) deletePrefix(ctx context.Context, bucket, prefix string) error 
 			if item.Key == nil {
 				continue
 			}
-			keys = append(keys, s3types.ObjectIdentifier{
-				Key: item.Key,
-			})
+			keys = append(keys, s3types.ObjectIdentifier{Key: item.Key})
 			if len(keys) == deleteBatch {
 				if err := c.deleteKeys(ctx, bucket, keys); err != nil {
 					return err
@@ -513,9 +509,7 @@ func (c *Client) DownloadManifest(ctx context.Context, manifestPath, targetDir s
 		if len(namespace) > 63 || !namespaceNameRE.MatchString(namespace) {
 			return errors.New("immutable skill namespace is invalid")
 		}
-		storagePath := (Config{
-			Bucket: c.bucket,
-		}).StoragePath(
+		storagePath := (Config{Bucket: c.bucket}).StoragePath(
 			namespace,
 			item.Name,
 			item.Version,

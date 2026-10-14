@@ -101,9 +101,7 @@ func (s *service) git(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *service) runGit(ctx context.Context, req GitRequest) (gatewayapi.CodingGitResult, error) {
-	result := gatewayapi.CodingGitResult{
-		Files: []gatewayapi.CodingGitFile{},
-	}
+	result := gatewayapi.CodingGitResult{Files: []gatewayapi.CodingGitFile{}}
 	names := []string{req.Root, req.Directory}
 	for _, name := range names {
 		if !filepath.IsLocal(name) || !strings.HasPrefix(name, "Projects/") {
@@ -217,9 +215,7 @@ func (s *service) runGit(ctx context.Context, req GitRequest) (gatewayapi.Coding
 			if record == "" {
 				continue
 			}
-			tree := gatewayapi.CodingDiscoveredWorktree{
-				Available: true,
-			}
+			tree := gatewayapi.CodingDiscoveredWorktree{Available: true}
 			var directory string
 			for _, field := range strings.Split(record, "\x00") {
 				key, value, _ := strings.Cut(field, " ")
@@ -284,10 +280,7 @@ func (s *service) runGit(ctx context.Context, req GitRequest) (gatewayapi.Coding
 			if len(fields) != 4 || fields[3] != "" {
 				continue
 			}
-			ref := gatewayapi.CodingRef{
-				Ref:  fields[0],
-				Head: fields[1],
-			}
+			ref := gatewayapi.CodingRef{Ref: fields[0], Head: fields[1]}
 			ref.Remote = strings.HasPrefix(ref.Ref, "refs/remotes/")
 			ref.Name = strings.TrimPrefix(strings.TrimPrefix(ref.Ref, "refs/heads/"), "refs/remotes/")
 			ref.CommittedAt, err = strconv.ParseInt(fields[2], 10, 64)

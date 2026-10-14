@@ -69,10 +69,7 @@ func URLTarget(raw string) (Target, error) {
 		}
 		port = int32(value)
 	}
-	return Target{
-		Host: u.Hostname(),
-		Port: port,
-	}, nil
+	return Target{Host: u.Hostname(), Port: port}, nil
 }
 
 // ServiceEgress permits DNS resolution and exact Kubernetes Service TCP ports.
@@ -156,15 +153,11 @@ func ExternalEgress(targets []Target) []ciliumapi.EgressRule {
 		rules = append(
 			rules,
 			ciliumapi.EgressRule{
-				ToFQDNs: ciliumapi.FQDNSelectorSlice{{
-					MatchName: target.Host,
-				}},
+				ToFQDNs: ciliumapi.FQDNSelectorSlice{{MatchName: target.Host}},
 				ToPorts: port,
 			},
 		)
-		dns = append(dns, ciliumapi.PortRuleDNS{
-			MatchName: target.Host,
-		})
+		dns = append(dns, ciliumapi.PortRuleDNS{MatchName: target.Host})
 	}
 	if len(dns) == 0 {
 		return rules
@@ -177,9 +170,7 @@ func ExternalEgress(targets []Target) []ciliumapi.EgressRule {
 			},
 			ToPorts: ciliumapi.PortRules{{
 				Ports: dnsPorts(),
-				Rules: &ciliumapi.L7Rules{
-					DNS: dns,
-				},
+				Rules: &ciliumapi.L7Rules{DNS: dns},
 			}},
 		},
 	)
@@ -198,14 +189,8 @@ func dnsEndpointSelector() ciliumapi.EndpointSelector {
 
 func dnsPorts() []ciliumapi.PortProtocol {
 	return []ciliumapi.PortProtocol{
-		{
-			Port:     "53",
-			Protocol: ciliumapi.ProtoUDP,
-		},
-		{
-			Port:     "53",
-			Protocol: ciliumapi.ProtoTCP,
-		},
+		{Port: "53", Protocol: ciliumapi.ProtoUDP},
+		{Port: "53", Protocol: ciliumapi.ProtoTCP},
 	}
 }
 

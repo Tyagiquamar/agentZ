@@ -86,9 +86,7 @@ func Serve(ctx context.Context, cfg Config) error {
 	evCh := make(chan event, cfg.BatchSize*4)
 	stats := &stats{}
 	sink := &sink{
-		store: &dbStore{
-			pool: pool,
-		},
+		store:  &dbStore{pool: pool},
 		stats:  stats,
 		cfg:    cfg,
 		events: evCh,
@@ -165,9 +163,7 @@ func consumeKubeArmorStream(ctx context.Context, cfg Config, r *resolver, mode w
 
 	switch mode {
 	case watchModeLogs:
-		stream, err := client.WatchLogs(ctx, &pb.RequestMessage{
-			Filter: "all",
-		})
+		stream, err := client.WatchLogs(ctx, &pb.RequestMessage{Filter: "all"})
 		if err != nil {
 			return err
 		}
@@ -200,9 +196,7 @@ func consumeKubeArmorStream(ctx context.Context, cfg Config, r *resolver, mode w
 			}
 		}
 	case watchModeAlerts:
-		stream, err := client.WatchAlerts(ctx, &pb.RequestMessage{
-			Filter: "all",
-		})
+		stream, err := client.WatchAlerts(ctx, &pb.RequestMessage{Filter: "all"})
 		if err != nil {
 			return err
 		}
@@ -260,9 +254,7 @@ func newKubeArmorRelayClient(ctx context.Context, addr string) (*grpc.ClientConn
 
 	client := pb.NewLogServiceClient(conn)
 	nonce := time.Now().UnixNano()
-	reply, err := client.HealthCheck(ctx, &pb.NonceMessage{
-		Nonce: int32(nonce),
-	})
+	reply, err := client.HealthCheck(ctx, &pb.NonceMessage{Nonce: int32(nonce)})
 	if err != nil {
 		_ = conn.Close()
 		return nil, nil, fmt.Errorf("kubearmor relay healthcheck: %w", err)
@@ -318,9 +310,7 @@ func consumeHubbleStream(ctx context.Context, cfg Config, r *resolver, out chan<
 	}
 	defer conn.Close()
 
-	stream, err := client.GetFlows(ctx, &observerpb.GetFlowsRequest{
-		Follow: true,
-	})
+	stream, err := client.GetFlows(ctx, &observerpb.GetFlowsRequest{Follow: true})
 	if err != nil {
 		return fmt.Errorf("get hubble flows: %w", err)
 	}

@@ -207,9 +207,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, fmt.Errorf("check sinjector readiness: %w", err)
 	}
 	if !ready {
-		return ctrl.Result{
-			RequeueAfter: 2 * time.Second,
-		}, nil
+		return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
 	}
 
 	err = r.reconcileEgressPolicy(ctx, agt, envCfg)
@@ -245,9 +243,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("update agent status: %w", err)
 		}
-		return ctrl.Result{
-			RequeueAfter: 2 * time.Second,
-		}, nil
+		return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
 	}
 
 	hash, err := configHash(opencodeCfg, instructionFiles, agt.Spec.Env, envCfg, agt.Spec.Tools)
@@ -334,9 +330,7 @@ func (r *Reconciler) resolveSandbox(ctx context.Context, agt *agentzv1alpha1.Age
 		Skills:                  []skillpkg.ManifestSkill{},
 	}
 	var workspace agentzv1alpha1.Workspace
-	err := r.Get(ctx, client.ObjectKey{
-		Name: agt.Namespace,
-	}, &workspace)
+	err := r.Get(ctx, client.ObjectKey{Name: agt.Namespace}, &workspace)
 	if err != nil {
 		return cfg, fmt.Errorf("get Agent Workspace: %w", err)
 	}
@@ -360,10 +354,7 @@ func (r *Reconciler) resolveSandbox(ctx context.Context, agt *agentzv1alpha1.Age
 		if err != nil {
 			return sandboxConfig{}, fmt.Errorf("resolve skill %q scope: %w", ref.Name, err)
 		}
-		key := types.NamespacedName{
-			Namespace: ns,
-			Name:      ref.Name,
-		}
+		key := types.NamespacedName{Namespace: ns, Name: ref.Name}
 		if _, ok := seenSkills[key]; ok {
 			continue
 		}
@@ -386,10 +377,7 @@ func (r *Reconciler) resolveSandbox(ctx context.Context, agt *agentzv1alpha1.Age
 		return sandboxConfig{}, fmt.Errorf("resolve sandbox scope: %w", err)
 	}
 	sandbox := &agentzv1alpha1.Sandbox{}
-	key := types.NamespacedName{
-		Name:      ref.Name,
-		Namespace: sandboxNamespace,
-	}
+	key := types.NamespacedName{Name: ref.Name, Namespace: sandboxNamespace}
 	if err := r.Get(ctx, key, sandbox); err != nil {
 		return sandboxConfig{}, fmt.Errorf("get sandbox %q: %w", ref.Name, err)
 	}
@@ -406,10 +394,7 @@ func (r *Reconciler) resolveSandbox(ctx context.Context, agt *agentzv1alpha1.Age
 		}
 		if modelRef.Provider == agentzv1alpha1.InferencePoolProvider {
 			pool := &agentzv1alpha1.InferencePool{}
-			key := types.NamespacedName{
-				Name:      modelRef.Model,
-				Namespace: modelNamespace,
-			}
+			key := types.NamespacedName{Name: modelRef.Model, Namespace: modelNamespace}
 			if err := r.Get(ctx, key, pool); err != nil {
 				return sandboxConfig{}, fmt.Errorf("get inference pool %q: %w", modelRef.Model, err)
 			}
@@ -480,10 +465,7 @@ func (r *Reconciler) resolveSandbox(ctx context.Context, agt *agentzv1alpha1.Age
 					)
 				}
 				memberProvider := &agentzv1alpha1.InferenceProvider{}
-				key := types.NamespacedName{
-					Name:      member.Provider,
-					Namespace: memberNamespace,
-				}
+				key := types.NamespacedName{Name: member.Provider, Namespace: memberNamespace}
 				if err := r.Get(ctx, key, memberProvider); err != nil {
 					return sandboxConfig{}, fmt.Errorf(
 						"get inference pool %q provider %q: %w",
@@ -518,10 +500,7 @@ func (r *Reconciler) resolveSandbox(ctx context.Context, agt *agentzv1alpha1.Age
 		provider := providers[providerKey]
 		if provider == nil {
 			provider = &agentzv1alpha1.InferenceProvider{}
-			key := types.NamespacedName{
-				Name:      modelRef.Provider,
-				Namespace: modelNamespace,
-			}
+			key := types.NamespacedName{Name: modelRef.Provider, Namespace: modelNamespace}
 			if err := r.Get(ctx, key, provider); err != nil {
 				return sandboxConfig{}, fmt.Errorf("get inference provider %q: %w", modelRef.Provider, err)
 			}
@@ -635,10 +614,7 @@ func (r *Reconciler) resolveSandbox(ctx context.Context, agt *agentzv1alpha1.Age
 		if err != nil {
 			return sandboxConfig{}, fmt.Errorf("resolve skill %q scope: %w", ref.Name, err)
 		}
-		key := types.NamespacedName{
-			Namespace: ns,
-			Name:      ref.Name,
-		}
+		key := types.NamespacedName{Namespace: ns, Name: ref.Name}
 		if _, ok := seenSkills[key]; ok {
 			continue
 		}

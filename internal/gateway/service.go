@@ -282,9 +282,7 @@ func Serve(ctx context.Context, cfg Config) error {
 	if err != nil {
 		return fmt.Errorf("load kube config: %w", err)
 	}
-	k8sClient, err := ctrlclient.New(kubeCfg, ctrlclient.Options{
-		Scheme: scheme,
-	})
+	k8sClient, err := ctrlclient.New(kubeCfg, ctrlclient.Options{Scheme: scheme})
 	if err != nil {
 		return fmt.Errorf("create k8s client: %w", err)
 	}
@@ -403,9 +401,7 @@ func Serve(ctx context.Context, cfg Config) error {
 		chatInputWake:      make(chan struct{}, 1),
 		catalog:            inference.NewCatalog(nil),
 		openAPI:            openAPISpec,
-		outboundHTTP: &http.Client{
-			Timeout: 10 * time.Second,
-		},
+		outboundHTTP:       &http.Client{Timeout: 10 * time.Second},
 	}
 	if err := svc.recoverWorkspaceProvisioning(ctx); err != nil {
 		return err
@@ -555,18 +551,9 @@ func (s *Service) drainCleanupJobs(ctx context.Context) {
 		job, err := s.queries.GatewayClaimCleanupJob(
 			ctx,
 			gatewaydb.GatewayClaimCleanupJobParams{
-				LeaseToken: pgtype.Text{
-					String: token,
-					Valid:  true,
-				},
-				LeaseExpiresAt: pgtype.Timestamptz{
-					Time:  now.Add(2 * time.Minute),
-					Valid: true,
-				},
-				NowAt: pgtype.Timestamptz{
-					Time:  now,
-					Valid: true,
-				},
+				LeaseToken:     pgtype.Text{String: token, Valid: true},
+				LeaseExpiresAt: pgtype.Timestamptz{Time: now.Add(2 * time.Minute), Valid: true},
+				NowAt:          pgtype.Timestamptz{Time: now, Valid: true},
 			},
 		)
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -583,14 +570,8 @@ func (s *Service) drainCleanupJobs(ctx context.Context) {
 				updated, failErr := s.queries.GatewayFailCleanupJob(
 					ctx,
 					gatewaydb.GatewayFailCleanupJobParams{
-						FailedAt: pgtype.Timestamptz{
-							Time:  now,
-							Valid: true,
-						},
-						LastError: pgtype.Text{
-							String: err.Error(),
-							Valid:  true,
-						},
+						FailedAt:   pgtype.Timestamptz{Time: now, Valid: true},
+						LastError:  pgtype.Text{String: err.Error(), Valid: true},
 						ID:         job.ID,
 						LeaseToken: job.LeaseToken,
 					},
@@ -614,20 +595,11 @@ func (s *Service) drainCleanupJobs(ctx context.Context) {
 			updated, retryErr := s.queries.GatewayRetryCleanupJob(
 				ctx,
 				gatewaydb.GatewayRetryCleanupJobParams{
-					NextAttemptAt: pgtype.Timestamptz{
-						Time:  next,
-						Valid: true,
-					},
-					LastError: pgtype.Text{
-						String: err.Error(),
-						Valid:  true,
-					},
-					UpdatedAt: pgtype.Timestamptz{
-						Time:  now,
-						Valid: true,
-					},
-					ID:         job.ID,
-					LeaseToken: job.LeaseToken,
+					NextAttemptAt: pgtype.Timestamptz{Time: next, Valid: true},
+					LastError:     pgtype.Text{String: err.Error(), Valid: true},
+					UpdatedAt:     pgtype.Timestamptz{Time: now, Valid: true},
+					ID:            job.ID,
+					LeaseToken:    job.LeaseToken,
 				},
 			)
 			if retryErr != nil {
@@ -643,12 +615,9 @@ func (s *Service) drainCleanupJobs(ctx context.Context) {
 		updated, err := s.queries.GatewayCompleteCleanupJob(
 			ctx,
 			gatewaydb.GatewayCompleteCleanupJobParams{
-				CompletedAt: pgtype.Timestamptz{
-					Time:  time.Now(),
-					Valid: true,
-				},
-				ID:         job.ID,
-				LeaseToken: job.LeaseToken,
+				CompletedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+				ID:          job.ID,
+				LeaseToken:  job.LeaseToken,
 			},
 		)
 		if err != nil {
@@ -854,9 +823,7 @@ func (s *Service) processWorkspaceCleanup(ctx context.Context, job gatewaydb.Cle
 	err = s.agentz.AgentzV1alpha1().Workspaces().Delete(
 		ctx,
 		workspace.Namespace,
-		metav1.DeleteOptions{
-			PropagationPolicy: new(metav1.DeletePropagationForeground),
-		},
+		metav1.DeleteOptions{PropagationPolicy: new(metav1.DeletePropagationForeground)},
 	)
 	if err != nil && !apierrors.IsNotFound(err) {
 		return fmt.Errorf("delete Workspace %q: %w", workspace.Namespace, err)
@@ -998,10 +965,7 @@ func openAPIRequestFields(err error) []gatewayapi.FieldError {
 	if strings.TrimSpace(message) == "" {
 		message = "does not match the declared schema"
 	}
-	return []gatewayapi.FieldError{{
-		Field:   field,
-		Message: message,
-	}}
+	return []gatewayapi.FieldError{{Field: field, Message: message}}
 }
 
 func validateWebOrigins(origins []string) ([]string, error) {
@@ -1044,10 +1008,7 @@ func requestLog(next http.Handler) http.Handler {
 		start := time.Now()
 		debug := slog.Default().Enabled(r.Context(), slog.LevelDebug)
 
-		rec := &statusRecorder{
-			ResponseWriter: w,
-			status:         http.StatusOK,
-		}
+		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rec, r)
 
 		attrs := []slog.Attr{

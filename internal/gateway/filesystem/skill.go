@@ -257,10 +257,7 @@ func (s *service) writeSkillArchive(w io.Writer, files []string) error {
 		if err != nil {
 			return errors.Join(err, zw.Close())
 		}
-		h := &zip.FileHeader{
-			Name:   name,
-			Method: zip.Deflate,
-		}
+		h := &zip.FileHeader{Name: name, Method: zip.Deflate}
 		dst, err := zw.CreateHeader(h)
 		if err != nil {
 			return errors.Join(err, src.Close(), zw.Close())
@@ -434,10 +431,7 @@ func (s *service) importSkills(w http.ResponseWriter, r *http.Request) {
 				writeFailure(w, r, internalFailure("commit mutable skill overwrite", err))
 				return
 			}
-			committed = append(committed, committedSkill{
-				name:   destination,
-				backup: saved,
-			})
+			committed = append(committed, committedSkill{name: destination, backup: saved})
 			continue
 		}
 		if err := s.root.Rename(staged, destination); err != nil {
@@ -447,10 +441,7 @@ func (s *service) importSkills(w http.ResponseWriter, r *http.Request) {
 			writeFailure(w, r, internalFailure("commit mutable skill create", err))
 			return
 		}
-		committed = append(committed, committedSkill{
-			name:      destination,
-			isCreated: true,
-		})
+		committed = append(committed, committedSkill{name: destination, isCreated: true})
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

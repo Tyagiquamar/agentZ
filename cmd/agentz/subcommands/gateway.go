@@ -191,25 +191,19 @@ var gatewayServeCmd = &cli.Command{
 			Name:     "skills-s3-endpoint",
 			Usage:    "S3-compatible endpoint for immutable skill storage",
 			Required: true,
-			Config: cli.StringConfig{
-				TrimSpace: true,
-			},
+			Config:   cli.StringConfig{TrimSpace: true},
 		},
 		&cli.StringFlag{
-			Name:  "skills-s3-region",
-			Usage: "S3 region for immutable skill storage",
-			Value: "us-east-1",
-			Config: cli.StringConfig{
-				TrimSpace: true,
-			},
+			Name:   "skills-s3-region",
+			Usage:  "S3 region for immutable skill storage",
+			Value:  "us-east-1",
+			Config: cli.StringConfig{TrimSpace: true},
 		},
 		&cli.StringFlag{
 			Name:     "skills-s3-bucket",
 			Usage:    "S3 bucket for immutable skill storage",
 			Required: true,
-			Config: cli.StringConfig{
-				TrimSpace: true,
-			},
+			Config:   cli.StringConfig{TrimSpace: true},
 		},
 	},
 	Action: func(ctx context.Context, c *cli.Command) error {

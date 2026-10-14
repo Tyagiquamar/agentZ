@@ -40,10 +40,7 @@ var _ admission.Validator[*agentzv1alpha1.WorkflowSchedule] = &Validator{}
 
 // NewValidator builds a WorkflowSchedule validator.
 func NewValidator(gatewayClient *gatewayapi.ClientWithResponses, tokenPath string) *Validator {
-	return &Validator{
-		gatewayClient: gatewayClient,
-		tokenPath:     tokenPath,
-	}
+	return &Validator{gatewayClient: gatewayClient, tokenPath: tokenPath}
 }
 
 // +kubebuilder:webhook:path=/validate-agentz-accuknox-com-v1alpha1-workflowschedule,mutating=false,failurePolicy=fail,sideEffects=None,groups=agentz.accuknox.com,resources=workflowschedules,verbs=create;update,versions=v1alpha1,name=vworkflowschedule-v1alpha1.kb.io,admissionReviewVersions=v1

@@ -234,10 +234,7 @@ func (r *resolver) writeSecretStatus(ctx context.Context, namespace, name string
 		retry.DefaultRetry,
 		func() error {
 			secret := &agentzv1alpha1.Secret{}
-			key := ctrlclient.ObjectKey{
-				Namespace: namespace,
-				Name:      name,
-			}
+			key := ctrlclient.ObjectKey{Namespace: namespace, Name: name}
 			if err := r.k8sClient.Get(ctx, key, secret); err != nil {
 				return ctrlclient.IgnoreNotFound(err)
 			}
@@ -246,9 +243,7 @@ func (r *resolver) writeSecretStatus(ctx context.Context, namespace, name string
 			now := metav1.NewTime(time.Now().UTC())
 			secret.Status.State = next.state
 			secret.Status.ObservedGeneration = secret.Generation
-			secret.Status.RuntimeRef = &agentzv1alpha1.SecretRuntimeRef{
-				Path: path,
-			}
+			secret.Status.RuntimeRef = &agentzv1alpha1.SecretRuntimeRef{Path: path}
 			secret.Status.LastRuntimeUpdateTime = &now
 			secret.Status.TokenExpiryTime = nil
 			if next.tokenExpiry != nil && !next.tokenExpiry.IsZero() {

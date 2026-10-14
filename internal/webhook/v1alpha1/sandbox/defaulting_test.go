@@ -29,9 +29,7 @@ func TestDefaulterDefaultParsesAndDeduplicatesHosts(t *testing.T) {
 	}
 
 	ctx := admission.NewContextWithRequest(t.Context(), admission.Request{
-		AdmissionRequest: admissionv1.AdmissionRequest{
-			Operation: admissionv1.Create,
-		},
+		AdmissionRequest: admissionv1.AdmissionRequest{Operation: admissionv1.Create},
 	})
 	if err := NewDefaulter().Default(ctx, sandbox); err != nil {
 		t.Fatalf("Default() error = %v", err)
@@ -57,9 +55,7 @@ func TestMetadataUpdatePreservesStoredDefaults(t *testing.T) {
 	ctx := admission.NewContextWithRequest(t.Context(), admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
 			Operation: admissionv1.Update,
-			OldObject: runtime.RawExtension{
-				Raw: raw,
-			},
+			OldObject: runtime.RawExtension{Raw: raw},
 		},
 	})
 	if err := NewDefaulter().Default(ctx, updated); err != nil {

@@ -3,7 +3,6 @@ package gateway
 import (
 	"context"
 	"crypto/rand"
-	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,7 +11,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"text/template"
 	"time"
 
 	"github.com/google/uuid"
@@ -80,7 +78,8 @@ func (s *Service) recordChatPrompt(ctx context.Context, input gatewaydb.GatewayC
 		return gatewaydb.ChatExecution{}, err
 	}
 	input.AgentUid = string(resolved.Agent.UID)
-	if err := s.watchChatRuntime(ctx, input.Namespace, input.WorkspaceID, input.AgentName, incarnation); err != nil {
+	err = s.watchChatRuntime(ctx, input.Namespace, input.WorkspaceID, input.AgentName, incarnation)
+	if err != nil {
 		return gatewaydb.ChatExecution{}, err
 	}
 	previous, err := s.queries.GatewaySessionChatExecution(ctx, gatewaydb.GatewaySessionChatExecutionParams{
@@ -98,14 +97,19 @@ func (s *Service) recordChatPrompt(ctx context.Context, input gatewaydb.GatewayC
 	defer tx.Rollback(ctx)
 	q := gatewaydb.New(tx)
 	execution := previous
-	active := previous.ID != uuid.Nil && previous.State != gatewaydb.ChatExecutionStateCompleted && previous.State != gatewaydb.ChatExecutionStateCancelled && previous.State != gatewaydb.ChatExecutionStateFailed
+	active := previous.ID != uuid.Nil &&
+		previous.State != gatewaydb.ChatExecutionStateCompleted &&
+		previous.State != gatewaydb.ChatExecutionStateCancelled &&
+		previous.State != gatewaydb.ChatExecutionStateFailed
 	if active && previous.Protocol != input.Protocol {
 		return gatewaydb.ChatExecution{}, errors.New("conversation is executing through another native protocol")
 	}
 	if active && previous.WorkflowRunUid != input.WorkflowRunUid {
 		return gatewaydb.ChatExecution{}, errors.New("conversation is executing another request")
 	}
-	if active && (previous.State == gatewaydb.ChatExecutionStateRecovering || previous.State == gatewaydb.ChatExecutionStateBlocked) && messageID != "" {
+	awaitingRecovery := previous.State == gatewaydb.ChatExecutionStateRecovering ||
+		previous.State == gatewaydb.ChatExecutionStateBlocked
+	if active && awaitingRecovery && messageID != "" {
 		_, err = q.GatewayCancelChatExecution(ctx, gatewaydb.GatewayCancelChatExecutionParams{
 			WorkspaceID: input.WorkspaceID,
 			AgentName:   input.AgentName,
@@ -184,10 +188,7 @@ func (s *Service) recordChatPrompt(ctx context.Context, input gatewaydb.GatewayC
 	err = s.queries.GatewayNotifyChatInputs(ctx, gatewaydb.GatewayNotifyChatInputsParams{
 		WorkspaceID: execution.WorkspaceID,
 		AgentName:   execution.AgentName,
-		SessionID: pgtype.Text{
-			String: execution.SessionID,
-			Valid:  true,
-		},
+		SessionID:   pgtype.Text{String: execution.SessionID, Valid: true},
 	})
 	return execution, err
 }
@@ -265,7 +266,8 @@ func (s *Service) reconcileChatExecution(ctx context.Context, execution gatewayd
 	}
 	if accessErr != nil {
 		var denied *apiutil.APIError
-		inaccessible := errors.Is(accessErr, pgx.ErrNoRows) || errors.As(accessErr, &denied) && denied.Status == http.StatusForbidden
+		inaccessible := errors.Is(accessErr, pgx.ErrNoRows) ||
+			errors.As(accessErr, &denied) && denied.Status == http.StatusForbidden
 		if !inaccessible {
 			return accessErr
 		}
@@ -309,26 +311,35 @@ func (s *Service) reconcileChatExecution(ctx context.Context, execution gatewayd
 		WaitingOnUser: execution.WaitingOnUser,
 	}
 	if accessErr != nil {
-		update.State, update.Reason, update.Message = gatewaydb.ChatExecutionStateFailed, "access_changed", "The execution's author or checkout is no longer accessible"
+		update.State = gatewaydb.ChatExecutionStateFailed
+		update.Reason = "access_changed"
+		update.Message = "The execution's author or checkout is no longer accessible"
 		return s.updateChatExecution(ctx, update)
 	}
 	resolved, incarnation, err := s.resolver.agentRuntime(ctx, execution.Namespace, execution.AgentName)
 	if errors.Is(err, errAgentNotFound) {
-		update.State, update.Reason, update.Message = gatewaydb.ChatExecutionStateFailed, "agent_deleted", "The original agent no longer exists"
+		update.State = gatewaydb.ChatExecutionStateFailed
+		update.Reason = "agent_deleted"
+		update.Message = "The original agent no longer exists"
 		return s.updateChatExecution(ctx, update)
 	}
 	if err != nil {
 		return err
 	}
-	if err := s.watchChatRuntime(ctx, execution.Namespace, execution.WorkspaceID, execution.AgentName, incarnation); err != nil {
+	err = s.watchChatRuntime(ctx, execution.Namespace, execution.WorkspaceID, execution.AgentName, incarnation)
+	if err != nil {
 		return err
 	}
 	if string(resolved.Agent.UID) != execution.AgentUid {
-		update.State, update.Reason, update.Message = gatewaydb.ChatExecutionStateFailed, "agent_replaced", "The original agent no longer exists"
+		update.State = gatewaydb.ChatExecutionStateFailed
+		update.Reason = "agent_replaced"
+		update.Message = "The original agent no longer exists"
 		return s.updateChatExecution(ctx, update)
 	}
 	if directory != execution.Directory {
-		update.State, update.Reason, update.Message = gatewaydb.ChatExecutionStateFailed, "directory_changed", "The conversation checkout changed"
+		update.State = gatewaydb.ChatExecutionStateFailed
+		update.Reason = "directory_changed"
+		update.Message = "The conversation checkout changed"
 		return s.updateChatExecution(ctx, update)
 	}
 	if execution.WorkflowRunUid != "" {
@@ -340,13 +351,25 @@ func (s *Service) reconcileChatExecution(ctx context.Context, execution gatewayd
 		if err != nil && !apierrors.IsNotFound(err) {
 			return err
 		}
-		if apierrors.IsNotFound(err) || string(run.UID) != execution.WorkflowRunUid || run.Status.SessionID != execution.SessionID || run.Status.ExecutionID != execution.ID.String() || run.Spec.AgentName != execution.AgentName || run.Spec.WorkflowName != execution.WorkflowName || !run.DeletionTimestamp.IsZero() || run.Status.Phase != agentzv1alpha1.WorkflowRunPhaseRunning {
-			update.State, update.Reason, update.Message = gatewaydb.ChatExecutionStateCancelled, "workflow_ended", "The workflow run ended"
+		workflowEnded := apierrors.IsNotFound(err) ||
+			string(run.UID) != execution.WorkflowRunUid ||
+			run.Status.SessionID != execution.SessionID ||
+			run.Status.ExecutionID != execution.ID.String() ||
+			run.Spec.AgentName != execution.AgentName ||
+			run.Spec.WorkflowName != execution.WorkflowName ||
+			!run.DeletionTimestamp.IsZero() ||
+			run.Status.Phase != agentzv1alpha1.WorkflowRunPhaseRunning
+		if workflowEnded {
+			update.State = gatewaydb.ChatExecutionStateCancelled
+			update.Reason = "workflow_ended"
+			update.Message = "The workflow run ended"
 			return s.updateChatExecution(ctx, update)
 		}
 	}
 	if execution.Deadline.Valid && !time.Now().Before(execution.Deadline.Time) {
-		update.State, update.Reason, update.Message = gatewaydb.ChatExecutionStateFailed, "timed_out", "The original workflow deadline expired"
+		update.State = gatewaydb.ChatExecutionStateFailed
+		update.Reason = "timed_out"
+		update.Message = "The original workflow deadline expired"
 		return s.updateChatExecution(ctx, update)
 	}
 	client, err := s.agentClient(ctx, execution.Namespace, execution.AgentName, s.outboundHTTP)
@@ -392,21 +415,33 @@ func (s *Service) observeChatAttempt(ctx context.Context, client *gatewayapi.Cli
 	accepted := len(prompts) > 0 && prompts[len(prompts)-1].Accepted
 	switch {
 	case observed.missing:
-		update.State, update.Reason, update.Message = gatewaydb.ChatExecutionStateFailed, "native_session_missing", "The saved native conversation is unavailable"
+		update.State = gatewaydb.ChatExecutionStateFailed
+		update.Reason = "native_session_missing"
+		update.Message = "The saved native conversation is unavailable"
 	case observed.completed && !observed.failed:
-		update.State, update.Reason, update.Message = gatewaydb.ChatExecutionStateCompleted, "completed", "Conversation execution completed"
+		update.State = gatewaydb.ChatExecutionStateCompleted
+		update.Reason = "completed"
+		update.Message = "Conversation execution completed"
 	case observed.waiting || execution.WaitingOnUser && changed:
-		update.State, update.Reason, update.Message = gatewaydb.ChatExecutionStateBlocked, "waiting_on_user", "The interrupted conversation needs your response"
+		update.State = gatewaydb.ChatExecutionStateBlocked
+		update.Reason = "waiting_on_user"
+		update.Message = "The interrupted conversation needs your response"
 		update.WaitingOnUser = true
 	case observed.busy && !changed:
-		update.State, update.Reason, update.Message = gatewaydb.ChatExecutionStateRunning, "running", "Conversation execution is running"
+		update.State = gatewaydb.ChatExecutionStateRunning
+		update.Reason = "running"
+		update.Message = "Conversation execution is running"
 		update.WaitingOnUser = false
 	case observed.completed && observed.failed && (!observed.aborted || !changed):
-		update.State, update.Reason, update.Message = gatewaydb.ChatExecutionStateFailed, "native_execution_failed", "The agent stopped with an error"
+		update.State = gatewaydb.ChatExecutionStateFailed
+		update.Reason = "native_execution_failed"
+		update.Message = "The agent stopped with an error"
 	case changed:
 		return s.continueChatExecution(ctx, execution, attempt, incarnation, accepted, update)
 	case !observed.busy && time.Since(attempt.UpdatedAt) >= time.Minute:
-		update.State, update.Reason, update.Message = gatewaydb.ChatExecutionStateFailed, "admission_unconfirmed", "The agent did not confirm a running or completed execution"
+		update.State = gatewaydb.ChatExecutionStateFailed
+		update.Reason = "admission_unconfirmed"
+		update.Message = "The agent did not confirm a running or completed execution"
 	default:
 		return nil
 	}
@@ -414,9 +449,7 @@ func (s *Service) observeChatAttempt(ctx context.Context, client *gatewayapi.Cli
 }
 
 func (s *Service) readChatAttempt(ctx context.Context, client *gatewayapi.ClientWithResponses, execution gatewaydb.ChatExecution, prompts []gatewaydb.ChatExecutionPrompt) (chatAttemptObservation, error) {
-	status, err := client.SessionStatusWithResponse(ctx, execution.AgentName, &gatewayapi.SessionStatusParams{
-		Directory: &execution.Directory,
-	})
+	status, err := client.SessionStatusWithResponse(ctx, execution.AgentName, &gatewayapi.SessionStatusParams{Directory: &execution.Directory})
 	if err != nil {
 		return chatAttemptObservation{}, err
 	}
@@ -439,9 +472,7 @@ func (s *Service) readChatAttempt(ctx context.Context, client *gatewayapi.Client
 		return chatAttemptObservation{}, err
 	}
 	if history.StatusCode() == http.StatusNotFound {
-		return chatAttemptObservation{
-			missing: true,
-		}, nil
+		return chatAttemptObservation{missing: true}, nil
 	}
 	if history.JSON200 == nil {
 		return chatAttemptObservation{}, fmt.Errorf("read native conversation: %s", history.Status())
@@ -480,7 +511,12 @@ func (s *Service) readChatAttempt(ctx context.Context, client *gatewayapi.Client
 		}
 	}
 	accepted := len(prompts) > 0 && prompts[len(prompts)-1].Accepted
-	tracked := assistant.ParentID == lastUser && lastUser != "" || slices.ContainsFunc(prompts, func(prompt gatewaydb.ChatExecutionPrompt) bool { return prompt.MessageID == assistant.ParentID })
+	tracked := assistant.ParentID == lastUser && lastUser != ""
+	if !tracked {
+		tracked = slices.ContainsFunc(prompts, func(prompt gatewaydb.ChatExecutionPrompt) bool {
+			return prompt.MessageID == assistant.ParentID
+		})
+	}
 	finished := assistant.Finish != nil && *assistant.Finish != "tool-calls" && *assistant.Finish != "unknown"
 	completed := accepted && tracked && !busy && assistant.Time.Completed != nil && (finished || assistant.Error != nil)
 	aborted := false
@@ -491,15 +527,19 @@ func (s *Service) readChatAttempt(ctx context.Context, client *gatewayapi.Client
 		}
 		aborted = kind == "MessageAbortedError"
 	}
-	permissions, err := client.PermissionListWithResponse(ctx, execution.AgentName, &gatewayapi.PermissionListParams{
-		Directory: &execution.Directory,
-	})
+	permissions, err := client.PermissionListWithResponse(
+		ctx,
+		execution.AgentName,
+		&gatewayapi.PermissionListParams{Directory: &execution.Directory},
+	)
 	if err != nil {
 		return chatAttemptObservation{}, err
 	}
-	questions, err := client.QuestionListWithResponse(ctx, execution.AgentName, &gatewayapi.QuestionListParams{
-		Directory: &execution.Directory,
-	})
+	questions, err := client.QuestionListWithResponse(
+		ctx,
+		execution.AgentName,
+		&gatewayapi.QuestionListParams{Directory: &execution.Directory},
+	)
 	if err != nil {
 		return chatAttemptObservation{}, err
 	}
@@ -508,7 +548,12 @@ func (s *Service) readChatAttempt(ctx context.Context, client *gatewayapi.Client
 	}
 	waiting := slices.ContainsFunc(*permissions.JSON200, func(request gatewayapi.OpencodePermissionRequest) bool {
 		return request.SessionID == execution.SessionID
-	}) || slices.ContainsFunc(*questions.JSON200, func(request gatewayapi.OpencodeQuestionRequest) bool { return request.SessionID == execution.SessionID })
+	})
+	if !waiting {
+		waiting = slices.ContainsFunc(*questions.JSON200, func(request gatewayapi.OpencodeQuestionRequest) bool {
+			return request.SessionID == execution.SessionID
+		})
+	}
 	return chatAttemptObservation{
 		busy:      busy,
 		completed: completed,
@@ -535,9 +580,7 @@ func (s *Service) readV2ChatAttempt(ctx context.Context, client *gatewayapi.Clie
 		return chatAttemptObservation{}, err
 	}
 	if history.StatusCode() == http.StatusNotFound {
-		return chatAttemptObservation{
-			missing: true,
-		}, nil
+		return chatAttemptObservation{missing: true}, nil
 	}
 	if history.JSON200 == nil {
 		return chatAttemptObservation{}, fmt.Errorf("read native session messages: %s", history.Status())
@@ -587,7 +630,8 @@ func (s *Service) readV2ChatAttempt(ctx context.Context, client *gatewayapi.Clie
 	accepted := len(prompts) > 0 && prompts[len(prompts)-1].Accepted
 	tracked := slices.ContainsFunc(prompts, func(prompt gatewaydb.ChatExecutionPrompt) bool { return prompt.MessageID == user.Id })
 	finished := assistant.Finish != nil && *assistant.Finish != "tool-calls" && *assistant.Finish != "unknown"
-	completed := accepted && tracked && !busy && finished && assistant.Time.Completed != nil && assistantIndex >= 0 && assistantIndex < userIndex
+	completed := accepted && tracked && !busy && finished &&
+		assistant.Time.Completed != nil && assistantIndex >= 0 && assistantIndex < userIndex
 	return chatAttemptObservation{
 		busy:      busy,
 		completed: completed,
@@ -598,16 +642,20 @@ func (s *Service) readV2ChatAttempt(ctx context.Context, client *gatewayapi.Clie
 
 func (s *Service) continueChatExecution(ctx context.Context, execution gatewaydb.ChatExecution, attempt gatewaydb.ChatAttempt, incarnation string, accepted bool, update gatewaydb.GatewayUpdateChatExecutionParams) error {
 	if !s.cfg.ConversationRecoveryEnabled {
-		update.State, update.Reason, update.Message = gatewaydb.ChatExecutionStateFailed, "recovery_disabled", "Automatic conversation recovery is disabled"
+		update.State = gatewaydb.ChatExecutionStateFailed
+		update.Reason = "recovery_disabled"
+		update.Message = "Automatic conversation recovery is disabled"
 		return s.updateChatExecution(ctx, update)
 	}
 	if execution.Continuations == 3 {
-		update.State, update.Reason, update.Message = gatewaydb.ChatExecutionStateFailed, "restart_limit_reached", "The conversation stopped after three consecutive restart continuations"
+		update.State = gatewaydb.ChatExecutionStateFailed
+		update.Reason = "restart_limit_reached"
+		update.Message = "The conversation stopped after three consecutive restart continuations"
 		return s.updateChatExecution(ctx, update)
 	}
 	payload := attempt.Payload
 	if accepted || execution.Continuations > 0 {
-		text := "The agent runtime restarted. Continue where you left off using this conversation's saved history. Tools and native subagents interrupted by the restart will not report back. Inspect their current state before repeating an action."
+		var data workflowRunPromptData
 		if execution.WorkflowRunUid != "" {
 			run := &agentzv1alpha1.WorkflowRun{}
 			err := s.k8sClient.Get(ctx, types.NamespacedName{
@@ -621,7 +669,17 @@ func (s *Service) continueChatExecution(ctx context.Context, execution gatewaydb
 			if err != nil {
 				return err
 			}
-			text += fmt.Sprintf("\nContinue WorkflowRun %q for workflow %q on agent %q. Keep the original inputs and workflow definition. Current node progress: %s. Skip successful nodes. Verify the interrupted node's outcome and update its status yourself using set_workflowrun_status. Finish the same run and report its final status yourself. If an action's outcome cannot be established, report the node and run failed with a clear reason.", execution.WorkflowRunName, execution.WorkflowName, execution.AgentName, progress)
+			data = workflowRunPromptData{
+				AgentName:    execution.AgentName,
+				WorkflowName: execution.WorkflowName,
+				RunName:      execution.WorkflowRunName,
+				ProgressJSON: string(progress),
+			}
+		}
+		var prompt strings.Builder
+		err := gatewayPrompts.ExecuteTemplate(&prompt, "conversation-recovery", data)
+		if err != nil {
+			return err
 		}
 		switch execution.Protocol {
 		case gatewaydb.ChatProtocolV1:
@@ -646,7 +704,7 @@ func (s *Service) continueChatExecution(ctx context.Context, execution gatewaydb
 			var part gatewayapi.OpencodePromptPartInput
 			err := part.FromOpencodeTextPartInput(gatewayapi.OpencodeTextPartInput{
 				Type:      gatewayapi.OpencodeTextPartInputTypeText,
-				Text:      text,
+				Text:      prompt.String(),
 				Synthetic: new(true),
 				Metadata:  &metadata,
 			})
@@ -664,9 +722,7 @@ func (s *Service) continueChatExecution(ctx context.Context, execution gatewaydb
 			if err := json.Unmarshal(payload, &body); err != nil {
 				return err
 			}
-			body.Prompt = gatewayapi.OpencodePromptInput{
-				Text: text,
-			}
+			body.Prompt = gatewayapi.OpencodePromptInput{Text: prompt.String()}
 			body.Id = nil
 			body.Resume = new(true)
 			body.Delivery = new(gatewayapi.V2SessionPromptJSONBodyDeliveryQueue)
@@ -714,7 +770,13 @@ func (s *Service) continueChatExecution(ctx context.Context, execution gatewaydb
 	}
 	err = tx.Commit(ctx)
 	if err == nil {
-		slog.InfoContext(ctx, "conversation recovery scheduled", "execution", execution.ID, "attempt", execution.Attempt, "incarnation", incarnation)
+		slog.InfoContext(
+			ctx,
+			"conversation recovery scheduled",
+			"execution", execution.ID,
+			"attempt", execution.Attempt,
+			"incarnation", incarnation,
+		)
 	}
 	return err
 }
@@ -789,22 +851,37 @@ func (s *Service) submitChatAttempt(ctx context.Context, client *gatewayapi.Clie
 	if err != nil {
 		return err
 	}
-	if current.State == gatewaydb.ChatExecutionStateCancelled || current.State == gatewaydb.ChatExecutionStateFailed || current.State == gatewaydb.ChatExecutionStateCompleted || current.Attempt != execution.Attempt || current.LeaseToken != execution.LeaseToken {
+	inactive := current.State == gatewaydb.ChatExecutionStateCancelled ||
+		current.State == gatewaydb.ChatExecutionStateFailed ||
+		current.State == gatewaydb.ChatExecutionStateCompleted ||
+		current.Attempt != execution.Attempt ||
+		current.LeaseToken != execution.LeaseToken
+	if inactive {
 		return nil
 	}
 	var status int
 	switch execution.Protocol {
 	case gatewaydb.ChatProtocolV1:
-		response, err := client.SessionPromptAsyncWithBodyWithResponse(ctx, execution.AgentName, execution.SessionID,
-			&gatewayapi.SessionPromptAsyncParams{
-				Directory: &execution.Directory,
-			}, "application/json", strings.NewReader(string(attempt.Payload)))
+		response, err := client.SessionPromptAsyncWithBodyWithResponse(
+			ctx,
+			execution.AgentName,
+			execution.SessionID,
+			&gatewayapi.SessionPromptAsyncParams{Directory: &execution.Directory},
+			"application/json",
+			strings.NewReader(string(attempt.Payload)),
+		)
 		if err != nil {
 			return err
 		}
 		status = response.StatusCode()
 	case gatewaydb.ChatProtocolV2:
-		response, err := client.V2SessionPromptWithBodyWithResponse(ctx, execution.AgentName, execution.SessionID, "application/json", strings.NewReader(string(attempt.Payload)))
+		response, err := client.V2SessionPromptWithBodyWithResponse(
+			ctx,
+			execution.AgentName,
+			execution.SessionID,
+			"application/json",
+			strings.NewReader(string(attempt.Payload)),
+		)
 		if err != nil {
 			return err
 		}
@@ -839,17 +916,13 @@ func (s *Service) submitChatAttempt(ctx context.Context, client *gatewayapi.Clie
 	return fmt.Errorf("native prompt admission returned HTTP %d", status)
 }
 
-//go:embed prompt.tmpl
-var promptTemplateText string
-
-var promptTemplate = template.Must(template.New("workflowrun-prompt").Parse(promptTemplateText))
-
-type promptTemplateData struct {
+type workflowRunPromptData struct {
 	AgentName    string
 	WorkflowName string
 	RunName      string
 	InputsJSON   string
 	Definition   string
+	ProgressJSON string
 }
 
 // StartWorkflowExecution records one workflow execution before submitting work.
@@ -864,18 +937,25 @@ func (s *Service) StartWorkflowExecution(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	run := &agentzv1alpha1.WorkflowRun{}
-	err := s.k8sClient.Get(r.Context(), ctrlclient.ObjectKey{
-		Namespace: access.namespace,
-		Name:      runName,
-	}, run)
+	err := s.k8sClient.Get(r.Context(), ctrlclient.ObjectKey{Namespace: access.namespace, Name: runName}, run)
 	if err != nil {
 		apiutil.WriteError(w, r, mapKubeHTTPError("get workflow run", err))
 		return
 	}
 	id, err := uuid.Parse(run.Status.ExecutionID)
-	valid := err == nil && string(run.UID) == input.RunUid && run.Spec.AgentName == agent && run.Spec.WorkflowName == workflowName && run.Status.SessionID != "" && run.Status.Phase == agentzv1alpha1.WorkflowRunPhaseRunning && run.DeletionTimestamp.IsZero()
+	valid := err == nil &&
+		string(run.UID) == input.RunUid &&
+		run.Spec.AgentName == agent &&
+		run.Spec.WorkflowName == workflowName &&
+		run.Status.SessionID != "" &&
+		run.Status.Phase == agentzv1alpha1.WorkflowRunPhaseRunning &&
+		run.DeletionTimestamp.IsZero()
 	if !valid {
-		apiutil.WriteError(w, r, apiutil.NewError(http.StatusConflict, "workflow_execution_conflict", "WorkflowRun does not have an active execution binding", err))
+		apiutil.WriteError(
+			w,
+			r,
+			apiutil.NewError(http.StatusConflict, "workflow_execution_conflict", "WorkflowRun does not have an active execution binding", err),
+		)
 		return
 	}
 	unlock, err := s.lockChatInputs(r.Context(), access.workspaceID, agent, run.Status.SessionID, "")
@@ -884,10 +964,10 @@ func (s *Service) StartWorkflowExecution(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	defer unlock()
-	existing, err := s.queries.GatewayGetChatExecution(r.Context(), gatewaydb.GatewayGetChatExecutionParams{
-		ID:          id,
-		WorkspaceID: access.workspaceID,
-	})
+	existing, err := s.queries.GatewayGetChatExecution(
+		r.Context(),
+		gatewaydb.GatewayGetChatExecutionParams{ID: id, WorkspaceID: access.workspaceID},
+	)
 	if err == nil {
 		apiutil.WriteJSON(w, http.StatusAccepted, chatExecutionView(existing))
 		return
@@ -927,7 +1007,7 @@ func (s *Service) StartWorkflowExecution(w http.ResponseWriter, r *http.Request,
 		}
 	}
 	var prompt strings.Builder
-	err = promptTemplate.Execute(&prompt, promptTemplateData{
+	err = gatewayPrompts.ExecuteTemplate(&prompt, "workflowrun.tmpl", workflowRunPromptData{
 		AgentName:    agent,
 		WorkflowName: workflowName,
 		RunName:      runName,
@@ -1008,10 +1088,7 @@ func (s *Service) GetWorkflowExecution(w http.ResponseWriter, r *http.Request, a
 		return
 	}
 	run := &agentzv1alpha1.WorkflowRun{}
-	err := s.k8sClient.Get(r.Context(), ctrlclient.ObjectKey{
-		Namespace: access.namespace,
-		Name:      runName,
-	}, run)
+	err := s.k8sClient.Get(r.Context(), ctrlclient.ObjectKey{Namespace: access.namespace, Name: runName}, run)
 	if err != nil {
 		apiutil.WriteError(w, r, mapKubeHTTPError("get workflow run", err))
 		return
@@ -1030,10 +1107,10 @@ func (s *Service) GetWorkflowExecution(w http.ResponseWriter, r *http.Request, a
 		apiutil.WriteInternalError(w, r, err)
 		return
 	}
-	execution, err := s.queries.GatewayGetChatExecution(r.Context(), gatewaydb.GatewayGetChatExecutionParams{
-		ID:          id,
-		WorkspaceID: access.workspaceID,
-	})
+	execution, err := s.queries.GatewayGetChatExecution(
+		r.Context(),
+		gatewaydb.GatewayGetChatExecutionParams{ID: id, WorkspaceID: access.workspaceID},
+	)
 	if err == nil && execution.WorkflowRunUid == string(run.UID) {
 		result.Execution = new(chatExecutionView(execution))
 	}
@@ -1125,9 +1202,7 @@ func (s *Service) watchChatRuntime(ctx context.Context, namespace string, worksp
 	s.chatObserverMu.Lock()
 	observer := s.chatObservers[key]
 	if observer == nil {
-		observer = &chatObserver{
-			ready: make(chan struct{}),
-		}
+		observer = &chatObserver{ready: make(chan struct{})}
 		if s.chatObservers == nil {
 			s.chatObservers = make(map[string]*chatObserver)
 		}
@@ -1167,9 +1242,7 @@ func (s *Service) watchChatRuntime(ctx context.Context, namespace string, worksp
 				return
 			}
 			close(observer.ready)
-			for frame, err := range sse.Read(response.Body, &sse.ReadConfig{
-				MaxEventSize: opencodeProxyBodyLimitBytes,
-			}) {
+			for frame, err := range sse.Read(response.Body, &sse.ReadConfig{MaxEventSize: opencodeProxyBodyLimitBytes}) {
 				if err != nil {
 					return
 				}
@@ -1269,10 +1342,7 @@ func (s *Service) updateChatExecution(ctx context.Context, input gatewaydb.Gatew
 	err = q.GatewayNotifyChatInputs(ctx, gatewaydb.GatewayNotifyChatInputsParams{
 		WorkspaceID: execution.WorkspaceID,
 		AgentName:   execution.AgentName,
-		SessionID: pgtype.Text{
-			String: execution.SessionID,
-			Valid:  true,
-		},
+		SessionID:   pgtype.Text{String: execution.SessionID, Valid: true},
 	})
 	if err != nil {
 		return err
@@ -1301,10 +1371,7 @@ func (s *Service) cancelChatExecution(ctx context.Context, input gatewaydb.Gatew
 	err = q.GatewayNotifyChatInputs(ctx, gatewaydb.GatewayNotifyChatInputsParams{
 		WorkspaceID: input.WorkspaceID,
 		AgentName:   input.AgentName,
-		SessionID: pgtype.Text{
-			String: input.SessionID,
-			Valid:  true,
-		},
+		SessionID:   pgtype.Text{String: input.SessionID, Valid: true},
 	})
 	if err != nil {
 		return err

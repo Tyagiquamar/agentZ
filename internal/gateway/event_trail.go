@@ -116,11 +116,8 @@ func (s *Service) ListEventTrailEvents(w http.ResponseWriter, r *http.Request, p
 	}
 
 	query := gatewaydb.GatewayListEventTrailEventsParams{
-		OrganizationID: access.organizationID,
-		RetainedAfter: pgtype.Timestamptz{
-			Time:  retainedAfter,
-			Valid: true,
-		},
+		OrganizationID:   access.organizationID,
+		RetainedAfter:    pgtype.Timestamptz{Time: retainedAfter, Valid: true},
 		ScopeWorkspaceID: access.workspaceID,
 		ActorTypes:       clause.actorTypes,
 		ActorIds:         clause.actorIDs,
@@ -204,10 +201,7 @@ func (s *Service) GetEventTrailEvent(w http.ResponseWriter, r *http.Request, eve
 				Time:  time.Now().Add(-eventTrailRetention),
 				Valid: true,
 			},
-			EventID: pgtype.Text{
-				String: eventID,
-				Valid:  true,
-			},
+			EventID:  pgtype.Text{String: eventID, Valid: true},
 			PageSize: 1,
 		},
 	)
@@ -279,14 +273,8 @@ func compileEventTrailFilters(filters []gatewayapi.EventTrailFilter) (eventTrail
 			if from.After(to) {
 				return eventTrailClause{}, errors.New("event trail date range starts after it ends")
 			}
-			clause.createdAfter = pgtype.Timestamptz{
-				Time:  from,
-				Valid: true,
-			}
-			clause.createdBefore = pgtype.Timestamptz{
-				Time:  to,
-				Valid: true,
-			}
+			clause.createdAfter = pgtype.Timestamptz{Time: from, Valid: true}
+			clause.createdBefore = pgtype.Timestamptz{Time: to, Valid: true}
 			continue
 		}
 
@@ -420,23 +408,15 @@ func (s *Service) authorizeEventTrailRead(ctx context.Context, workspaceID strin
 		}
 	}
 
-	access := eventTrailAccess{
-		organizationID: auth.claims.OrganizationID,
-	}
+	access := eventTrailAccess{organizationID: auth.claims.OrganizationID}
 	if workspaceID != "" {
-		access.workspaceID = pgtype.Text{
-			String: workspaceID,
-			Valid:  true,
-		}
+		access.workspaceID = pgtype.Text{String: workspaceID, Valid: true}
 	}
 	return access, nil
 }
 
 func (s *Service) eventTrailFilters(ctx context.Context, organizationID string, workspaceID pgtype.Text, retainedAfter time.Time) (gatewayapi.EventTrailFilters, error) {
-	retention := pgtype.Timestamptz{
-		Time:  retainedAfter,
-		Valid: true,
-	}
+	retention := pgtype.Timestamptz{Time: retainedAfter, Valid: true}
 	actors, err := s.queries.GatewayListEventTrailActors(
 		ctx,
 		gatewaydb.GatewayListEventTrailActorsParams{
@@ -502,9 +482,7 @@ func (s *Service) eventTrailFilters(ctx context.Context, organizationID string, 
 
 	workspaceFilters := make([]gatewayapi.EventTrailWorkspaceFilter, 0, len(workspaces))
 	for _, workspace := range workspaces {
-		filter := gatewayapi.EventTrailWorkspaceFilter{
-			Id: workspace.WorkspaceID.String,
-		}
+		filter := gatewayapi.EventTrailWorkspaceFilter{Id: workspace.WorkspaceID.String}
 		if workspace.Name.Valid {
 			name := workspace.Name.String
 			filter.Name = &name
@@ -591,9 +569,7 @@ func eventTrailEventView(row gatewaydb.GatewayListEventTrailEventsRow) (gatewaya
 		Target:    target,
 	}
 	if row.WorkspaceID.Valid {
-		workspace := gatewayapi.EventTrailWorkspace{
-			Id: row.WorkspaceID.String,
-		}
+		workspace := gatewayapi.EventTrailWorkspace{Id: row.WorkspaceID.String}
 		if row.WorkspaceName.Valid {
 			name := row.WorkspaceName.String
 			workspace.Name = &name

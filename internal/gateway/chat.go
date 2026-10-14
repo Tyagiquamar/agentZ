@@ -81,10 +81,7 @@ func (s *Service) ListChatSessions(w http.ResponseWriter, r *http.Request, param
 	auth, _ := requestAuthState(r.Context())
 	var ownerID pgtype.Text
 	if auth.workspaceType == agentzv1alpha1.WorkspaceTypeCoding {
-		ownerID = pgtype.Text{
-			String: access.claims.UserID,
-			Valid:  true,
-		}
+		ownerID = pgtype.Text{String: access.claims.UserID, Valid: true}
 	}
 	groupBy := gatewayapi.ChatSessionGroupByNone
 	if params.GroupBy != nil {
@@ -183,10 +180,7 @@ func (s *Service) ListChatSessions(w http.ResponseWriter, r *http.Request, param
 
 	var projectID pgtype.Text
 	if params.ProjectId != nil {
-		projectID = pgtype.Text{
-			String: *params.ProjectId,
-			Valid:  true,
-		}
+		projectID = pgtype.Text{String: *params.ProjectId, Valid: true}
 	}
 	var groupAgent pgtype.Text
 	var groupStatus gatewaydb.NullChatSessionStatus
@@ -218,10 +212,7 @@ func (s *Service) ListChatSessions(w http.ResponseWriter, r *http.Request, param
 		groupValue = key.Value
 		switch groupBy {
 		case gatewayapi.ChatSessionGroupByProject:
-			projectID = pgtype.Text{
-				String: groupValue,
-				Valid:  true,
-			}
+			projectID = pgtype.Text{String: groupValue, Valid: true}
 		case gatewayapi.ChatSessionGroupByAgent:
 			if !slices.Contains(accessibleAgentNames, groupValue) {
 				apiutil.WriteError(w, r, apiutil.NewError(
@@ -232,10 +223,7 @@ func (s *Service) ListChatSessions(w http.ResponseWriter, r *http.Request, param
 				))
 				return
 			}
-			groupAgent = pgtype.Text{
-				String: groupValue,
-				Valid:  true,
-			}
+			groupAgent = pgtype.Text{String: groupValue, Valid: true}
 		case gatewayapi.ChatSessionGroupByStatus:
 			status := gatewaydb.ChatSessionStatus(groupValue)
 			switch status {
@@ -256,33 +244,15 @@ func (s *Service) ListChatSessions(w http.ResponseWriter, r *http.Request, param
 		case gatewayapi.ChatSessionGroupByDate:
 			switch gatewayapi.ChatSessionDateBucket(groupValue) {
 			case gatewayapi.ChatSessionDateBucketToday:
-				groupSince = pgtype.Timestamptz{
-					Time:  today,
-					Valid: true,
-				}
+				groupSince = pgtype.Timestamptz{Time: today, Valid: true}
 			case gatewayapi.ChatSessionDateBucketYesterday:
-				groupSince = pgtype.Timestamptz{
-					Time:  yesterday,
-					Valid: true,
-				}
-				groupBefore = pgtype.Timestamptz{
-					Time:  today,
-					Valid: true,
-				}
+				groupSince = pgtype.Timestamptz{Time: yesterday, Valid: true}
+				groupBefore = pgtype.Timestamptz{Time: today, Valid: true}
 			case gatewayapi.ChatSessionDateBucketPrevious7Days:
-				groupSince = pgtype.Timestamptz{
-					Time:  previousWeek,
-					Valid: true,
-				}
-				groupBefore = pgtype.Timestamptz{
-					Time:  yesterday,
-					Valid: true,
-				}
+				groupSince = pgtype.Timestamptz{Time: previousWeek, Valid: true}
+				groupBefore = pgtype.Timestamptz{Time: yesterday, Valid: true}
 			case gatewayapi.ChatSessionDateBucketOlder:
-				groupBefore = pgtype.Timestamptz{
-					Time:  previousWeek,
-					Valid: true,
-				}
+				groupBefore = pgtype.Timestamptz{Time: previousWeek, Valid: true}
 			default:
 				apiutil.WriteError(w, r, apiutil.NewError(
 					http.StatusBadRequest,
@@ -308,10 +278,7 @@ func (s *Service) ListChatSessions(w http.ResponseWriter, r *http.Request, param
 
 	var agentName pgtype.Text
 	if params.AgentName != nil {
-		agentName = pgtype.Text{
-			String: *params.AgentName,
-			Valid:  true,
-		}
+		agentName = pgtype.Text{String: *params.AgentName, Valid: true}
 	}
 	participantIDs := []string{}
 	if params.ParticipantUserId != nil {
@@ -721,16 +688,10 @@ func (s *Service) UpdateChatSessionPreference(w http.ResponseWriter, r *http.Req
 	}
 	var agentName, lastAgentName pgtype.Text
 	if body.AgentName != nil {
-		agentName = pgtype.Text{
-			String: *body.AgentName,
-			Valid:  true,
-		}
+		agentName = pgtype.Text{String: *body.AgentName, Valid: true}
 	}
 	if body.LastAgentName != nil {
-		lastAgentName = pgtype.Text{
-			String: *body.LastAgentName,
-			Valid:  true,
-		}
+		lastAgentName = pgtype.Text{String: *body.LastAgentName, Valid: true}
 	}
 
 	projectGroup := body.GroupBy == gatewayapi.ChatSessionGroupByProject

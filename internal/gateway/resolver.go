@@ -109,7 +109,13 @@ func newResolver(ctx context.Context, targetOverride string) (*resolver, error) 
 	if err != nil {
 		return nil, fmt.Errorf("create pod clientset: %w", err)
 	}
-	coreFactory := coreinformers.NewSharedInformerFactoryWithOptions(coreClient, 30*time.Second, coreinformers.WithTweakListOptions(func(options *metav1.ListOptions) { options.LabelSelector = "app.kubernetes.io/name=agentz-agent" }))
+	coreFactory := coreinformers.NewSharedInformerFactoryWithOptions(
+		coreClient,
+		30*time.Second,
+		coreinformers.WithTweakListOptions(func(options *metav1.ListOptions) {
+			options.LabelSelector = "app.kubernetes.io/name=agentz-agent"
+		}),
+	)
 	podInformer := coreFactory.Core().V1().Pods()
 	factory := informers.NewSharedInformerFactoryWithOptions(cs, 30*time.Second)
 	agentInformer := factory.Agentz().V1alpha1().Agents()

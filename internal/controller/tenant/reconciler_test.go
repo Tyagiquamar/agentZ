@@ -76,10 +76,7 @@ func TestTenantIsolationExcludesPrivateRuntimes(t *testing.T) {
 		})
 	}
 	baseline := &ciliumv2.CiliumNetworkPolicy{}
-	key = client.ObjectKey{
-		Name:      "runtime-isolation",
-		Namespace: tenant.Name,
-	}
+	key = client.ObjectKey{Name: "runtime-isolation", Namespace: tenant.Name}
 	if err := c.Get(t.Context(), key, baseline); err != nil {
 		t.Fatal(err)
 	}
@@ -151,10 +148,7 @@ func TestTenantChangePredicate(t *testing.T) {
 			tt.name,
 			func(t *testing.T) {
 				t.Parallel()
-				e := event.UpdateEvent{
-					ObjectOld: tt.oldTenant,
-					ObjectNew: tt.newTenant,
-				}
+				e := event.UpdateEvent{ObjectOld: tt.oldTenant, ObjectNew: tt.newTenant}
 				if got := p.Update(e); got != tt.want {
 					t.Fatalf("Update() = %v, want %v", got, tt.want)
 				}

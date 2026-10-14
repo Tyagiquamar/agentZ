@@ -60,9 +60,7 @@ type resourceAccessRequest struct {
 func (s *Service) resourceActors(ctx context.Context, userIDs ...string) (map[string]gatewayapi.ResourceActor, error) {
 	actors := make(map[string]gatewayapi.ResourceActor, len(userIDs))
 	for _, userID := range userIDs {
-		actors[userID] = gatewayapi.ResourceActor{
-			Id: userID,
-		}
+		actors[userID] = gatewayapi.ResourceActor{Id: userID}
 	}
 	if len(actors) == 0 {
 		return actors, nil
@@ -79,11 +77,7 @@ func (s *Service) resourceActors(ctx context.Context, userIDs ...string) (map[st
 	for _, row := range rows {
 		name := row.Name
 		email := openapi_types.Email(row.Email)
-		actor := gatewayapi.ResourceActor{
-			Id:    row.ID,
-			Name:  &name,
-			Email: &email,
-		}
+		actor := gatewayapi.ResourceActor{Id: row.ID, Name: &name, Email: &email}
 		if row.Image.Valid {
 			actor.Image = &row.Image.String
 		}
@@ -100,10 +94,7 @@ func (a resourceAccess) failureResult() gatewaydb.EventTrailResult {
 }
 
 func (s *Service) resolveResourceAccess(ctx context.Context, req resourceAccessRequest) (resourceAccess, *apiutil.APIError) {
-	access := resourceAccess{
-		workspaceID: req.workspaceID,
-		operation:   req.operation,
-	}
+	access := resourceAccess{workspaceID: req.workspaceID, operation: req.operation}
 	claims, apiErr := externalWorkspaceClaims(ctx)
 	if apiErr != nil {
 		return access, apiErr
@@ -221,9 +212,7 @@ func (s *Service) resolveResourceScope(ctx context.Context, claims gatewayClaims
 		)
 	}
 	workspace := &agentzv1alpha1.Workspace{}
-	err = s.k8sClient.Get(ctx, ctrlclient.ObjectKey{
-		Name: row.Namespace,
-	}, workspace)
+	err = s.k8sClient.Get(ctx, ctrlclient.ObjectKey{Name: row.Namespace}, workspace)
 	if err != nil {
 		return "", metav1.OwnerReference{}, apiutil.NewError(
 			http.StatusConflict,
@@ -282,10 +271,7 @@ func (s *Service) resolveResourceCapabilities(ctx context.Context, claims gatewa
 }
 
 func resourceCapabilities(effective authorization.Effective, organizationID, workspaceID string) resourceCapabilitySet {
-	scope := authorization.Scope{
-		OrganizationID: organizationID,
-		WorkspaceID:    workspaceID,
-	}
+	scope := authorization.Scope{OrganizationID: organizationID, WorkspaceID: workspaceID}
 	capabilities := resourceCapabilitySet{}
 	capabilities.skill = gatewayapi.ResourceCapabilities{
 		Read:   effective.Allows(scope, authorization.OperationListSkills),
@@ -352,26 +338,20 @@ func (s *Service) createResourceEventTrail(ctx context.Context, access resourceA
 	}
 	workspaceID := pgtype.Text{}
 	if access.workspaceID != "" {
-		workspaceID = pgtype.Text{
-			String: access.workspaceID,
-			Valid:  true,
-		}
+		workspaceID = pgtype.Text{String: access.workspaceID, Valid: true}
 	}
 	params := gatewaydb.GatewayCreateEventTrailEventParams{
 		ID:             "event-trail-" + uuid.NewString(),
 		OrganizationID: access.claims.OrganizationID,
 		WorkspaceID:    workspaceID,
 		ActorType:      gatewaydb.EventTrailActorUser,
-		ActorID: pgtype.Text{
-			String: access.claims.UserID,
-			Valid:  true,
-		},
-		TargetType: target,
-		TargetID:   id,
-		Category:   category,
-		Action:     category + "." + action,
-		Result:     result,
-		After:      fields,
+		ActorID:        pgtype.Text{String: access.claims.UserID, Valid: true},
+		TargetType:     target,
+		TargetID:       id,
+		Category:       category,
+		Action:         category + "." + action,
+		Result:         result,
+		After:          fields,
 	}
 	_, err = s.queries.GatewayCreateEventTrailEvent(ctx, params)
 	if err != nil {

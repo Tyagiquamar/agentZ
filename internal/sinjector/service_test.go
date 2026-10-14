@@ -13,11 +13,7 @@ func TestRewriteRequestRewritesBasicAuth(t *testing.T) {
 	raw := "user:agentz:resolve:env:TOKEN"
 	req := &http.Request{
 		Method: http.MethodGet,
-		URL: &url.URL{
-			Scheme: "https",
-			Host:   "example.com",
-			Path:   "/v1",
-		},
+		URL:    &url.URL{Scheme: "https", Host: "example.com", Path: "/v1"},
 		Header: http.Header{},
 	}
 	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(raw)))

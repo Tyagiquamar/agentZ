@@ -129,9 +129,7 @@ func (r *ExtAuthRuntimeReconciler) namespaceForWorkspace(_ context.Context, obj 
 
 func (r *ExtAuthRuntimeReconciler) namespaceForObject(_ context.Context, obj client.Object) []reconcile.Request {
 	return []reconcile.Request{{
-		NamespacedName: types.NamespacedName{
-			Name: obj.GetNamespace(),
-		},
+		NamespacedName: types.NamespacedName{Name: obj.GetNamespace()},
 	}}
 }
 
@@ -164,10 +162,7 @@ func (r *ExtAuthRuntimeReconciler) runtimeNeeded(ctx context.Context, ns string)
 // Reconcile creates or removes the namespace-shared ext-auth runtime.
 func (r *ExtAuthRuntimeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	ns := &corev1.Namespace{}
-	err := r.Get(ctx, client.ObjectKey{
-		Name: req.Name,
-	}, ns)
-	if err != nil {
+	if err := r.Get(ctx, client.ObjectKey{Name: req.Name}, ns); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 	if ns.Labels[agentzv1alpha1.TenantManagedByLabel] != agentzv1alpha1.TenantManagedByValue {
@@ -405,11 +400,7 @@ func (r *ExtAuthRuntimeReconciler) reconcileExtAuthScopeReader(ctx context.Conte
 		namespaces = append(namespaces, workspace.namespace)
 		workspaceNames = append(workspaceNames, workspace.name)
 	}
-	role := &rbacv1.ClusterRole{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
-		},
-	}
+	role := &rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: name}}
 	_, err := ctrlutil.CreateOrPatch(
 		ctx,
 		r.Client,
@@ -443,11 +434,7 @@ func (r *ExtAuthRuntimeReconciler) reconcileExtAuthScopeReader(ctx context.Conte
 		return fmt.Errorf("create or patch ext auth scope reader role: %w", err)
 	}
 
-	binding := &rbacv1.ClusterRoleBinding{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
-		},
-	}
+	binding := &rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: name}}
 	_, err = ctrlutil.CreateOrPatch(
 		ctx,
 		r.Client,
@@ -997,14 +984,8 @@ func extAuthPolicySpec(ns string, workspaces []workspaceAccess) *ciliumapi.Rule 
 				},
 				ToPorts: ciliumapi.PortRules{{
 					Ports: []ciliumapi.PortProtocol{
-						{
-							Port:     "18081",
-							Protocol: ciliumapi.ProtoTCP,
-						},
-						{
-							Port:     "18082",
-							Protocol: ciliumapi.ProtoTCP,
-						},
+						{Port: "18081", Protocol: ciliumapi.ProtoTCP},
+						{Port: "18082", Protocol: ciliumapi.ProtoTCP},
 					},
 				}},
 			},
@@ -1189,17 +1170,13 @@ func (r *ExtAuthRuntimeReconciler) deleteExtAuthRuntime(ctx context.Context, ns 
 
 	scopeReaderName := accessName + "-scope-reader"
 	scopeReaderBinding := &rbacv1.ClusterRoleBinding{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: scopeReaderName,
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: scopeReaderName},
 	}
 	if err := r.Delete(ctx, scopeReaderBinding); err != nil && !apierrors.IsNotFound(err) {
 		return fmt.Errorf("delete ext auth scope reader binding: %w", err)
 	}
 	scopeReader := &rbacv1.ClusterRole{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: scopeReaderName,
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: scopeReaderName},
 	}
 	if err := r.Delete(ctx, scopeReader); err != nil && !apierrors.IsNotFound(err) {
 		return fmt.Errorf("delete ext auth scope reader role: %w", err)

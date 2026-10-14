@@ -24,10 +24,7 @@ func TestValidatorBindsWorkspaceNameToStableID(t *testing.T) {
 		workspaceID,
 	)
 	tests := []validateWorkspaceCreateCase{
-		{
-			name:       "stable workspace identity",
-			objectName: validName,
-		},
+		{name: "stable workspace identity", objectName: validName},
 		{
 			name: "organization scope hash",
 			objectName: agentzv1alpha1.ScopeNamespace(
@@ -36,11 +33,7 @@ func TestValidatorBindsWorkspaceNameToStableID(t *testing.T) {
 			),
 			wantErr: true,
 		},
-		{
-			name:       "display alias",
-			objectName: "platform-team",
-			wantErr:    true,
-		},
+		{name: "display alias", objectName: "platform-team", wantErr: true},
 	}
 
 	for _, tt := range tests {
@@ -49,9 +42,7 @@ func TestValidatorBindsWorkspaceNameToStableID(t *testing.T) {
 			func(t *testing.T) {
 				t.Parallel()
 				obj := &agentzv1alpha1.Workspace{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: tt.objectName,
-					},
+					ObjectMeta: metav1.ObjectMeta{Name: tt.objectName},
 					Spec: agentzv1alpha1.WorkspaceSpec{
 						WorkspaceID:    workspaceID,
 						OrganizationID: "organization_01k1qj8ke5vsxg64ns0g13m87v",

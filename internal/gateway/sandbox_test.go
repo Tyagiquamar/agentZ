@@ -237,12 +237,8 @@ func TestSandboxMutationAuthorizationIncludesCreatorPrivilege(t *testing.T) {
 				tenantContextKey{},
 				tenantRequest{
 					tenant: &agentzv1alpha1.Tenant{
-						Spec: agentzv1alpha1.TenantSpec{
-							OrganizationID: testOrganizationID,
-						},
-						Status: agentzv1alpha1.TenantStatus{
-							Namespace: testOrgNamespace,
-						},
+						Spec:   agentzv1alpha1.TenantSpec{OrganizationID: testOrganizationID},
+						Status: agentzv1alpha1.TenantStatus{Namespace: testOrgNamespace},
 					},
 				},
 			)
@@ -356,10 +352,7 @@ func TestUpdateSecretSandboxHostsAllowsInheritedSandbox(t *testing.T) {
 		testOrganizationID,
 	)
 	agt := &agentzv1alpha1.Agent{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "agent",
-			Namespace: testWorkspaceNS,
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: "agent", Namespace: testWorkspaceNS},
 		Spec: agentzv1alpha1.AgentSpec{
 			SandboxRef: agentzv1alpha1.ResourceReference{
 				Scope: agentzv1alpha1.ResourceScopeOrganisation,
@@ -380,11 +373,7 @@ func TestUpdateSecretSandboxHostsAllowsInheritedSandbox(t *testing.T) {
 		},
 	}
 	client := agentzfake.NewSimpleClientset(agt, sandbox)
-	svc := &Service{
-		resolver: &resolver{
-			client: client,
-		},
-	}
+	svc := &Service{resolver: &resolver{client: client}}
 
 	warning, apiErr := svc.updateSecretSandboxHosts(
 		context.Background(),
@@ -463,9 +452,7 @@ func sandboxTestService(t *testing.T, queries gatewaydb.Querier) *Service {
 			},
 		},
 		&agentzv1alpha1.Workspace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: testWorkspaceNS,
-			},
+			ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceNS},
 			Spec: agentzv1alpha1.WorkspaceSpec{
 				WorkspaceID:    testWorkspaceID,
 				OrganizationID: testOrganizationID,
@@ -473,19 +460,12 @@ func sandboxTestService(t *testing.T, queries gatewaydb.Querier) *Service {
 					InferenceProviders: []string{"provider"},
 				},
 			},
-			Status: agentzv1alpha1.WorkspaceStatus{
-				Namespace: testWorkspaceNS,
-			},
+			Status: agentzv1alpha1.WorkspaceStatus{Namespace: testWorkspaceNS},
 		},
 		&agentzv1alpha1.InferenceProvider{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "provider",
-				Namespace: organizationNamespace,
-			},
+			ObjectMeta: metav1.ObjectMeta{Name: "provider", Namespace: organizationNamespace},
 			Spec: agentzv1alpha1.InferenceProviderSpec{
-				Models: []agentzv1alpha1.InferenceModel{{
-					ID: "model",
-				}},
+				Models: []agentzv1alpha1.InferenceModel{{ID: "model"}},
 			},
 		},
 	}
@@ -514,12 +494,8 @@ func sandboxTestAuth(next http.Handler) http.Handler {
 			tenantContextKey{},
 			tenantRequest{
 				tenant: &agentzv1alpha1.Tenant{
-					Spec: agentzv1alpha1.TenantSpec{
-						OrganizationID: testOrganizationID,
-					},
-					Status: agentzv1alpha1.TenantStatus{
-						Namespace: testOrgNamespace,
-					},
+					Spec:   agentzv1alpha1.TenantSpec{OrganizationID: testOrganizationID},
+					Status: agentzv1alpha1.TenantStatus{Namespace: testOrgNamespace},
 				},
 			},
 		)

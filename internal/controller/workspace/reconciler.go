@@ -142,9 +142,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 
 	tenant, err := r.readyTenant(ctx, workspace.Spec.OrganizationID)
 	if err != nil {
-		return ctrl.Result{
-			RequeueAfter: 2 * time.Second,
-		}, r.markPending(
+		return ctrl.Result{RequeueAfter: 2 * time.Second}, r.markPending(
 			ctx,
 			&workspace,
 			attempt,
@@ -164,9 +162,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 				err,
 			)
 		}
-		return ctrl.Result{
-			RequeueAfter: 2 * time.Second,
-		}, r.markPending(
+		return ctrl.Result{RequeueAfter: 2 * time.Second}, r.markPending(
 			ctx,
 			&workspace,
 			attempt,
@@ -194,9 +190,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		},
 	)
 	if err != nil {
-		return ctrl.Result{
-			RequeueAfter: 2 * time.Second,
-		}, r.markPending(
+		return ctrl.Result{RequeueAfter: 2 * time.Second}, r.markPending(
 			ctx,
 			&workspace,
 			attempt,
@@ -216,9 +210,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 				err,
 			)
 		}
-		return ctrl.Result{
-			RequeueAfter: 2 * time.Second,
-		}, r.markPending(
+		return ctrl.Result{RequeueAfter: 2 * time.Second}, r.markPending(
 			ctx,
 			&workspace,
 			attempt,
@@ -240,9 +232,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 				err,
 			)
 		}
-		return ctrl.Result{
-			RequeueAfter: 2 * time.Second,
-		}, r.markPending(
+		return ctrl.Result{RequeueAfter: 2 * time.Second}, r.markPending(
 			ctx,
 			&workspace,
 			attempt,
@@ -280,9 +270,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 				err,
 			)
 		}
-		return ctrl.Result{
-			RequeueAfter: 2 * time.Second,
-		}, r.markPending(
+		return ctrl.Result{RequeueAfter: 2 * time.Second}, r.markPending(
 			ctx,
 			&workspace,
 			attempt,
@@ -292,9 +280,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		)
 	}
 	if !certReady {
-		return ctrl.Result{
-			RequeueAfter: 2 * time.Second,
-		}, r.markPending(
+		return ctrl.Result{RequeueAfter: 2 * time.Second}, r.markPending(
 			ctx,
 			&workspace,
 			attempt,
@@ -375,10 +361,7 @@ func (r *Reconciler) readyTenant(ctx context.Context, organizationID string) (*a
 		organizationID,
 	)
 	var tenant agentzv1alpha1.Tenant
-	err := r.Direct.Get(ctx, client.ObjectKey{
-		Name: name,
-	}, &tenant)
-	if err != nil {
+	if err := r.Direct.Get(ctx, client.ObjectKey{Name: name}, &tenant); err != nil {
 		return nil, fmt.Errorf("get organization tenant %q: %w", name, err)
 	}
 	if tenant.Spec.OrganizationID != organizationID {
@@ -404,11 +387,7 @@ func (r *Reconciler) readyTenant(ctx context.Context, organizationID string) (*a
 }
 
 func (r *Reconciler) reconcileNamespace(ctx context.Context, workspace *agentzv1alpha1.Workspace, tenant *agentzv1alpha1.Tenant) error {
-	ns := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: workspace.Name,
-		},
-	}
+	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: workspace.Name}}
 	_, err := controllerutil.CreateOrPatch(
 		ctx,
 		r.Direct,
@@ -529,9 +508,7 @@ func (r *Reconciler) reconcileNixStorePVC(ctx context.Context, workspace *agentz
 
 func (r *Reconciler) reconcileIsolationPolicy(ctx context.Context, workspace *agentzv1alpha1.Workspace, tenant *agentzv1alpha1.Tenant) error {
 	namespace := &corev1.Namespace{}
-	key := client.ObjectKey{
-		Name: workspace.Name,
-	}
+	key := client.ObjectKey{Name: workspace.Name}
 	if err := r.Direct.Get(ctx, key, namespace); err != nil {
 		return err
 	}
@@ -616,14 +593,8 @@ func (r *Reconciler) reconcileIsolationPolicy(ctx context.Context, workspace *ag
 						},
 						ToPorts: []ciliumpolicyapi.PortRule{{
 							Ports: []ciliumpolicyapi.PortProtocol{
-								{
-									Port:     "4096",
-									Protocol: ciliumpolicyapi.ProtoTCP,
-								},
-								{
-									Port:     "4097",
-									Protocol: ciliumpolicyapi.ProtoTCP,
-								},
+								{Port: "4096", Protocol: ciliumpolicyapi.ProtoTCP},
+								{Port: "4097", Protocol: ciliumpolicyapi.ProtoTCP},
 							},
 						}},
 					},
@@ -647,14 +618,8 @@ func (r *Reconciler) reconcileIsolationPolicy(ctx context.Context, workspace *ag
 						},
 						ToPorts: []ciliumpolicyapi.PortRule{{
 							Ports: []ciliumpolicyapi.PortProtocol{
-								{
-									Port:     "53",
-									Protocol: "UDP",
-								},
-								{
-									Port:     "53",
-									Protocol: "TCP",
-								},
+								{Port: "53", Protocol: "UDP"},
+								{Port: "53", Protocol: "TCP"},
 							},
 						}},
 					},
@@ -785,10 +750,7 @@ func (r *Reconciler) updateLifecycleStatus(ctx context.Context, name string, att
 		retry.DefaultRetry,
 		func() error {
 			var workspace agentzv1alpha1.Workspace
-			err := r.Direct.Get(ctx, client.ObjectKey{
-				Name: name,
-			}, &workspace)
-			if err != nil {
+			if err := r.Direct.Get(ctx, client.ObjectKey{Name: name}, &workspace); err != nil {
 				return err
 			}
 			if workspace.Spec.ProvisioningAttempt != attempt {

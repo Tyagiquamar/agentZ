@@ -278,10 +278,7 @@ func ListSchedules(ctx context.Context, k8sClient ctrlclient.Client, ns string, 
 // DeleteSchedule removes a schedule after checking its agent and workflow scope.
 func DeleteSchedule(ctx context.Context, k8sClient ctrlclient.Client, ns string, agtName string, wfName string, name string) error {
 	schedule := &agentzv1alpha1.WorkflowSchedule{}
-	key := ctrlclient.ObjectKey{
-		Name:      name,
-		Namespace: ns,
-	}
+	key := ctrlclient.ObjectKey{Name: name, Namespace: ns}
 	if err := k8sClient.Get(ctx, key, schedule); err != nil {
 		return err
 	}
@@ -297,10 +294,7 @@ func DeleteSchedule(ctx context.Context, k8sClient ctrlclient.Client, ns string,
 // UpdateSchedule replaces a schedule specification, retrying concurrent updates.
 func UpdateSchedule(ctx context.Context, k8sClient ctrlclient.Client, ns string, agtName string, wfName string, name string, req gatewayapi.UpdateWorkflowScheduleRequest) (gatewayapi.WorkflowSchedule, error) {
 	current := &agentzv1alpha1.WorkflowSchedule{}
-	key := ctrlclient.ObjectKey{
-		Name:      name,
-		Namespace: ns,
-	}
+	key := ctrlclient.ObjectKey{Name: name, Namespace: ns}
 	if err := k8sClient.Get(ctx, key, current); err != nil {
 		return gatewayapi.WorkflowSchedule{}, err
 	}
@@ -442,9 +436,7 @@ func applyScheduleSpec(spec *agentzv1alpha1.WorkflowScheduleSpec, agtName string
 	if specInput.timeZone != nil {
 		spec.TimeZone = *specInput.timeZone
 	}
-	spec.Inputs = apiextensionsv1.JSON{
-		Raw: inputsJSON,
-	}
+	spec.Inputs = apiextensionsv1.JSON{Raw: inputsJSON}
 	spec.TimeoutSeconds = specInput.timeoutSeconds
 	spec.Suspend = false
 	if specInput.suspend != nil {

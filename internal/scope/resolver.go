@@ -39,10 +39,7 @@ type Selection struct {
 // Namespace resolves scope from a verified Organisation or Workspace namespace.
 func Namespace(ctx context.Context, c client.Reader, current string, scope agentzv1alpha1.ResourceScope) (string, error) {
 	var ns corev1.Namespace
-	err := c.Get(ctx, client.ObjectKey{
-		Name: current,
-	}, &ns)
-	if err != nil {
+	if err := c.Get(ctx, client.ObjectKey{Name: current}, &ns); err != nil {
 		return "", fmt.Errorf("get current namespace: %w", err)
 	}
 
@@ -67,10 +64,7 @@ func Namespace(ctx context.Context, c client.Reader, current string, scope agent
 	}
 
 	var workspace agentzv1alpha1.Workspace
-	err = c.Get(ctx, client.ObjectKey{
-		Name: workspaceName,
-	}, &workspace)
-	if err != nil {
+	if err := c.Get(ctx, client.ObjectKey{Name: workspaceName}, &workspace); err != nil {
 		return "", fmt.Errorf("get current Workspace identity: %w", err)
 	}
 	organizationNamespace := agentzv1alpha1.ScopeNamespace(
@@ -91,10 +85,7 @@ func SelectedNamespace(ctx context.Context, c client.Reader, current string, sel
 		return ns, err
 	}
 	workspace := &agentzv1alpha1.Workspace{}
-	err = c.Get(ctx, client.ObjectKey{
-		Name: current,
-	}, workspace)
-	if err != nil {
+	if err := c.Get(ctx, client.ObjectKey{Name: current}, workspace); err != nil {
 		return "", fmt.Errorf("get Workspace selection: %w", err)
 	}
 	names := workspace.Spec.SelectedOrganizationResources.Names(selection.Kind)

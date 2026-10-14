@@ -232,19 +232,14 @@ func (s *Service) AdoptCodingWorktree(w http.ResponseWriter, r *http.Request, pr
 		"Projects", base64.RawURLEncoding.EncodeToString([]byte(project.OwnerID)),
 		"github", project.ID,
 	)
-	tree := gatewaydb.CodingWorktree{
-		AgentName: input.AgentName,
-		Directory: root + "/repo",
-	}
+	tree := gatewaydb.CodingWorktree{AgentName: input.AgentName, Directory: root + "/repo"}
 	result, err := s.codingFilesystem(
 		r.Context(),
 		access.namespace,
 		tree,
 		project,
 		false,
-		gatewayapi.CodingGitRequest{
-			Operation: gatewayapi.CodingGitDiscover,
-		},
+		gatewayapi.CodingGitRequest{Operation: gatewayapi.CodingGitDiscover},
 	)
 	if err != nil {
 		apiutil.WriteError(w, r, apiutil.NewError(http.StatusConflict, "discovery_failed", err.Error(), err))
@@ -456,9 +451,7 @@ func (s *Service) loadCodingSnapshot(ctx context.Context, access resourceAccess,
 			tree,
 			project,
 			false,
-			gatewayapi.CodingGitRequest{
-				Operation: gatewayapi.CodingGitStatus,
-			},
+			gatewayapi.CodingGitRequest{Operation: gatewayapi.CodingGitStatus},
 		)
 		if err != nil {
 			return err
@@ -489,11 +482,9 @@ func (s *Service) loadCodingSnapshot(ctx context.Context, access resourceAccess,
 			owner,
 			repo,
 			&github.PullRequestListOptions{
-				Head:  owner + ":" + current.Branch,
-				State: "open",
-				ListOptions: github.ListOptions{
-					PerPage: 1,
-				},
+				Head:        owner + ":" + current.Branch,
+				State:       "open",
+				ListOptions: github.ListOptions{PerPage: 1},
 			},
 		)
 		if err != nil {
@@ -505,9 +496,7 @@ func (s *Service) loadCodingSnapshot(ctx context.Context, access resourceAccess,
 			tree,
 			project,
 			false,
-			gatewayapi.CodingGitRequest{
-				Operation: gatewayapi.CodingGitStatus,
-			},
+			gatewayapi.CodingGitRequest{Operation: gatewayapi.CodingGitStatus},
 		)
 		if err != nil {
 			return err
@@ -552,9 +541,7 @@ func (s *Service) loadCodingSnapshot(ctx context.Context, access resourceAccess,
 			tree,
 			project,
 			false,
-			gatewayapi.CodingGitRequest{
-				Operation: gatewayapi.CodingGitDiscover,
-			},
+			gatewayapi.CodingGitRequest{Operation: gatewayapi.CodingGitDiscover},
 		)
 		if err != nil {
 			return err
@@ -704,9 +691,7 @@ func (s *Service) WatchCoding(w http.ResponseWriter, r *http.Request) {
 		case <-r.Context().Done():
 			return
 		case revision := <-events:
-			body, err := json.Marshal(gatewayapi.WatchChatSessionsEvent{
-				Revision: strconv.FormatUint(revision, 10),
-			})
+			body, err := json.Marshal(gatewayapi.WatchChatSessionsEvent{Revision: strconv.FormatUint(revision, 10)})
 			if err != nil {
 				return
 			}

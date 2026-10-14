@@ -136,9 +136,7 @@ func TestCredentials(t *testing.T) {
 	}
 
 	bedrock := providerSpec(agentzv1alpha1.InferenceProviderKindBedrock)
-	_, _, err := CredentialsForUpdate(bedrock, CredentialValues{
-		AccessKey: "new",
-	})
+	_, _, err := CredentialsForUpdate(bedrock, CredentialValues{AccessKey: "new"})
 	if err == nil {
 		t.Fatal("CredentialsForUpdate() unexpectedly accepted partial AWS credentials")
 	}
@@ -190,11 +188,8 @@ func TestRenderProviderTargetVertexModelNames(t *testing.T) {
 	t.Parallel()
 
 	provider := &agentzv1alpha1.InferenceProvider{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "vertex",
-			Namespace: "default",
-		},
-		Spec: providerSpec(agentzv1alpha1.InferenceProviderKindVertexAI),
+		ObjectMeta: metav1.ObjectMeta{Name: "vertex", Namespace: "default"},
+		Spec:       providerSpec(agentzv1alpha1.InferenceProviderKindVertexAI),
 	}
 	provider.Spec.Models[0].ID = "gemini-2.5-flash"
 	provider.Spec.Models = append(
@@ -263,19 +258,13 @@ func TestValidateModelRemovalRejectsPoolReference(t *testing.T) {
 	t.Parallel()
 
 	current := &agentzv1alpha1.InferenceProvider{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "provider",
-			Namespace: "default",
-		},
-		Spec: providerSpec(agentzv1alpha1.InferenceProviderKindOpenAI),
+		ObjectMeta: metav1.ObjectMeta{Name: "provider", Namespace: "default"},
+		Spec:       providerSpec(agentzv1alpha1.InferenceProviderKindOpenAI),
 	}
 	desired := current.DeepCopy()
 	desired.Spec.Models = nil
 	pool := &agentzv1alpha1.InferencePool{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "pool",
-			Namespace: "default",
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: "pool", Namespace: "default"},
 		Spec: agentzv1alpha1.InferencePoolSpec{
 			Members: []agentzv1alpha1.InferencePoolMember{{
 				Scope:    agentzv1alpha1.ResourceScopeOrganisation,
@@ -319,19 +308,14 @@ func providerSpec(providerKind agentzv1alpha1.InferenceProviderKind) agentzv1alp
 		DisplayName: "Provider",
 		Kind:        providerKind,
 		Models: []agentzv1alpha1.InferenceModel{{
-			ID:          "model",
-			DisplayName: "Model",
-			Capabilities: agentzv1alpha1.InferenceModelCapabilities{
-				ToolCall: true,
-			},
+			ID:           "model",
+			DisplayName:  "Model",
+			Capabilities: agentzv1alpha1.InferenceModelCapabilities{ToolCall: true},
 			Modalities: agentzv1alpha1.InferenceModelModalities{
 				Input:  []agentzv1alpha1.InferenceModelModality{agentzv1alpha1.InferenceModelModalityText},
 				Output: []agentzv1alpha1.InferenceModelModality{agentzv1alpha1.InferenceModelModalityText},
 			},
-			Limits: agentzv1alpha1.InferenceModelLimits{
-				Context: 128000,
-				Output:  4096,
-			},
+			Limits: agentzv1alpha1.InferenceModelLimits{Context: 128000, Output: 4096},
 		}},
 	}
 
@@ -347,10 +331,7 @@ func providerSpec(providerKind agentzv1alpha1.InferenceProviderKind) agentzv1alp
 		spec.Gemini = &agentzv1alpha1.GeminiProviderConfig{}
 	case agentzv1alpha1.InferenceProviderKindVertexAI:
 		spec.CatalogProvider = "google-vertex"
-		spec.VertexAI = &agentzv1alpha1.VertexAIProviderConfig{
-			Project: "project",
-			Region:  "us-central1",
-		}
+		spec.VertexAI = &agentzv1alpha1.VertexAIProviderConfig{Project: "project", Region: "us-central1"}
 	case agentzv1alpha1.InferenceProviderKindBedrock:
 		spec.CatalogProvider = "amazon-bedrock"
 		spec.Bedrock = &agentzv1alpha1.BedrockProviderConfig{
@@ -475,12 +456,7 @@ func TestDelegatedInferenceRejectsProviderResourceBypasses(t *testing.T) {
 			false,
 			true,
 		},
-		{
-			"responses",
-			`{"model":"selected","store":false,"input":"hi"}`,
-			true,
-			true,
-		},
+		{"responses", `{"model":"selected","store":false,"input":"hi"}`, true, true},
 		{
 			"explicit previous message",
 			`{"model":"selected","store":false,"input":[{"type":"message","id":"msg-inline","role":"assistant","content":[{"type":"output_text","text":"hi"}]}]}`,

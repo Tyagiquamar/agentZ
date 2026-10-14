@@ -132,10 +132,7 @@ func runOTLPTraceReceiver(ctx context.Context, cfg Config, out chan<- event, s *
 func (r *traceReceiver) Export(ctx context.Context, req *tracev1.ExportTraceServiceRequest) (*tracev1.ExportTraceServiceResponse, error) {
 	events, rejected := traceEventsFromOTLPRequest(req)
 	for _, ev := range events {
-		err := sendEvent(ctx, r.out, event{
-			trace: &ev,
-		})
-		if err != nil {
+		if err := sendEvent(ctx, r.out, event{trace: &ev}); err != nil {
 			return nil, err
 		}
 	}

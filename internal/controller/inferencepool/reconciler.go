@@ -76,7 +76,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		}
 		backend := &agentgatewayv1alpha1.AgentgatewayBackend{}
 		key := client.ObjectKeyFromObject(pool)
-		if cleanupErr := r.Get(ctx, key, backend); cleanupErr != nil && !apierrors.IsNotFound(cleanupErr) {
+		cleanupErr = r.Get(ctx, key, backend)
+		if cleanupErr != nil && !apierrors.IsNotFound(cleanupErr) {
 			return ctrl.Result{}, cleanupErr
 		}
 		if metav1.IsControlledBy(backend, pool) {
@@ -94,10 +95,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, errors.Join(err, r.updateStatus(ctx, pool, definition, nil, err))
 	}
 	backend := &agentgatewayv1alpha1.AgentgatewayBackend{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      pool.Name,
-			Namespace: pool.Namespace,
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: pool.Name, Namespace: pool.Namespace},
 	}
 	_, err = ctrlutil.CreateOrPatch(
 		ctx,
@@ -165,10 +163,7 @@ func (r *Reconciler) reconcileCredentialProjections(ctx context.Context, pool *a
 		name := inference.PoolProviderSecretName(pool.Name, member.Provider.Name)
 		desired[name] = struct{}{}
 		projection := &externalsecretsv1.ExternalSecret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: pool.Namespace,
-			},
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: pool.Namespace},
 		}
 		_, err = ctrlutil.CreateOrPatch(
 			ctx,
@@ -218,9 +213,7 @@ func (r *Reconciler) poolsForWorkspace(ctx context.Context, obj client.Object) [
 	}
 	requests := make([]reconcile.Request, 0, len(pools.Items))
 	for _, pool := range pools.Items {
-		requests = append(requests, reconcile.Request{
-			NamespacedName: client.ObjectKeyFromObject(&pool),
-		})
+		requests = append(requests, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&pool)})
 	}
 	return requests
 }
@@ -241,10 +234,7 @@ func (r *Reconciler) reconcileAuthPolicies(ctx context.Context, pool *agentzv1al
 		)
 		desired[policy.Name] = true
 		current := &agentgatewayv1alpha1.AgentgatewayPolicy{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      policy.Name,
-				Namespace: pool.Namespace,
-			},
+			ObjectMeta: metav1.ObjectMeta{Name: policy.Name, Namespace: pool.Namespace},
 		}
 		_, err := ctrlutil.CreateOrPatch(
 			ctx,
@@ -352,15 +342,10 @@ func (r *Reconciler) reconcileDelete(ctx context.Context, pool *agentzv1alpha1.I
 		return ctrl.Result{}, fmt.Errorf("list pool references before deletion: %w", err)
 	}
 	if len(sandboxes.Items) > 0 {
-		return ctrl.Result{
-			RequeueAfter: 5 * time.Second,
-		}, nil
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 	backend := &agentgatewayv1alpha1.AgentgatewayBackend{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      pool.Name,
-			Namespace: pool.Namespace,
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: pool.Name, Namespace: pool.Namespace},
 	}
 	err = r.Get(ctx, client.ObjectKeyFromObject(backend), backend)
 	if err == nil && !metav1.IsControlledBy(backend, pool) {
@@ -370,9 +355,7 @@ func (r *Reconciler) reconcileDelete(ctx context.Context, pool *agentzv1alpha1.I
 		if err := r.Delete(ctx, backend); err != nil && !apierrors.IsNotFound(err) {
 			return ctrl.Result{}, fmt.Errorf("delete pool backend: %w", err)
 		}
-		return ctrl.Result{
-			RequeueAfter: 500 * time.Millisecond,
-		}, nil
+		return ctrl.Result{RequeueAfter: 500 * time.Millisecond}, nil
 	}
 	if !apierrors.IsNotFound(err) {
 		return ctrl.Result{}, fmt.Errorf("read pool backend for cleanup: %w", err)
@@ -431,10 +414,7 @@ func (r *Reconciler) updateStatus(ctx context.Context, pool *agentzv1alpha1.Infe
 					}
 					if target.Policies.Auth != nil {
 						name := inference.PoolProviderSecretName(pool.Name, member.Provider.Name)
-						key := client.ObjectKey{
-							Name:      name,
-							Namespace: pool.Namespace,
-						}
+						key := client.ObjectKey{Name: name, Namespace: pool.Namespace}
 						projection := &externalsecretsv1.ExternalSecret{}
 						if err := r.Get(ctx, key, projection); err != nil && !apierrors.IsNotFound(err) {
 							return err

@@ -31,9 +31,7 @@ type WebhookConfig struct {
 // RegisterWithManager registers the Tenant webhook with the manager.
 func RegisterWithManager(mgr ctrl.Manager, cfg WebhookConfig) error {
 	return ctrl.NewWebhookManagedBy(mgr, &agentzv1alpha1.Tenant{}).
-		WithValidator(&Validator{
-			reader: mgr.GetAPIReader(),
-		}).
+		WithValidator(&Validator{reader: mgr.GetAPIReader()}).
 		WithDefaulter(NewDefaulter(cfg.AgentQuota, cfg.DashboardQuota)).
 		Complete()
 }

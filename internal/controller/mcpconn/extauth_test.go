@@ -56,9 +56,7 @@ func TestExtAuthAccessIsLimitedToOrganizationWorkspaces(t *testing.T) {
 		}
 	}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ns, allowed, foreign).Build()
-	r := &ExtAuthRuntimeReconciler{
-		Client: c,
-	}
+	r := &ExtAuthRuntimeReconciler{Client: c}
 	access, err := r.workspaceAccess(context.Background(), ns)
 	if err != nil {
 		t.Fatalf("workspaceAccess() error = %v", err)
@@ -68,11 +66,7 @@ func TestExtAuthAccessIsLimitedToOrganizationWorkspaces(t *testing.T) {
 	}
 
 	labels := map[string]string{"app.kubernetes.io/name": extAuthLabelName}
-	ownerRefs := []metav1.OwnerReference{{
-		APIVersion: "v1",
-		Kind:       "Namespace",
-		Name:       org,
-	}}
+	ownerRefs := []metav1.OwnerReference{{APIVersion: "v1", Kind: "Namespace", Name: org}}
 	scope := extAuthScope{
 		namespace:  org,
 		workspaces: access,
@@ -88,10 +82,7 @@ func TestExtAuthAccessIsLimitedToOrganizationWorkspaces(t *testing.T) {
 
 	role := &rbacv1.ClusterRole{}
 	name := mcp.ExtAuthOpenBaoName(org) + "-scope-reader"
-	err = c.Get(context.Background(), client.ObjectKey{
-		Name: name,
-	}, role)
-	if err != nil {
+	if err := c.Get(context.Background(), client.ObjectKey{Name: name}, role); err != nil {
 		t.Fatalf("get scope reader ClusterRole: %v", err)
 	}
 	for _, rule := range role.Rules {
@@ -101,10 +92,7 @@ func TestExtAuthAccessIsLimitedToOrganizationWorkspaces(t *testing.T) {
 	}
 
 	workspaceRole := &rbacv1.Role{}
-	key := client.ObjectKey{
-		Namespace: allowed.Name,
-		Name:      mcp.ExtAuthOpenBaoName(org),
-	}
+	key := client.ObjectKey{Namespace: allowed.Name, Name: mcp.ExtAuthOpenBaoName(org)}
 	if err := c.Get(context.Background(), key, workspaceRole); err != nil {
 		t.Fatalf("get allowed workspace Role: %v", err)
 	}
@@ -118,10 +106,7 @@ func TestExtAuthAccessIsLimitedToOrganizationWorkspaces(t *testing.T) {
 func workspaceForExtAuth(id, organizationID string) *agentzv1alpha1.Workspace {
 	name := agentzv1alpha1.ScopeNamespace(agentzv1alpha1.ResourceScopeWorkspace, id)
 	return &agentzv1alpha1.Workspace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
-			UID:  types.UID("uid-" + name),
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: name, UID: types.UID("uid-" + name)},
 		Spec: agentzv1alpha1.WorkspaceSpec{
 			WorkspaceID:    id,
 			OrganizationID: organizationID,
@@ -160,10 +145,7 @@ func TestExtAuthCallerIdentities(t *testing.T) {
 		t.Fatal(err)
 	}
 	policy := &ciliumv2.CiliumNetworkPolicy{}
-	key := client.ObjectKey{
-		Namespace: "owner",
-		Name:      mcp.ExtAuthServiceName,
-	}
+	key := client.ObjectKey{Namespace: "owner", Name: mcp.ExtAuthServiceName}
 	if err := c.Get(t.Context(), key, policy); err != nil {
 		t.Fatal(err)
 	}
@@ -171,42 +153,10 @@ func TestExtAuthCallerIdentities(t *testing.T) {
 		t.Fatal(err)
 	}
 	cases := []extAuthCallerCase{
-		{
-			"local inference",
-			"owner",
-			"inference",
-			"inference",
-			true,
-			true,
-			false,
-		},
-		{
-			"local MCP",
-			"owner",
-			"mcp",
-			"mcp",
-			true,
-			true,
-			true,
-		},
-		{
-			"related inference",
-			"related",
-			"inference",
-			"inference",
-			true,
-			false,
-			false,
-		},
-		{
-			"related MCP",
-			"related",
-			"mcp",
-			"mcp",
-			true,
-			false,
-			true,
-		},
+		{"local inference", "owner", "inference", "inference", true, true, false},
+		{"local MCP", "owner", "mcp", "mcp", true, true, true},
+		{"related inference", "related", "inference", "inference", true, false, false},
+		{"related MCP", "related", "mcp", "mcp", true, false, true},
 		{
 			"unrelated inference",
 			"foreign",
@@ -234,15 +184,7 @@ func TestExtAuthCallerIdentities(t *testing.T) {
 			false,
 			false,
 		},
-		{
-			"aggregator",
-			"private",
-			"delegations",
-			"delegations",
-			false,
-			false,
-			false,
-		},
+		{"aggregator", "private", "delegations", "delegations", false, false, false},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {

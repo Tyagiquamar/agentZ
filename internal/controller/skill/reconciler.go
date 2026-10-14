@@ -60,9 +60,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			return ctrl.Result{}, fmt.Errorf("check skill references: %w", err)
 		}
 		if len(consumers) > 0 {
-			return ctrl.Result{
-				RequeueAfter: 10 * time.Second,
-			}, nil
+			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 		}
 		store, err := skillpkg.New(ctx, r.StoreConfig)
 		if err != nil {

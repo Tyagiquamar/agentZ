@@ -35,9 +35,7 @@ import (
 )
 
 func (s *Service) resolveAgentAccess(ctx context.Context, name string, operation authorization.Operation) (resourceAccess, *apiutil.APIError) {
-	access := resourceAccess{
-		operation: operation,
-	}
+	access := resourceAccess{operation: operation}
 	if _, ok := operation.BearerScope(); !ok {
 		return access, resourceForbidden(fmt.Errorf("agent operation %q is unknown", operation))
 	}
@@ -518,14 +516,8 @@ func (s *Service) CreateAgent(w http.ResponseWriter, r *http.Request) {
 			name:   name,
 			action: "agent.create",
 			after: []gatewayapi.EventTrailField{
-				{
-					Field: gatewayapi.EventTrailFieldName,
-					Value: name,
-				},
-				{
-					Field: gatewayapi.EventTrailFieldUserID,
-					Value: access.claims.UserID,
-				},
+				{Field: gatewayapi.EventTrailFieldName, Value: name},
+				{Field: gatewayapi.EventTrailFieldUserID, Value: access.claims.UserID},
 			},
 		},
 	)
@@ -948,14 +940,8 @@ func (s *Service) DeleteAgent(w http.ResponseWriter, r *http.Request, agentName 
 			name:   agentName,
 			action: "agent.delete",
 			before: []gatewayapi.EventTrailField{
-				{
-					Field: gatewayapi.EventTrailFieldName,
-					Value: agentName,
-				},
-				{
-					Field: gatewayapi.EventTrailFieldUserID,
-					Value: owner.OwnerUserID,
-				},
+				{Field: gatewayapi.EventTrailFieldName, Value: agentName},
+				{Field: gatewayapi.EventTrailFieldUserID, Value: owner.OwnerUserID},
 			},
 		},
 	)
@@ -1014,10 +1000,7 @@ func (s *Service) TransferAgentOwner(w http.ResponseWriter, r *http.Request, age
 			"invalid_request",
 			"request validation failed",
 			errBadRequest,
-			gatewayapi.FieldError{
-				Field:   "owner_user_id",
-				Message: "required",
-			},
+			gatewayapi.FieldError{Field: "owner_user_id", Message: "required"},
 		))
 		return
 	}
@@ -1128,10 +1111,7 @@ func (s *Service) TransferAgentOwner(w http.ResponseWriter, r *http.Request, age
 	row, err := q.GatewayTransferAgentOwner(
 		r.Context(),
 		gatewaydb.GatewayTransferAgentOwnerParams{
-			UpdatedAt: pgtype.Timestamptz{
-				Time:  time.Now().UTC(),
-				Valid: true,
-			},
+			UpdatedAt:      pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
 			WorkspaceID:    access.workspaceID,
 			AgentName:      agentName,
 			OrganizationID: access.claims.OrganizationID,
@@ -1154,24 +1134,12 @@ func (s *Service) TransferAgentOwner(w http.ResponseWriter, r *http.Request, age
 			name:   agentName,
 			action: "agent.owner.transfer",
 			before: []gatewayapi.EventTrailField{
-				{
-					Field: gatewayapi.EventTrailFieldName,
-					Value: agentName,
-				},
-				{
-					Field: gatewayapi.EventTrailFieldUserID,
-					Value: previous.OwnerUserID,
-				},
+				{Field: gatewayapi.EventTrailFieldName, Value: agentName},
+				{Field: gatewayapi.EventTrailFieldUserID, Value: previous.OwnerUserID},
 			},
 			after: []gatewayapi.EventTrailField{
-				{
-					Field: gatewayapi.EventTrailFieldName,
-					Value: agentName,
-				},
-				{
-					Field: gatewayapi.EventTrailFieldUserID,
-					Value: row.OwnerUserID,
-				},
+				{Field: gatewayapi.EventTrailFieldName, Value: agentName},
+				{Field: gatewayapi.EventTrailFieldUserID, Value: row.OwnerUserID},
 			},
 		},
 	)
@@ -1273,10 +1241,7 @@ func (s *Service) ListAgentAccessTargets(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	workspaceID := pgtype.Text{
-		String: access.workspaceID,
-		Valid:  true,
-	}
+	workspaceID := pgtype.Text{String: access.workspaceID, Valid: true}
 	rows, err := s.queries.GatewayListAgentAccessTargets(
 		r.Context(),
 		gatewaydb.GatewayListAgentAccessTargetsParams{
@@ -1381,9 +1346,7 @@ func (s *Service) ListAgentAccessTargets(w http.ResponseWriter, r *http.Request,
 			return strings.Compare(a.Id, b.Id)
 		},
 	)
-	apiutil.WriteJSON(w, http.StatusOK, gatewayapi.ListAgentAccessTargetsResponse{
-		Targets: targets,
-	})
+	apiutil.WriteJSON(w, http.StatusOK, gatewayapi.ListAgentAccessTargetsResponse{Targets: targets})
 }
 
 // UpsertAgentShare handles POST /api/agent/{agentName}/share.
@@ -1489,10 +1452,7 @@ func (s *Service) UpsertAgentShare(w http.ResponseWriter, r *http.Request, agent
 					"invalid_request",
 					err.Error(),
 					errBadRequest,
-					gatewayapi.FieldError{
-						Field:   "target_user_id",
-						Message: err.Error(),
-					},
+					gatewayapi.FieldError{Field: "target_user_id", Message: err.Error()},
 				),
 			)
 			return
@@ -1578,10 +1538,7 @@ func (s *Service) DeleteAgentShare(w http.ResponseWriter, r *http.Request, agent
 			name:   agentName,
 			action: "agent.share.delete",
 			before: agentShareEventTrailFields(agentName, share),
-			after: []gatewayapi.EventTrailField{{
-				Field: gatewayapi.EventTrailFieldName,
-				Value: agentName,
-			}},
+			after:  []gatewayapi.EventTrailField{{Field: gatewayapi.EventTrailFieldName, Value: agentName}},
 		},
 	)
 	if err != nil {
@@ -1650,9 +1607,7 @@ func (s *Service) WatchAgents(w http.ResponseWriter, r *http.Request) {
 		if len(items) == 0 {
 			return true
 		}
-		raw, err := json.Marshal(gatewayapi.WatchAgentsEvent{
-			Agents: items,
-		})
+		raw, err := json.Marshal(gatewayapi.WatchAgentsEvent{Agents: items})
 		if err != nil {
 			apiutil.RecordRequestError(w, "internal_error", err)
 			return false
@@ -1778,16 +1733,10 @@ func (s *Service) agentCapabilityProjections(ctx context.Context, access resourc
 	rows, err := s.queries.GatewayListAgentRelationships(
 		ctx,
 		gatewaydb.GatewayListAgentRelationshipsParams{
-			UserID: pgtype.Text{
-				String: access.claims.UserID,
-				Valid:  true,
-			},
+			UserID:         pgtype.Text{String: access.claims.UserID, Valid: true},
 			OrganizationID: access.claims.OrganizationID,
 			WorkspaceID:    access.workspaceID,
-			AgentName: pgtype.Text{
-				String: agentName,
-				Valid:  agentName != "",
-			},
+			AgentName:      pgtype.Text{String: agentName, Valid: agentName != ""},
 		},
 	)
 	if err != nil {
@@ -1904,11 +1853,8 @@ func (s *Service) recipientCanUseAgent(ctx context.Context, recipient agentShare
 		ctx,
 		gatewaydb.GatewayListTeamAgentShareCapabilitiesParams{
 			OrganizationID: recipient.organizationID,
-			WorkspaceID: pgtype.Text{
-				String: recipient.workspaceID,
-				Valid:  true,
-			},
-			TeamID: recipient.team.String,
+			WorkspaceID:    pgtype.Text{String: recipient.workspaceID, Valid: true},
+			TeamID:         recipient.team.String,
 		},
 	)
 	if err != nil {
@@ -2156,16 +2102,10 @@ func (s *Service) createAgentShare(ctx context.Context, request agentShareMutati
 	relationships, err := q.GatewayListAgentRelationships(
 		ctx,
 		gatewaydb.GatewayListAgentRelationshipsParams{
-			UserID: pgtype.Text{
-				String: access.claims.UserID,
-				Valid:  true,
-			},
+			UserID:         pgtype.Text{String: access.claims.UserID, Valid: true},
 			OrganizationID: access.claims.OrganizationID,
 			WorkspaceID:    access.workspaceID,
-			AgentName: pgtype.Text{
-				String: agentName,
-				Valid:  true,
-			},
+			AgentName:      pgtype.Text{String: agentName, Valid: true},
 		},
 	)
 	if err != nil {
@@ -2389,11 +2329,8 @@ func createAgentEventTrail(ctx context.Context, q gatewaydb.Querier, event agent
 			String: event.access.workspaceID,
 			Valid:  event.access.workspaceID != "",
 		},
-		ActorType: gatewaydb.EventTrailActorUser,
-		ActorID: pgtype.Text{
-			String: event.access.claims.UserID,
-			Valid:  true,
-		},
+		ActorType:  gatewaydb.EventTrailActorUser,
+		ActorID:    pgtype.Text{String: event.access.claims.UserID, Valid: true},
 		TargetType: gatewaydb.EventTrailTargetAgent,
 		TargetID:   event.name,
 		Category:   "agent",
@@ -2410,10 +2347,7 @@ func createAgentEventTrail(ctx context.Context, q gatewaydb.Querier, event agent
 
 func agentConfigurationEventTrailFields(agentName string, agent *agentzv1alpha1.Agent) []gatewayapi.EventTrailField {
 	if agent == nil {
-		return []gatewayapi.EventTrailField{{
-			Field: gatewayapi.EventTrailFieldName,
-			Value: agentName,
-		}}
+		return []gatewayapi.EventTrailField{{Field: gatewayapi.EventTrailFieldName, Value: agentName}}
 	}
 
 	skills := make([]string, 0, len(agent.Spec.Skills))
@@ -2429,22 +2363,13 @@ func agentConfigurationEventTrailFields(agentName string, agent *agentzv1alpha1.
 		strings.Join(skills, ","),
 	)
 	return []gatewayapi.EventTrailField{
-		{
-			Field: gatewayapi.EventTrailFieldName,
-			Value: agentName,
-		},
-		{
-			Field: gatewayapi.EventTrailFieldState,
-			Value: state,
-		},
+		{Field: gatewayapi.EventTrailFieldName, Value: agentName},
+		{Field: gatewayapi.EventTrailFieldState, Value: state},
 	}
 }
 
 func agentShareEventTrailFields(agentName string, share gatewaydb.AgentShare) []gatewayapi.EventTrailField {
-	fields := []gatewayapi.EventTrailField{{
-		Field: gatewayapi.EventTrailFieldName,
-		Value: agentName,
-	}}
+	fields := []gatewayapi.EventTrailField{{Field: gatewayapi.EventTrailFieldName, Value: agentName}}
 	if share.TargetUserID.Valid {
 		fields = append(
 			fields,
@@ -2563,10 +2488,7 @@ func validateCreateAgentRequest(req gatewayapi.CreateAgentRequest) (string, []ga
 
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
-		fields = append(fields, gatewayapi.FieldError{
-			Field:   "name",
-			Message: "required",
-		})
+		fields = append(fields, gatewayapi.FieldError{Field: "name", Message: "required"})
 	}
 	if len(name) > 32 {
 		fields = append(
@@ -2655,10 +2577,7 @@ func (s *Service) validateAgentSandbox(ctx context.Context, namespace string, re
 	}
 
 	var sandbox agentzv1alpha1.Sandbox
-	key := types.NamespacedName{
-		Namespace: resourceNamespace,
-		Name:      ref.Name,
-	}
+	key := types.NamespacedName{Namespace: resourceNamespace, Name: ref.Name}
 	if err := s.k8sClient.Get(ctx, key, &sandbox); err != nil {
 		if apierrors.IsNotFound(err) {
 			return []gatewayapi.FieldError{{
@@ -2790,10 +2709,7 @@ func envVarsFromMap(items map[string]string) []corev1.EnvVar {
 
 	sandbox := make([]corev1.EnvVar, 0, len(keys))
 	for _, key := range keys {
-		sandbox = append(sandbox, corev1.EnvVar{
-			Name:  key,
-			Value: items[key],
-		})
+		sandbox = append(sandbox, corev1.EnvVar{Name: key, Value: items[key]})
 	}
 	return sandbox
 }
@@ -2847,10 +2763,7 @@ func (s *Service) ListAgentModelCatalog(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	var sandbox agentzv1alpha1.Sandbox
-	key := client.ObjectKey{
-		Namespace: namespace,
-		Name:      ref.Name,
-	}
+	key := client.ObjectKey{Namespace: namespace, Name: ref.Name}
 	err = s.k8sClient.Get(r.Context(), key, &sandbox)
 	if err != nil {
 		apiutil.WriteInternalError(w, r, err)
@@ -2880,10 +2793,7 @@ func agentModelCatalog(ctx context.Context, reader client.Reader, sandbox *agent
 				return nil, err
 			}
 			var pool agentzv1alpha1.InferencePool
-			key := client.ObjectKey{
-				Namespace: namespace,
-				Name:      model.Model,
-			}
+			key := client.ObjectKey{Namespace: namespace, Name: model.Model}
 			if err := reader.Get(ctx, key, &pool); err != nil {
 				return nil, err
 			}
@@ -2904,10 +2814,7 @@ func agentModelCatalog(ctx context.Context, reader client.Reader, sandbox *agent
 			if err != nil {
 				return nil, err
 			}
-			key := client.ObjectKey{
-				Namespace: namespace,
-				Name:      member.Provider,
-			}
+			key := client.ObjectKey{Namespace: namespace, Name: member.Provider}
 			brand, found := providers[key]
 			if !found {
 				var provider agentzv1alpha1.InferenceProvider
@@ -3039,8 +2946,7 @@ func (s *Service) agentTools(w http.ResponseWriter, r *http.Request, name, toolN
 			fields := make([]gatewayapi.FieldError, 0, len(validation))
 			for _, e := range validation {
 				fields = append(fields, gatewayapi.FieldError{
-					Field:   e.Field,
-					Message: e.Detail,
+					Field: e.Field, Message: e.Detail,
 				})
 			}
 			apiutil.WriteError(w, r, apiutil.NewError(
@@ -3082,24 +2988,12 @@ func (s *Service) agentTools(w http.ResponseWriter, r *http.Request, name, toolN
 			name:   name,
 			action: action,
 			before: []gatewayapi.EventTrailField{
-				{
-					Field: gatewayapi.EventTrailFieldName,
-					Value: toolName,
-				},
-				{
-					Field: gatewayapi.EventTrailFieldState,
-					Value: before.ResourceVersion,
-				},
+				{Field: gatewayapi.EventTrailFieldName, Value: toolName},
+				{Field: gatewayapi.EventTrailFieldState, Value: before.ResourceVersion},
 			},
 			after: []gatewayapi.EventTrailField{
-				{
-					Field: gatewayapi.EventTrailFieldName,
-					Value: toolName,
-				},
-				{
-					Field: gatewayapi.EventTrailFieldState,
-					Value: updated.ResourceVersion,
-				},
+				{Field: gatewayapi.EventTrailFieldName, Value: toolName},
+				{Field: gatewayapi.EventTrailFieldState, Value: updated.ResourceVersion},
 			},
 		})
 	}

@@ -42,9 +42,7 @@ type dnsCache struct {
 }
 
 func newDNSCache() *dnsCache {
-	return &dnsCache{
-		items: map[dnsCacheKey]dnsCacheEntry{},
-	}
+	return &dnsCache{items: map[dnsCacheKey]dnsCacheEntry{}}
 }
 
 func (c *dnsCache) put(agentName, podName, ip, domain string, now time.Time, ttl uint32) {
@@ -62,11 +60,7 @@ func (c *dnsCache) put(agentName, podName, ip, domain string, now time.Time, ttl
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	key := dnsCacheKey{
-		agentName: agentName,
-		podName:   podName,
-		ip:        ip,
-	}
+	key := dnsCacheKey{agentName: agentName, podName: podName, ip: ip}
 	c.items[key] = dnsCacheEntry{
 		domain:   domain,
 		deadline: now.Add(d),
@@ -78,11 +72,7 @@ func (c *dnsCache) get(agentName, podName, ip string, now time.Time) string {
 		return ""
 	}
 
-	key := dnsCacheKey{
-		agentName: agentName,
-		podName:   podName,
-		ip:        ip,
-	}
+	key := dnsCacheKey{agentName: agentName, podName: podName, ip: ip}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 

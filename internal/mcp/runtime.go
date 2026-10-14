@@ -217,10 +217,7 @@ func LoadConnections(ctx context.Context, c client.Reader, env *agentzv1alpha1.S
 			return nil, fmt.Errorf("resolve mcp connection %q scope: %w", name, err)
 		}
 		conn := &agentzv1alpha1.MCPConnection{}
-		key := types.NamespacedName{
-			Namespace: ns,
-			Name:      name,
-		}
+		key := types.NamespacedName{Namespace: ns, Name: name}
 		err = c.Get(ctx, key, conn)
 		if apierrors.IsNotFound(err) {
 			continue

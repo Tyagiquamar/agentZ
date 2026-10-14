@@ -38,10 +38,7 @@ func TestParseMarkdownCompatibility(t *testing.T) {
 	t.Parallel()
 
 	tests := []markdownCompatibilityCase{
-		{
-			name:    "LF",
-			content: skillMarkdown("skill-name", "\n", false, "# Skill\n"),
-		},
+		{name: "LF", content: skillMarkdown("skill-name", "\n", false, "# Skill\n")},
 		{
 			name:    "CRLF",
 			content: skillMarkdown("skill-name", "\r\n", false, "# Skill\r\n"),
@@ -54,10 +51,7 @@ func TestParseMarkdownCompatibility(t *testing.T) {
 			name:    "BOM and CRLF",
 			content: skillMarkdown("skill-name", "\r\n", true, "# Skill\r\n"),
 		},
-		{
-			name:    "empty body",
-			content: skillMarkdown("skill-name", "\n", false, ""),
-		},
+		{name: "empty body", content: skillMarkdown("skill-name", "\n", false, "")},
 		{
 			name:    "63-character name",
 			content: skillMarkdown(strings.Repeat("a", 63), "\n", false, ""),
@@ -100,11 +94,7 @@ func TestParseMarkdownDiagnostics(t *testing.T) {
 			content: skillMarkdown("bad--skill", "\n", false, ""),
 			kind:    ImportIssueInvalidName,
 		},
-		{
-			name:    "invalid UTF-8",
-			content: []byte{0xff},
-			kind:    ImportIssueInvalidUTF8,
-		},
+		{name: "invalid UTF-8", content: []byte{0xff}, kind: ImportIssueInvalidUTF8},
 		{
 			name:    "missing frontmatter",
 			content: []byte("# Skill\n"),
@@ -156,52 +146,31 @@ func TestParseZIPStrictTree(t *testing.T) {
 		{
 			name: "single skill",
 			files: []archiveFile{
-				{
-					name:    "skill/SKILL.md",
-					content: skillMarkdown("skill", "\n", false, ""),
-				},
-				{
-					name:    "skill/references/doc.md",
-					content: []byte("reference"),
-				},
+				{name: "skill/SKILL.md", content: skillMarkdown("skill", "\n", false, "")},
+				{name: "skill/references/doc.md", content: []byte("reference")},
 			},
 			want: 1,
 		},
 		{
 			name: "multiple skills in wrapper",
 			files: []archiveFile{
-				{
-					name:    "bundle/one/SKILL.md",
-					content: skillMarkdown("one", "\n", false, ""),
-				},
-				{
-					name:    "bundle/two/SKILL.md",
-					content: skillMarkdown("two", "\n", false, ""),
-				},
+				{name: "bundle/one/SKILL.md", content: skillMarkdown("one", "\n", false, "")},
+				{name: "bundle/two/SKILL.md", content: skillMarkdown("two", "\n", false, "")},
 			},
 			want: 2,
 		},
 		{
 			name: "unclaimed file",
 			files: []archiveFile{
-				{
-					name:    "skill/SKILL.md",
-					content: skillMarkdown("skill", "\n", false, ""),
-				},
-				{
-					name:    ".DS_Store",
-					content: []byte("metadata"),
-				},
+				{name: "skill/SKILL.md", content: skillMarkdown("skill", "\n", false, "")},
+				{name: ".DS_Store", content: []byte("metadata")},
 			},
 			kind: ImportIssueInvalidTree,
 		},
 		{
 			name: "nested roots",
 			files: []archiveFile{
-				{
-					name:    "skill/SKILL.md",
-					content: skillMarkdown("skill", "\n", false, ""),
-				},
+				{name: "skill/SKILL.md", content: skillMarkdown("skill", "\n", false, "")},
 				{
 					name:    "skill/nested/SKILL.md",
 					content: skillMarkdown("nested", "\n", false, ""),
@@ -212,14 +181,8 @@ func TestParseZIPStrictTree(t *testing.T) {
 		{
 			name: "duplicate names",
 			files: []archiveFile{
-				{
-					name:    "one/SKILL.md",
-					content: skillMarkdown("same", "\n", false, ""),
-				},
-				{
-					name:    "two/SKILL.md",
-					content: skillMarkdown("same", "\n", false, ""),
-				},
+				{name: "one/SKILL.md", content: skillMarkdown("same", "\n", false, "")},
+				{name: "two/SKILL.md", content: skillMarkdown("same", "\n", false, "")},
 			},
 			kind: ImportIssueInvalidTree,
 		},
@@ -281,20 +244,14 @@ func TestParseZIPRejectsInvalidEntries(t *testing.T) {
 	}
 	tests := []zipEntryCase{
 		{
-			name: "traversal",
-			files: []archiveFile{{
-				name:    "../SKILL.md",
-				content: validSkill.content,
-			}},
-			kind: ImportIssueInvalidTree,
+			name:  "traversal",
+			files: []archiveFile{{name: "../SKILL.md", content: validSkill.content}},
+			kind:  ImportIssueInvalidTree,
 		},
 		{
-			name: "backslash",
-			files: []archiveFile{{
-				name:    `skill\SKILL.md`,
-				content: validSkill.content,
-			}},
-			kind: ImportIssueInvalidTree,
+			name:  "backslash",
+			files: []archiveFile{{name: `skill\SKILL.md`, content: validSkill.content}},
+			kind:  ImportIssueInvalidTree,
 		},
 		{
 			name: "duplicate path",
@@ -308,11 +265,7 @@ func TestParseZIPRejectsInvalidEntries(t *testing.T) {
 			name: "symbolic link",
 			files: []archiveFile{
 				validSkill,
-				{
-					name:    "skill/link",
-					content: []byte("target"),
-					mode:    fs.ModeSymlink | 0o777,
-				},
+				{name: "skill/link", content: []byte("target"), mode: fs.ModeSymlink | 0o777},
 			},
 			kind: ImportIssueInvalidTree,
 		},
@@ -320,11 +273,7 @@ func TestParseZIPRejectsInvalidEntries(t *testing.T) {
 			name: "encrypted entry",
 			files: []archiveFile{
 				validSkill,
-				{
-					name:    "skill/secret",
-					content: []byte("secret"),
-					flags:   1,
-				},
+				{name: "skill/secret", content: []byte("secret"), flags: 1},
 			},
 			kind: ImportIssueInvalidArchive,
 		},
@@ -332,10 +281,7 @@ func TestParseZIPRejectsInvalidEntries(t *testing.T) {
 			name: "file limit",
 			files: []archiveFile{
 				validSkill,
-				{
-					name:    "skill/assets/large",
-					content: bytes.Repeat([]byte("x"), (1<<20)+1),
-				},
+				{name: "skill/assets/large", content: bytes.Repeat([]byte("x"), (1<<20)+1)},
 			},
 			kind: ImportIssueLimitExceeded,
 		},
@@ -412,11 +358,7 @@ func writeArchive(t *testing.T, files []archiveFile) []byte {
 	var archive bytes.Buffer
 	writer := zip.NewWriter(&archive)
 	for _, file := range files {
-		header := &zip.FileHeader{
-			Name:   file.name,
-			Method: zip.Deflate,
-			Flags:  file.flags,
-		}
+		header := &zip.FileHeader{Name: file.name, Method: zip.Deflate, Flags: file.flags}
 		if file.mode != 0 {
 			header.SetMode(file.mode)
 		}

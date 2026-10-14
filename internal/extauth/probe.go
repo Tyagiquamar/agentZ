@@ -221,10 +221,8 @@ func (s *Service) probeMCPConnectionOnce(ctx context.Context, conn *agentzv1alph
 		},
 	)
 	transport := &mcpsdk.StreamableClientTransport{
-		Endpoint: conn.Spec.Endpoint.URL,
-		HTTPClient: &http.Client{
-			Transport: rt,
-		},
+		Endpoint:             conn.Spec.Endpoint.URL,
+		HTTPClient:           &http.Client{Transport: rt},
 		DisableStandaloneSSE: true,
 		MaxRetries:           -1,
 	}
@@ -271,9 +269,7 @@ func (s *Service) probeMCPConnectionOnce(ctx context.Context, conn *agentzv1alph
 				outcome.message = "MCP catalog exceeds the discovery size limit"
 				return outcome
 			}
-			outcome.tools = append(outcome.tools, agentzv1alpha1.MCPConnectionTool{
-				Name: tool.Name,
-			})
+			outcome.tools = append(outcome.tools, agentzv1alpha1.MCPConnectionTool{Name: tool.Name})
 		}
 	}
 	if capabilities.Prompts != nil {
@@ -351,10 +347,7 @@ func (s *Service) probeTransport(ctx context.Context, conn *agentzv1alpha1.MCPCo
 			query.Set(location.QueryParameter.Name, token)
 		}
 		if location != nil && location.Cookie != nil {
-			cookie = &http.Cookie{
-				Name:  location.Cookie.Name,
-				Value: token,
-			}
+			cookie = &http.Cookie{Name: location.Cookie.Name, Value: token}
 		}
 	}
 

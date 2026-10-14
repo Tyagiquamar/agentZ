@@ -28,15 +28,10 @@ import (
 var (
 	// SchemeGroupVersion is group version used to register these objects.
 	// This name is used by applyconfiguration generators (e.g. controller-gen).
-	SchemeGroupVersion = schema.GroupVersion{
-		Group:   "agentz.accuknox.com",
-		Version: "v1alpha1",
-	}
+	SchemeGroupVersion = schema.GroupVersion{Group: "agentz.accuknox.com", Version: "v1alpha1"}
 
 	// SchemeBuilder is used to add go types to the GroupVersionKind scheme.
-	SchemeBuilder = &schemeBuilder{
-		GroupVersion: SchemeGroupVersion,
-	}
+	SchemeBuilder = &schemeBuilder{GroupVersion: SchemeGroupVersion}
 
 	// AddToScheme adds the types in this group-version to the given scheme.
 	AddToScheme = SchemeBuilder.AddToScheme

@@ -131,11 +131,8 @@ func TestSkillDeleteRequiresDetachment(t *testing.T) {
 			queries := &skillDeleteQueries{
 				sandboxQueries: sandboxQueries{
 					permissions: []gatewaydb.GatewayResolvePermissionsRow{{
-						Active: true,
-						WorkspaceID: pgtype.Text{
-							String: testWorkspaceID,
-							Valid:  true,
-						},
+						Active:      true,
+						WorkspaceID: pgtype.Text{String: testWorkspaceID, Valid: true},
 						Resource: gatewaydb.NullPermissionResource{
 							PermissionResource: gatewaydb.PermissionResourceSkill,
 							Valid:              true,
@@ -168,10 +165,7 @@ func TestSkillDeleteRequiresDetachment(t *testing.T) {
 				}
 			}
 			agt := &agentzv1alpha1.Agent{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "consumer",
-					Namespace: testWorkspaceNS,
-				},
+				ObjectMeta: metav1.ObjectMeta{Name: "consumer", Namespace: testWorkspaceNS},
 				Spec: agentzv1alpha1.AgentSpec{
 					Skills: []agentzv1alpha1.ResourceReference{{
 						Name:  "used",
@@ -211,10 +205,7 @@ func TestSkillDeleteRequiresDetachment(t *testing.T) {
 				names := []string{"free", "used"}
 				for _, name := range names {
 					var item agentzv1alpha1.Skill
-					key := ctrlclient.ObjectKey{
-						Namespace: testWorkspaceNS,
-						Name:      name,
-					}
+					key := ctrlclient.ObjectKey{Namespace: testWorkspaceNS, Name: name}
 					if err := svc.k8sClient.Get(t.Context(), key, &item); err != nil {
 						t.Fatal(err)
 					}
@@ -231,10 +222,7 @@ func TestSkillDeleteRequiresDetachment(t *testing.T) {
 				}
 			}
 			var item agentzv1alpha1.Skill
-			key := ctrlclient.ObjectKey{
-				Namespace: testWorkspaceNS,
-				Name:      "used",
-			}
+			key := ctrlclient.ObjectKey{Namespace: testWorkspaceNS, Name: "used"}
 			if err := svc.k8sClient.Get(t.Context(), key, &item); err != nil {
 				t.Fatal(err)
 			}
