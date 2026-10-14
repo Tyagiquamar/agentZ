@@ -27,6 +27,7 @@ import (
 	"github.com/accuknox/agentz/internal/inference"
 	"github.com/accuknox/agentz/internal/mcp"
 	"github.com/accuknox/agentz/internal/networkpolicy"
+	agentzv1alpha1 "github.com/accuknox/agentz/pkg/apis/agentz/v1alpha1"
 )
 
 func (s *Service) delegationReady(ctx context.Context, grant gatewaydb.DelegationGrant, namespace, gateway, name string, policyNames ...string) error {
@@ -54,8 +55,11 @@ func (s *Service) delegationReady(ctx context.Context, grant gatewaydb.Delegatio
 		if parent.ParentRef.Name != gwv1.ObjectName(gateway) || parent.ControllerName != "agentgateway.dev/agentgateway" {
 			continue
 		}
-		ready = ready || conditionsReady(parent.Conditions, route.Generation,
+		ready = conditionsReady(parent.Conditions, route.Generation,
 			string(gwv1.RouteConditionAccepted), string(gwv1.RouteConditionResolvedRefs))
+		if ready {
+			break
+		}
 	}
 	if !ready {
 		return errors.New("route is not accepted")
@@ -65,7 +69,10 @@ func (s *Service) delegationReady(ctx context.Context, grant gatewaydb.Delegatio
 		return err
 	}
 	currentSelection := backend.Annotations["agentz.accuknox.com/selection"] == selection
-	if !currentSelection || !conditionsReady(backend.Status.Conditions, backend.Generation, "Accepted") {
+	if !currentSelection {
+		return errors.New("backend selection is not current")
+	}
+	if !conditionsReady(backend.Status.Conditions, backend.Generation, "Accepted") {
 		return errors.New("backend is not accepted")
 	}
 	for _, policyName := range policyNames {
@@ -84,7 +91,10 @@ func (s *Service) delegationReady(ctx context.Context, grant gatewaydb.Delegatio
 			if !matchingGateway {
 				continue
 			}
-			ready = ready || conditionsReady(ancestor.Conditions, policy.Generation, "Accepted", "Attached")
+			ready = conditionsReady(ancestor.Conditions, policy.Generation, "Accepted", "Attached")
+			if ready {
+				break
+			}
 		}
 		if !ready {
 			return errors.New("credential policy is not attached")
@@ -185,6 +195,14 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 		}
 		// Plaintext HTTP/2 must not dictate the external provider's protocol.
 		target.Policies.HTTP = &agw.BackendHTTP{Version: new(agw.HTTPVersion1)}
+		// Set this after AgentGateway conversion so Messages input cannot create
+		// stored Responses in the provider owner's account.
+		stateless := provider.Spec.Kind == agentzv1alpha1.InferenceProviderKindOpenAI ||
+			provider.Spec.Kind == agentzv1alpha1.InferenceProviderKindAzure ||
+			provider.Spec.Kind == agentzv1alpha1.InferenceProviderKindOpenAICodex
+		if stateless {
+			target.Policies.AI.FinalTransformations = []agw.FieldTransformation{{Field: "store", Expression: "false"}}
+		}
 		name := fmt.Sprintf("d-%s-model-%d", grant.ID, index)
 		ownerEgress[selected.Namespace] = append(ownerEgress[selected.Namespace], networkpolicy.Target{
 			Host: target.LLM.Host,
@@ -197,7 +215,10 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 			})
 		}
 		backend := &agw.AgentgatewayBackend{
-			TypeMeta:   metav1.TypeMeta{APIVersion: agw.GroupVersion.String(), Kind: "AgentgatewayBackend"},
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: agw.GroupVersion.String(),
+				Kind:       "AgentgatewayBackend",
+			},
 			ObjectMeta: metav1.ObjectMeta{Namespace: selected.Namespace, Name: name},
 			Spec: agw.AgentgatewayBackendSpec{
 				AI: &agw.AIBackend{LLM: &target.LLM},
@@ -220,14 +241,19 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 		// Keep the owner route intact through the shared private ingress. Only the
 		// owner gateway rewrites it to the provider's API and injects credentials.
 		forward := &agw.AgentgatewayBackend{
-			TypeMeta:   metav1.TypeMeta{APIVersion: agw.GroupVersion.String(), Kind: "AgentgatewayBackend"},
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: agw.GroupVersion.String(),
+				Kind:       "AgentgatewayBackend",
+			},
 			ObjectMeta: metav1.ObjectMeta{Namespace: s.cfg.DelegationNamespace, Name: name},
 			Spec: agw.AgentgatewayBackendSpec{
 				Static: &agw.StaticBackend{
 					Host: "inference." + selected.Namespace + ".svc.cluster.local",
 					Port: 8080,
 				},
-				Policies: &agw.BackendFull{BackendSimple: agw.BackendSimple{HTTP: &agw.BackendHTTP{Version: new(agw.HTTPVersion2)}}},
+				Policies: &agw.BackendFull{
+					BackendSimple: agw.BackendSimple{HTTP: &agw.BackendHTTP{Version: new(agw.HTTPVersion2)}},
+				},
 			},
 		}
 		entry := delegationRoute(
@@ -244,7 +270,10 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 	if len(selection.Mcp) > 0 {
 		name := "d-" + grant.ID + "-mcp"
 		outer := &agw.AgentgatewayBackend{
-			TypeMeta:   metav1.TypeMeta{APIVersion: agw.GroupVersion.String(), Kind: "AgentgatewayBackend"},
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: agw.GroupVersion.String(),
+				Kind:       "AgentgatewayBackend",
+			},
 			ObjectMeta: metav1.ObjectMeta{Namespace: s.cfg.DelegationNamespace, Name: name},
 			Spec: agw.AgentgatewayBackendSpec{MCP: &agw.MCPBackend{
 				PrefixMode:     agw.PrefixAlways,
@@ -282,7 +311,10 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 				return err
 			}
 			inner := &agw.AgentgatewayBackend{
-				TypeMeta:   metav1.TypeMeta{APIVersion: agw.GroupVersion.String(), Kind: "AgentgatewayBackend"},
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: agw.GroupVersion.String(),
+					Kind:       "AgentgatewayBackend",
+				},
 				ObjectMeta: metav1.ObjectMeta{Namespace: selected.Namespace, Name: innerName},
 				Spec: agw.AgentgatewayBackendSpec{
 					MCP: &agw.MCPBackend{
@@ -307,7 +339,10 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 				},
 			}
 			policy := &agw.AgentgatewayPolicy{
-				TypeMeta:   metav1.TypeMeta{APIVersion: agw.GroupVersion.String(), Kind: "AgentgatewayPolicy"},
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: agw.GroupVersion.String(),
+					Kind:       "AgentgatewayPolicy",
+				},
 				ObjectMeta: metav1.ObjectMeta{Namespace: selected.Namespace, Name: innerName + "-auth"},
 				Spec: agw.AgentgatewayPolicySpec{
 					TargetRefs: []agw.LocalPolicyTargetReferenceWithSectionName{{

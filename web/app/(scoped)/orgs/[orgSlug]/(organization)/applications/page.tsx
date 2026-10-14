@@ -29,6 +29,7 @@ async function ApplicationsContent({ params }: PageProps<"/orgs/[orgSlug]/applic
         scopes: schema.oauthClients.scopes,
         tokenEndpointAuthMethod: schema.oauthClients.tokenEndpointAuthMethod,
         applicationType: schema.oauthClients.applicationType,
+        grantTypes: schema.oauthClients.grantTypes,
         disabled: schema.oauthClients.disabled,
       })
       .from(schema.oauthClients)

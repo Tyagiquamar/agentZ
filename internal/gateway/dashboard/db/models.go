@@ -1124,6 +1124,23 @@ type DelegationTransaction struct {
 	ExpiresAt          pgtype.Timestamptz `json:"expires_at"`
 }
 
+type DeviceCode struct {
+	ID              string           `json:"id"`
+	DeviceCode      string           `json:"device_code"`
+	UserCode        string           `json:"user_code"`
+	UserID          pgtype.Text      `json:"user_id"`
+	ExpiresAt       pgtype.Timestamp `json:"expires_at"`
+	Status          string           `json:"status"`
+	LastPolledAt    pgtype.Timestamp `json:"last_polled_at"`
+	PollingInterval pgtype.Int4      `json:"polling_interval"`
+	ClientID        pgtype.Text      `json:"client_id"`
+	Scope           pgtype.Text      `json:"scope"`
+	Resources       []string         `json:"resources"`
+	OauthClientID   pgtype.Text      `json:"oauth_client_id"`
+	ReferenceID     pgtype.Text      `json:"reference_id"`
+	SessionID       pgtype.Text      `json:"session_id"`
+}
+
 type EventTrailEvent struct {
 	ID             string             `json:"id"`
 	OrganizationID string             `json:"organization_id"`

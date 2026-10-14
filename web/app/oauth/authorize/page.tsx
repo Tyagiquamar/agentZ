@@ -5,9 +5,12 @@ import { verifyOAuthQueryParams } from "@better-auth/oauth-provider"
 import { getDB, schema } from "@/db"
 import { getAuthSession } from "@/lib/auth"
 import { getEnv } from "@/lib/env"
-import { delegationTransaction } from "@/lib/delegation"
+import { delegationRequest, type DelegationRequest } from "@/lib/delegation"
 import { Consent, ResumeAuthorization } from "./consent"
 import { AuthorizationState } from "./authorization-state"
+import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
+import { Field, FieldLabel } from "@/components/ui/field"
 
 export const metadata = { title: "Authorize application", robots: { index: false, follow: false } }
 
@@ -45,15 +48,56 @@ async function AuthorizeContent({ searchParams }: PageProps<"/oauth/authorize">)
       description="Return to the app you were connecting and reattempt sign in."
     />
   )
-  if (!(await verifyOAuthQueryParams(oauthQuery, getEnv().BETTER_AUTH_SECRET)))
+  if (params.get("result") === "approved" || params.get("result") === "denied") {
+    const approved = params.get("result") === "approved"
+    return (
+      <AuthorizationState
+        title={approved ? "Application connected" : "Access declined"}
+        description="Return to your terminal to continue."
+      />
+    )
+  }
+  if (!oauthQuery)
+    return (
+      <form action="/oauth/authorize" className="flex flex-col gap-5">
+        <h1 className="text-2xl font-semibold">Connect an application</h1>
+        <Field>
+          <FieldLabel htmlFor="device-user-code">Code from your terminal</FieldLabel>
+          <Input
+            id="device-user-code"
+            name="user_code"
+            required
+            autoComplete="off"
+            maxLength={191}
+          />
+        </Field>
+        <Button type="submit">Review connection</Button>
+      </form>
+    )
+  const userCode = params.get("user_code")
+  let request: DelegationRequest = { type: "authorization_code", oauthQuery }
+  if (userCode !== null)
+    request = { type: "device_code", userCode: userCode.replace(/[^a-z0-9]/gi, "").toUpperCase() }
+  if (
+    request.type === "authorization_code" &&
+    !(await verifyOAuthQueryParams(oauthQuery, getEnv().BETTER_AUTH_SECRET))
+  )
     return expiredRequest
   const session = await getAuthSession()
-  if (!session || !params.has("agentz_tx")) redirect(`/signin?${oauthQuery}`)
-  const transaction = await delegationTransaction(
-    oauthQuery,
+  if (!session) {
+    if (request.type === "device_code")
+      redirect(
+        `/signin?returnTo=${encodeURIComponent(`/oauth/authorize?user_code=${request.userCode}`)}`
+      )
+    redirect(`/signin?${oauthQuery}`)
+  }
+  if (request.type === "authorization_code" && !params.has("agentz_tx"))
+    redirect(`/signin?${oauthQuery}`)
+  const transaction = await delegationRequest(
+    request,
     session.session.user.id,
     session.session.session.id
-  )
+  ).catch(() => undefined)
   if (!transaction) return expiredRequest
   const [client] = await getDB()
     .select({
@@ -71,7 +115,8 @@ async function AuthorizeContent({ searchParams }: PageProps<"/oauth/authorize">)
         description="This application can no longer connect to AgentZ. Contact the app owner for help."
       />
     )
-  if (transaction.grantId) return <ResumeAuthorization oauthQuery={oauthQuery} />
+  if (request.type === "authorization_code" && transaction.grantId)
+    return <ResumeAuthorization oauthQuery={oauthQuery} />
   const organizations = await getDB()
     .select({ id: schema.organizations.id, name: schema.organizations.name })
     .from(schema.members)
@@ -106,11 +151,11 @@ async function AuthorizeContent({ searchParams }: PageProps<"/oauth/authorize">)
     .orderBy(asc(schema.workspaces.name))
   return (
     <Consent
-      oauthQuery={oauthQuery}
+      request={request}
       client={{
         name: client.name ?? "Application",
         owner: client.owner,
-        callback: params.get("redirect_uri") ?? "",
+        callback: request.type === "authorization_code" ? (params.get("redirect_uri") ?? "") : "",
       }}
       user={{
         name: session.session.user.name,

@@ -139,7 +139,12 @@ func TestDelegatedAccessRequiresLiveGrantAndAccessToken(t *testing.T) {
 	service.externalJWTKeyfunc = func(*jwt.Token) (any, error) { return &key.PublicKey, nil }
 	cases := []delegationTokenCase{
 		{name: "access token", typ: "at+jwt", want: http.StatusOK},
-		{name: "client origin", origin: "https://app.example", typ: "at+jwt", want: http.StatusOK},
+		{
+			name:   "client origin",
+			origin: "https://app.example",
+			typ:    "at+jwt",
+			want:   http.StatusOK,
+		},
 		{
 			name:   "another registered client's origin",
 			origin: "https://other.example",
@@ -352,7 +357,9 @@ func TestDelegationRechecksResourceIdentityAndPermissions(t *testing.T) {
 			OpenAI: &agentzv1alpha1.OpenAIProviderConfig{},
 			Models: []agentzv1alpha1.InferenceModel{{ID: "model"}},
 		},
-		Status: agentzv1alpha1.InferenceProviderStatus{State: agentzv1alpha1.InferenceProviderStateReady},
+		Status: agentzv1alpha1.InferenceProviderStatus{
+			State: agentzv1alpha1.InferenceProviderStateReady,
+		},
 	}
 	objects := []ctrlclient.Object{
 		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
@@ -377,7 +384,9 @@ func TestDelegationRechecksResourceIdentityAndPermissions(t *testing.T) {
 			UID:        "mcp-original",
 			Generation: 2,
 		},
-		Spec: agentzv1alpha1.MCPConnectionSpec{Endpoint: agentzv1alpha1.MCPConnectionEndpoint{URL: "https://mcp.example/mcp"}},
+		Spec: agentzv1alpha1.MCPConnectionSpec{
+			Endpoint: agentzv1alpha1.MCPConnectionEndpoint{URL: "https://mcp.example/mcp"},
+		},
 		Status: agentzv1alpha1.MCPConnectionStatus{
 			ToolCatalogReady: true,
 			Tools:            []agentzv1alpha1.MCPConnectionTool{{Name: "echo"}},
@@ -451,7 +460,10 @@ func TestDelegationReadinessRequiresCurrentAcceptedProjection(t *testing.T) {
 		}
 	}
 	service.cfg.DelegationNamespace = "private"
-	grant := gatewaydb.DelegationGrant{ID: "grant-1", Selection: []byte(`{"models":[],"mcp":[]}`)}
+	grant := gatewaydb.DelegationGrant{
+		ID:        "grant-1",
+		Selection: []byte(`{"models":[],"mcp":[]}`),
+	}
 	hash := sha256.Sum256(grant.Selection)
 	metadata := metav1.ObjectMeta{
 		Name:        "d-grant-1-model-0",
@@ -534,7 +546,9 @@ func TestDelegatedInferenceUsesPrivateGateway(t *testing.T) {
 			OpenAI: &agentzv1alpha1.OpenAIProviderConfig{},
 			Models: []agentzv1alpha1.InferenceModel{{ID: "model"}},
 		},
-		Status: agentzv1alpha1.InferenceProviderStatus{State: agentzv1alpha1.InferenceProviderStateReady},
+		Status: agentzv1alpha1.InferenceProviderStatus{
+			State: agentzv1alpha1.InferenceProviderStateReady,
+		},
 	}
 	objects := []ctrlclient.Object{
 		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
@@ -683,7 +697,12 @@ func TestDelegationCORSMethodsHeadersAndMissingOrigins(t *testing.T) {
 	}))
 	cases := []delegationCORSCase{
 		{name: "native request", path: "/api/mcp", want: http.StatusUnauthorized},
-		{name: "empty origin", path: "/api/mcp", origins: []string{""}, want: http.StatusForbidden},
+		{
+			name:    "empty origin",
+			path:    "/api/mcp",
+			origins: []string{""},
+			want:    http.StatusForbidden,
+		},
 		{
 			name:    "prefix spoof",
 			path:    "/api/inference/v1/models",
@@ -972,7 +991,9 @@ func TestDelegatedMCPTransportBoundary(t *testing.T) {
 	namespace := agentzv1alpha1.ScopeNamespace(agentzv1alpha1.ResourceScopeWorkspace, testWorkspaceID)
 	connection := &agentzv1alpha1.MCPConnection{
 		ObjectMeta: metav1.ObjectMeta{Name: "selected", Namespace: namespace, UID: "mcp-original"},
-		Spec:       agentzv1alpha1.MCPConnectionSpec{Endpoint: agentzv1alpha1.MCPConnectionEndpoint{URL: "https://mcp.example/mcp"}},
+		Spec: agentzv1alpha1.MCPConnectionSpec{
+			Endpoint: agentzv1alpha1.MCPConnectionEndpoint{URL: "https://mcp.example/mcp"},
+		},
 	}
 	objects := []ctrlclient.Object{
 		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
@@ -1158,7 +1179,10 @@ func TestDelegatedMCPTransportBoundary(t *testing.T) {
 				Trailer: http.Header{"X-Diagnostic": {"private-credential"}},
 			}}
 			service.delegationTransport = upstream
-			request := httptest.NewRequest(http.MethodPost, "/api/mcp?api_key=private-credential", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"ping"}`))
+			request := httptest.NewRequest(
+				http.MethodPost, "/api/mcp?api_key=private-credential",
+				strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"ping"}`),
+			)
 			request.Header.Set("Authorization", "Bearer "+signed)
 			request.Header.Set("Cookie", "private-credential")
 			request.Header.Set("X-Api-Key", "private-credential")
@@ -1190,10 +1214,28 @@ func TestDelegatedMCPTransportBoundary(t *testing.T) {
 	}
 	t.Run("deleted session cannot be revived by upstream headers", func(t *testing.T) {
 		steps := []delegationMCPSessionStep{
-			{http.MethodPost, `{"jsonrpc":"2.0","id":1,"method":"initialize"}`, "", http.StatusOK, http.StatusOK},
+			{
+				http.MethodPost,
+				`{"jsonrpc":"2.0","id":1,"method":"initialize"}`,
+				"",
+				http.StatusOK,
+				http.StatusOK,
+			},
 			{http.MethodDelete, "", "session", http.StatusAccepted, http.StatusAccepted},
-			{http.MethodPost, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`, "", http.StatusOK, http.StatusOK},
-			{http.MethodPost, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`, "session", http.StatusOK, http.StatusNotFound},
+			{
+				http.MethodPost,
+				`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`,
+				"",
+				http.StatusOK,
+				http.StatusOK,
+			},
+			{
+				http.MethodPost,
+				`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`,
+				"session",
+				http.StatusOK,
+				http.StatusNotFound,
+			},
 		}
 		for _, step := range steps {
 			service.delegationTransport = &delegationUpstream{response: &http.Response{

@@ -4,7 +4,14 @@ export type ClientOptions = {
   baseUrl: `${string}://${string}` | (string & {})
 }
 
+export type DelegationApiCompatibility = {
+  api: InferenceModelApi
+  support: "native" | "translated" | "unsupported"
+  warning: string
+}
+
 export type DelegationModel = {
+  api_compatibility?: Array<DelegationApiCompatibility>
   id: string
   workspace_id: string
   namespace: string
@@ -8533,6 +8540,32 @@ export type ListInferenceModelSuggestionsResponses = {
 
 export type ListInferenceModelSuggestionsResponse =
   ListInferenceModelSuggestionsResponses[keyof ListInferenceModelSuggestionsResponses]
+
+export type GetDelegatedCatalogData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/api/inference/v1/catalog"
+}
+
+export type GetDelegatedCatalogErrors = {
+  /**
+   * Request validation failed.
+   */
+  default: Error
+}
+
+export type GetDelegatedCatalogError = GetDelegatedCatalogErrors[keyof GetDelegatedCatalogErrors]
+
+export type GetDelegatedCatalogResponses = {
+  /**
+   * Approved models in the immutable grant's order, with current API compatibility.
+   */
+  200: DelegationCatalog
+}
+
+export type GetDelegatedCatalogResponse =
+  GetDelegatedCatalogResponses[keyof GetDelegatedCatalogResponses]
 
 export type ListInferencePoolsData = {
   body?: never

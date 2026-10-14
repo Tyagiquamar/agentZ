@@ -15,6 +15,7 @@ import (
 // DelegatedRequest contains validated inference input for a delegated model.
 type DelegatedRequest struct {
 	responses          bool
+	endpoint           string
 	Model              string               `json:"model"`
 	Instructions       string               `json:"instructions"`
 	Stream             bool                 `json:"stream"`
@@ -36,16 +37,13 @@ func DelegatedProviderEndpoints(kind agentzv1alpha1.InferenceProviderKind) []str
 	switch kind {
 	case agentzv1alpha1.InferenceProviderKindOpenAICodex:
 		return []string{"/responses"}
-	case agentzv1alpha1.InferenceProviderKindAnthropic,
-		agentzv1alpha1.InferenceProviderKindAnthropicCompatible,
-		agentzv1alpha1.InferenceProviderKindGemini,
-		agentzv1alpha1.InferenceProviderKindVertexAI:
+	case agentzv1alpha1.InferenceProviderKindAnthropic, agentzv1alpha1.InferenceProviderKindAnthropicCompatible:
+		return []string{"/chat/completions", "/messages", "/messages/count_tokens"}
+	case agentzv1alpha1.InferenceProviderKindGemini, agentzv1alpha1.InferenceProviderKindVertexAI:
 		return []string{"/chat/completions"}
-	case agentzv1alpha1.InferenceProviderKindOpenAI,
-		agentzv1alpha1.InferenceProviderKindOpenAICompatible,
-		agentzv1alpha1.InferenceProviderKindAzure,
-		agentzv1alpha1.InferenceProviderKindBedrock:
-		return []string{"/chat/completions", "/responses"}
+	case agentzv1alpha1.InferenceProviderKindOpenAI, agentzv1alpha1.InferenceProviderKindOpenAICompatible,
+		agentzv1alpha1.InferenceProviderKindAzure, agentzv1alpha1.InferenceProviderKindBedrock:
+		return []string{"/chat/completions", "/responses", "/messages", "/messages/count_tokens"}
 	default:
 		return nil
 	}
@@ -57,6 +55,9 @@ func (input *DelegatedRequest) ValidateProvider(kind agentzv1alpha1.InferencePro
 	endpoint := "/chat/completions"
 	if input.responses {
 		endpoint = "/responses"
+	}
+	if input.endpoint != "" {
+		endpoint = input.endpoint
 	}
 	endpoints := DelegatedProviderEndpoints(kind)
 	if len(endpoints) == 0 {
@@ -71,7 +72,7 @@ func (input *DelegatedRequest) ValidateProvider(kind agentzv1alpha1.InferencePro
 	if !input.Stream {
 		return errors.New("this Codex model requires stream:true")
 	}
-	if input.Instructions == "" {
+	if input.responses && input.Instructions == "" {
 		return errors.New("this Codex model requires an instructions string")
 	}
 	return nil
@@ -177,4 +178,80 @@ func ValidateDelegatedRequest(body []byte, responses bool) (*DelegatedRequest, e
 		}
 	}
 	return &input, nil
+}
+
+type anthropicRequest struct {
+	Model      string               `json:"model"`
+	Stream     bool                 `json:"stream"`
+	Container  json.RawMessage      `json:"container"`
+	MCPServers json.RawMessage      `json:"mcp_servers"`
+	Tools      []inferenceTool      `json:"tools"`
+	Messages   []inferenceInputItem `json:"messages"`
+	System     json.RawMessage      `json:"system"`
+}
+
+type anthropicContent struct {
+	Type    string           `json:"type"`
+	FileID  string           `json:"file_id"`
+	Source  *anthropicSource `json:"source"`
+	Content json.RawMessage  `json:"content"`
+}
+
+type anthropicSource struct {
+	Type    string          `json:"type"`
+	FileID  string          `json:"file_id"`
+	Content json.RawMessage `json:"content"`
+}
+
+// ValidateDelegatedMessages admits inline Anthropic input and client-executed
+// tools. A model grant never authorizes provider files, containers or hosted MCP.
+func ValidateDelegatedMessages(body []byte, countTokens bool) (*DelegatedRequest, error) {
+	var input anthropicRequest
+	strictErrors, err := kjson.UnmarshalStrict(body, &input, kjson.DisallowDuplicateFields)
+	if err != nil || len(strictErrors) != 0 || input.Model == "" {
+		return nil, errors.New("provide a valid Messages request with a model and no duplicate fields")
+	}
+	container := len(input.Container) != 0 && string(input.Container) != "null"
+	hostedMCP := len(input.MCPServers) != 0 && string(input.MCPServers) != "null"
+	if container || hostedMCP {
+		return nil, errors.New("provider containers and hosted MCP servers are unavailable")
+	}
+	for _, tool := range input.Tools {
+		local := tool.Type == "" || tool.Type == "custom" || strings.HasPrefix(tool.Type, "computer_") ||
+			strings.HasPrefix(tool.Type, "bash_") || strings.HasPrefix(tool.Type, "text_editor_")
+		if !local {
+			return nil, errors.New("use client-side tools; provider hosted tools are unavailable")
+		}
+	}
+	contents := []json.RawMessage{input.System}
+	for _, message := range input.Messages {
+		contents = append(contents, message.Content)
+	}
+	for len(contents) > 0 {
+		content := contents[len(contents)-1]
+		contents = contents[:len(contents)-1]
+		if len(content) == 0 || content[0] != '[' {
+			continue
+		}
+		var parts []anthropicContent
+		strictErrors, err = kjson.UnmarshalStrict(content, &parts, kjson.DisallowDuplicateFields)
+		if err != nil || len(strictErrors) != 0 {
+			return nil, errors.New("invalid Messages content")
+		}
+		for _, part := range parts {
+			storedSource := part.Source != nil && (part.Source.Type == "file" || part.Source.FileID != "")
+			if part.Type == "file" || part.Type == "container_upload" || part.FileID != "" || storedSource {
+				return nil, errors.New("provider files are unavailable; provide inline content or a URL")
+			}
+			contents = append(contents, part.Content)
+			if part.Source != nil {
+				contents = append(contents, part.Source.Content)
+			}
+		}
+	}
+	endpoint := "/messages"
+	if countTokens {
+		endpoint += "/count_tokens"
+	}
+	return &DelegatedRequest{Model: input.Model, Stream: input.Stream, endpoint: endpoint}, nil
 }

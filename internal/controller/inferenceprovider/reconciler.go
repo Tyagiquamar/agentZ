@@ -175,7 +175,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		}
 		runtime.ExternalSecret = currentExternalSecret
 	}
-	if r.Recorder != nil && runtime.ExternalSecret != nil && !externalSecretReady(runtime.ExternalSecret) {
+	var credentialsPending bool
+	if r.Recorder != nil && runtime.ExternalSecret != nil {
+		credentialsPending = !externalSecretReady(runtime.ExternalSecret)
+	}
+	if credentialsPending {
 		r.Recorder.Eventf(
 			provider,
 			nil,
@@ -185,7 +189,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			"ExternalSecret has not materialized the expected credential keys",
 		)
 	}
-	if r.Recorder != nil && !backendAccepted(runtime.Backend) {
+	var backendPending bool
+	if r.Recorder != nil {
+		backendPending = !backendAccepted(runtime.Backend)
+	}
+	if backendPending {
 		r.Recorder.Eventf(
 			provider,
 			nil,

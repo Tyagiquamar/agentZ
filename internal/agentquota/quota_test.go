@@ -69,7 +69,12 @@ func TestEffectiveRequests(t *testing.T) {
 			cpu:    "0",
 			memory: "0",
 		},
-		{name: "best effort", resources: corev1.ResourceRequirements{}, cpu: "0", memory: "0"},
+		{
+			name:      "best effort",
+			resources: corev1.ResourceRequirements{},
+			cpu:       "0",
+			memory:    "0",
+		},
 	}
 
 	for _, tt := range tests {
@@ -94,7 +99,12 @@ func TestResources(t *testing.T) {
 		Memory: resource.MustParse("800Mi"),
 	}
 	tests := []resourcesCase{
-		{name: "guaranteed", qos: corev1.PodQOSGuaranteed, wantRequests: true, wantLimits: true},
+		{
+			name:         "guaranteed",
+			qos:          corev1.PodQOSGuaranteed,
+			wantRequests: true,
+			wantLimits:   true,
+		},
 		{name: "burstable", qos: corev1.PodQOSBurstable, wantRequests: true},
 		{name: "best effort", qos: corev1.PodQOSBestEffort},
 	}

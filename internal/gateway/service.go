@@ -869,9 +869,12 @@ func (s *Service) routes() http.Handler {
 		r.Route("/api/inference/v1", func(r chi.Router) {
 			r.Use(s.delegationCORS)
 			r.Get("/models", s.handleDelegatedRequest)
+			r.Get("/catalog", s.GetDelegatedCatalog)
 			r.Post("/chat/completions", s.handleDelegatedRequest)
 			r.Post("/responses", s.handleDelegatedRequest)
-			paths := []string{"/models", "/chat/completions", "/responses"}
+			r.Post("/messages", s.handleDelegatedRequest)
+			r.Post("/messages/count_tokens", s.handleDelegatedRequest)
+			paths := []string{"/models", "/catalog", "/chat/completions", "/responses", "/messages", "/messages/count_tokens"}
 			for _, path := range paths {
 				r.Options(path, func(w http.ResponseWriter, _ *http.Request) {
 					w.WriteHeader(http.StatusNoContent)

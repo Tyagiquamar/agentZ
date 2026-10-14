@@ -3,25 +3,19 @@
 import { and, eq, isNull } from "drizzle-orm"
 import { getDB, schema } from "@/db"
 import { getAuthSession } from "@/lib/auth"
-import { delegationCatalog, delegationTransaction } from "@/lib/delegation"
-import { approveDelegation } from "@/data/delegations"
+import { delegationCatalog, delegationRequest, type DelegationRequest } from "@/lib/delegation"
+import { approveDelegation, denyDeviceDelegation } from "@/data/delegations"
 import { zDelegationCatalog } from "@/lib/gateway/client/zod.gen"
 import type { DelegationCatalog } from "@/lib/gateway/client"
 
 export async function delegationWorkspaceAction(
-  oauthQuery: string,
+  request: DelegationRequest,
   organizationId: string,
   workspaceId: string
 ) {
   const session = await getAuthSession()
   if (!session) throw new Error("Sign in to continue.")
-  const transaction = await delegationTransaction(
-    oauthQuery,
-    session.session.user.id,
-    session.session.session.id
-  )
-  if (!transaction)
-    throw new Error("This authorization request has expired. Start again from the application.")
+  await delegationRequest(request, session.session.user.id, session.session.session.id)
   const [membership] = await getDB()
     .select({ id: schema.members.id })
     .from(schema.members)
@@ -44,12 +38,12 @@ export async function delegationWorkspaceAction(
 }
 
 export async function approveConsentAction(
-  oauthQuery: string,
+  request: DelegationRequest,
   organizationId: string | null,
   selection: DelegationCatalog
 ) {
   try {
-    await approveDelegation(oauthQuery, organizationId, zDelegationCatalog.parse(selection))
+    await approveDelegation(request, organizationId, zDelegationCatalog.parse(selection))
     return { approved: true }
   } catch (error) {
     return {
@@ -57,6 +51,19 @@ export async function approveConsentAction(
         error instanceof Error && error.message
           ? error.message
           : "Access could not be granted. Start again from the application.",
+    }
+  }
+}
+
+export async function denyDeviceConsentAction(
+  request: Extract<DelegationRequest, { type: "device_code" }>
+) {
+  try {
+    await denyDeviceDelegation(request)
+    return { denied: true }
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "This device request could not be declined.",
     }
   }
 }

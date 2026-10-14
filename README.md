@@ -86,6 +86,51 @@ can connect to the agent using:
 opencode attach https://agentzharness.ai/api/opencode/{AGENT_NAME}/
 ```
 
+## External coding agents
+
+Create a public native application under **Organization > Applications**. Enable
+Device authorization and allow `openid`, `profile`, `email`, `offline_access`,
+`inference:use` and `mcp:use`. The application's setup sheet provides the client
+ID and configuration. Public native clients have no client secret.
+
+Install the desktop `agentz` binary and create its configuration:
+
+```yaml
+server_url: https://agentzharness.ai
+client_id: YOUR_NATIVE_APPLICATION_CLIENT_ID
+```
+
+Use `$XDG_CONFIG_HOME/agentz/config.yaml` or `~/.config/agentz/config.yaml` on
+Linux, `~/Library/Application Support/agentz/config.yaml` on macOS, and
+`%APPDATA%\agentz\config.yaml` on Windows. `agentz --config FILE` selects another
+configuration file.
+
+```sh
+agentz launch claude --your-claude-flags
+```
+
+Claude Code 2.1.299 or later handles browser login, credential storage and
+refresh. Choose models during AgentZ consent. A persistent loopback relay
+connects Claude's private gateway protocol to the public AgentZ service. Native
+flags pass through unchanged. The launcher uses a separate Claude profile for
+each AgentZ server and client ID. `agentz relay status` and `agentz relay stop`
+manage that profile's relay.
+
+MCP uses a separate native OAuth login. Enable Browser login with PKCE and
+register `http://localhost:8765/callback`, then follow the application's MCP
+setup instructions. Choose tools, prompts and resources during consent. Provider
+credentials remain on AgentZ. Disconnect the application under **Settings >
+Connected applications** to revoke its grants.
+
+AgentGateway 1.6.0 translates supported inference formats and streams responses.
+Consent shows conversion warnings and disables unsupported models for the
+selected API. Delegated inference uses inline conversation history. Stored
+provider files, hosted tools and stored Responses are unavailable.
+
+After disconnecting, run `agentz launch claude auth logout` and launch again to
+grant fresh access. Claude's managed model settings choose the first approved
+model as the default on each launch; `/model` selects another approved model.
+
 ## Open-Source Projects
 
 This project wouldn't have been possible without the many excellent open-source libraries and projects it builds on.

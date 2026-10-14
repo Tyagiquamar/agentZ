@@ -146,6 +146,9 @@ import type {
   GetDashboardData,
   GetDashboardErrors,
   GetDashboardResponses,
+  GetDelegatedCatalogData,
+  GetDelegatedCatalogErrors,
+  GetDelegatedCatalogResponses,
   GetDelegationCatalogData,
   GetDelegationCatalogErrors,
   GetDelegationCatalogResponses,
@@ -2208,6 +2211,22 @@ export const listInferenceModelSuggestions = <ThrowOnError extends boolean = fal
   >({
     security: [{ scheme: "bearer", type: "http" }],
     url: "/api/inference/provider/catalog/{catalogProvider}/models",
+    ...options,
+  })
+
+/**
+ * Read the approved model catalog using a delegated inference credential.
+ */
+export const getDelegatedCatalog = <ThrowOnError extends boolean = false>(
+  options?: Options<GetDelegatedCatalogData, ThrowOnError>
+) =>
+  (options?.client ?? client).get<
+    GetDelegatedCatalogResponses,
+    GetDelegatedCatalogErrors,
+    ThrowOnError
+  >({
+    security: [{ scheme: "bearer", type: "http" }],
+    url: "/api/inference/v1/catalog",
     ...options,
   })
 

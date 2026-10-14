@@ -1,9 +1,31 @@
 version: 2
 project_name: agentz
 builds:
-- skip: true
+- id: client
+  main: ./cmd/agentz-client
+  binary: agentz
+  env:
+  - CGO_ENABLED=0
+  goos:
+  - linux
+  - darwin
+  - windows
+  goarch:
+  - amd64
+  - arm64
+  ldflags:
+  - -s -w -X main.version={{ .Version }}
+archives:
+- id: client
+  ids:
+  - client
+  name_template: "agentz-cli_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+  format_overrides:
+  - goos: windows
+    formats:
+    - zip
 checksum:
-  disable: true
+  name_template: agentz-cli-checksums.txt
 changelog:
   use: github-native
 release:

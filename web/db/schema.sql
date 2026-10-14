@@ -410,6 +410,23 @@ CREATE TABLE "apikeys" (
 	"metadata" text
 );
 
+CREATE TABLE "device_codes" (
+	"id" text PRIMARY KEY NOT NULL,
+	"device_code" text NOT NULL,
+	"user_code" text NOT NULL,
+	"user_id" text,
+	"expires_at" timestamp NOT NULL,
+	"status" text NOT NULL,
+	"last_polled_at" timestamp,
+	"polling_interval" integer,
+	"client_id" text,
+	"scope" text,
+	"resources" text[],
+	"oauth_client_id" text,
+	"reference_id" text,
+	"session_id" text
+);
+
 CREATE TABLE "invitations" (
 	"id" text PRIMARY KEY NOT NULL,
 	"organization_id" text NOT NULL,
@@ -793,6 +810,8 @@ CREATE INDEX "accounts_userId_idx" ON "accounts" USING btree ("user_id");
 CREATE INDEX "apikeys_configId_idx" ON "apikeys" USING btree ("config_id");
 CREATE INDEX "apikeys_referenceId_idx" ON "apikeys" USING btree ("reference_id");
 CREATE INDEX "apikeys_key_idx" ON "apikeys" USING btree ("key");
+CREATE UNIQUE INDEX "deviceCodes_deviceCode_uidx" ON "device_codes" USING btree ("device_code");
+CREATE UNIQUE INDEX "deviceCodes_userCode_uidx" ON "device_codes" USING btree ("user_code");
 CREATE INDEX "invitations_organizationId_idx" ON "invitations" USING btree ("organization_id");
 CREATE INDEX "invitations_email_idx" ON "invitations" USING btree ("email");
 CREATE INDEX "members_organizationId_idx" ON "members" USING btree ("organization_id");

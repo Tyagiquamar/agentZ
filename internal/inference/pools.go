@@ -252,6 +252,8 @@ func ProviderAPI(kind agentzv1alpha1.InferenceProviderKind, model agentzv1alpha1
 		return *model.API
 	}
 	switch kind {
+	case agentzv1alpha1.InferenceProviderKindOpenAICodex:
+		return agentzv1alpha1.InferenceModelAPIResponses
 	case agentzv1alpha1.InferenceProviderKindAnthropic,
 		agentzv1alpha1.InferenceProviderKindAnthropicCompatible:
 		return agentzv1alpha1.InferenceModelAPIMessages
@@ -272,7 +274,7 @@ func SupportsPoolAPI(poolAPI, memberAPI agentzv1alpha1.InferenceModelAPI) bool {
 	case agentzv1alpha1.InferenceModelAPIResponses:
 		return memberAPI == agentzv1alpha1.InferenceModelAPIChatCompletions
 	case agentzv1alpha1.InferenceModelAPIMessages:
-		return memberAPI == agentzv1alpha1.InferenceModelAPIChatCompletions
+		return memberAPI == agentzv1alpha1.InferenceModelAPIChatCompletions || memberAPI == agentzv1alpha1.InferenceModelAPIResponses
 	default:
 		return false
 	}

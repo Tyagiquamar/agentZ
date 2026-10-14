@@ -7,6 +7,8 @@ import {
   getOAuthProviderState,
   getOAuthProviderApi,
   oauthProvider,
+  oauthDeviceAuthorization,
+  DEVICE_CODE_GRANT_TYPE,
   verifyOAuthQueryParams,
   type OAuthClaimExtensionInput,
   type OAuthAuthorizationQuery,
@@ -220,6 +222,56 @@ export async function delegationTransaction(oauthQuery: string, userId: string, 
   return transaction
 }
 
+const consentRequest = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("authorization_code"), oauthQuery: z.string().min(1) }),
+  z.object({ type: z.literal("device_code"), userCode: z.string().min(1).max(191) }),
+])
+
+/** DelegationRequest identifies a server-owned consent request by its native protocol. */
+export type DelegationRequest = z.infer<typeof consentRequest>
+
+/** delegationRequest checks consent ownership before reading either OAuth flow. */
+export async function delegationRequest(
+  request: DelegationRequest,
+  userId: string,
+  sessionId: string
+) {
+  request = consentRequest.parse(request)
+  if (request.type === "authorization_code") {
+    const transaction = await delegationTransaction(request.oauthQuery, userId, sessionId)
+    if (!transaction)
+      throw new Error("This authorization request expired. Start again from the application.")
+    return { ...transaction, type: request.type }
+  }
+  const { getAuth } = await import("@/lib/auth")
+  const { headers } = await import("next/headers")
+  const verified = await getAuth().api.deviceVerify({
+    query: { user_code: request.userCode },
+    headers: await headers(),
+  })
+  const [device] = await getDB()
+    .select()
+    .from(schema.deviceCodes)
+    .where(
+      and(
+        eq(schema.deviceCodes.userCode, verified.user_code),
+        eq(schema.deviceCodes.userId, userId),
+        eq(schema.deviceCodes.status, "pending"),
+        gt(schema.deviceCodes.expiresAt, new Date())
+      )
+    )
+  if (!device?.oauthClientId)
+    throw new Error("This device request expired or belongs to another account.")
+  return {
+    ...device,
+    type: request.type,
+    clientId: device.oauthClientId,
+    scopes: device.scope?.split(/\s+/).filter(Boolean) ?? [],
+    resources: device.resources ?? [],
+    grantId: device.referenceId,
+  }
+}
+
 /** approvedDelegation loads a live snapshot bound to its user and enabled application's scope ceiling. */
 async function approvedDelegation(clientId: string, userId: string, grantId?: string) {
   const [current] = await getDB()
@@ -285,9 +337,10 @@ export function agentZOAuthProvider(issuer: string) {
     loginPage: "/signin",
     consentPage: "/oauth/authorize",
     scopes: delegationScopes,
-    grantTypes: ["authorization_code", "refresh_token"],
+    grantTypes: ["authorization_code", "refresh_token", DEVICE_CODE_GRANT_TYPE],
     accessTokenExpiresIn: 300,
     refreshTokenExpiresIn: 30 * 24 * 60 * 60,
+    rateLimit: { token: { window: 60, max: 600 } },
     allowDynamicClientRegistration: false,
     allowPublicWebHttpLoopbackRedirects: process.env.NODE_ENV === "development",
     clientRegistrationAllowedScopes: delegationScopes,
@@ -617,6 +670,29 @@ export function agentZOAuthProvider(issuer: string) {
           }),
         },
       ],
+    },
+  } satisfies BetterAuthPlugin
+}
+
+/** agentZDeviceAuthorization adds server-owned grant bindings to native device authorization. */
+export function agentZDeviceAuthorization() {
+  const plugin = oauthDeviceAuthorization({
+    verificationUri: "/oauth/authorize",
+    expiresIn: "10m",
+    interval: "5s",
+  })
+  return {
+    ...plugin,
+    schema: {
+      ...plugin.schema,
+      deviceCode: {
+        ...plugin.schema.deviceCode,
+        fields: {
+          ...plugin.schema.deviceCode.fields,
+          referenceId: { type: "string", required: false, input: false, returned: false },
+          sessionId: { type: "string", required: false, input: false, returned: false },
+        },
+      },
     },
   } satisfies BetterAuthPlugin
 }

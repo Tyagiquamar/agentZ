@@ -241,10 +241,14 @@ func traceEventFromOTLPSpan(sp *tracepb.Span, resourceAttrs map[string]*commonpb
 			spanAttrs[attrGenAIToolName].GetStringValue(),
 		)
 		if connectionName != "" && mcpToolName != "" {
-			failed := status == statusError || hasPayloadValue(payload.toolError)
-			result := mcpToolResult{}
-			if !failed && json.Unmarshal(payload.toolResult, &result) == nil {
-				failed = result.IsError
+			failed := status == statusError
+			if !failed {
+				failed = hasPayloadValue(payload.toolError)
+			}
+			if !failed {
+				result := mcpToolResult{}
+				err := json.Unmarshal(payload.toolResult, &result)
+				failed = err == nil && result.IsError
 			}
 			mcpToolCall = &mcpToolCallEvent{
 				agentName:         agentName,
@@ -424,11 +428,16 @@ func jsonValue(v any) []byte {
 	if v == nil {
 		return []byte(null)
 	}
-	if raw, ok := v.([]byte); ok && json.Valid(raw) {
-		return raw
-	}
-	if s, ok := v.(string); ok && json.Valid([]byte(s)) {
-		return []byte(s)
+	switch value := v.(type) {
+	case []byte:
+		if json.Valid(value) {
+			return value
+		}
+	case string:
+		raw := []byte(value)
+		if json.Valid(raw) {
+			return raw
+		}
 	}
 	return mustJSON(v)
 }

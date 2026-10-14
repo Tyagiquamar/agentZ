@@ -49,7 +49,10 @@ func TestTenantIsolationExcludesPrivateRuntimes(t *testing.T) {
 	}
 
 	policy := &ciliumv2.CiliumNetworkPolicy{}
-	key := client.ObjectKey{Name: agentzv1alpha1.TenantIsolationPolicyName, Namespace: tenant.Name}
+	key := client.ObjectKey{
+		Name:      agentzv1alpha1.TenantIsolationPolicyName,
+		Namespace: tenant.Name,
+	}
 	if err := c.Get(context.Background(), key, policy); err != nil {
 		t.Fatalf("get CiliumNetworkPolicy: %v", err)
 	}

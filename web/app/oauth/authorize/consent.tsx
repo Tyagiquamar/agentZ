@@ -36,7 +36,8 @@ import {
   SelectGroup,
 } from "@/components/ui/select"
 import type { DelegationCatalog } from "@/lib/gateway/client"
-import { approveConsentAction, delegationWorkspaceAction } from "./actions"
+import type { DelegationRequest } from "@/lib/delegation"
+import { approveConsentAction, delegationWorkspaceAction, denyDeviceConsentAction } from "./actions"
 import { AuthorizationState } from "./authorization-state"
 
 // Only the current continuation may navigate. Automatic redirects would also
@@ -56,7 +57,7 @@ const identityScopes = [
 const mcpKinds = ["tools", "prompts", "resources"] as const
 
 type ConsentProps = {
-  oauthQuery: string
+  request: DelegationRequest
   client: { name: string; owner: string | null; callback: string }
   user: { name: string; email: string; image?: string | null }
   scopes: string[]
@@ -65,13 +66,14 @@ type ConsentProps = {
 }
 
 export function Consent({
-  oauthQuery,
+  request,
   client,
   user,
   scopes,
   organizations,
   workspaces,
 }: ConsentProps) {
+  const [inferenceAPI, setInferenceAPI] = useState("Messages")
   const inference = scopes.includes("inference:use")
   const mcp = scopes.includes("mcp:use")
   const resourceAccess = inference || mcp
@@ -111,7 +113,7 @@ export function Consent({
     if (catalogs[id]) return
     startLoading(async () => {
       try {
-        const catalog = await delegationWorkspaceAction(oauthQuery, organizationId, id)
+        const catalog = await delegationWorkspaceAction(request, organizationId, id)
         setCatalogs((current) => ({ ...current, [id]: catalog }))
       } catch (error) {
         setLoadError(
@@ -151,6 +153,15 @@ export function Consent({
           </p>
         </div>
       </header>
+      {request.type === "device_code" ? (
+        <Alert>
+          <AlertDescription>
+            Confirm this code matches your terminal:{" "}
+            <strong className="font-mono">{request.userCode}</strong>. Only authorize a connection
+            you started.
+          </AlertDescription>
+        </Alert>
+      ) : null}
       <div className="rounded-xl border-2 border-dashed border-border/70 bg-card/40 p-5 text-sm">
         <UserIdentity name={user.name} email={user.email} image={user.image} size="default" />
       </div>
@@ -189,6 +200,41 @@ export function Consent({
             <Layers3 aria-hidden="true" className="size-4 text-primary" />
             Choose resource access
           </h2>
+          {inference ? (
+            <Field>
+              <FieldLabel htmlFor="consent-inference-api">Inference API</FieldLabel>
+              <Select
+                value={inferenceAPI}
+                onValueChange={(value) => {
+                  setInferenceAPI(value)
+                  setSelection((current) => ({
+                    ...current,
+                    models: current.models.filter((model) =>
+                      model.api_compatibility?.some(
+                        (item) => item.api === value && item.support !== "unsupported"
+                      )
+                    ),
+                  }))
+                }}
+                disabled={pending || loading}
+              >
+                <SelectTrigger id="consent-inference-api" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="Messages">Messages, used by Claude</SelectItem>
+                    <SelectItem value="Responses">Responses, used by Codex</SelectItem>
+                    <SelectItem value="ChatCompletions">Chat Completions</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <FieldDescription>
+                Choose your client&apos;s API to see conversion warnings. Unsupported models cannot
+                be selected for this API.
+              </FieldDescription>
+            </Field>
+          ) : null}
           {organizations.length === 0 ? (
             <Alert>
               <AlertDescription>
@@ -311,13 +357,24 @@ export function Consent({
                           }
                           searchPlaceholder="Search models or providers…"
                           emptyMessage="No matching models."
-                          options={catalog.models.map((model) => ({
-                            value: model.id,
-                            label: model.model_display_name || model.model,
-                            description: `${model.model} · Provider ID: ${model.provider}`,
-                            badge: model.provider_display_name || model.provider,
-                            icon: Cpu,
-                          }))}
+                          options={catalog.models.map((model) => {
+                            const compatibility = model.api_compatibility?.find(
+                              (item) => item.api === inferenceAPI
+                            )
+                            let badge = model.provider_display_name || model.provider
+                            if (compatibility?.support === "unsupported") badge = "Unsupported"
+                            if (compatibility?.support === "translated") badge = "Conversion"
+                            let description = `${model.model} · Provider ID: ${model.provider}`
+                            if (compatibility?.warning) description += ` · ${compatibility.warning}`
+                            return {
+                              value: model.id,
+                              label: model.model_display_name || model.model,
+                              description,
+                              badge,
+                              disabled: compatibility?.support === "unsupported",
+                              icon: Cpu,
+                            }
+                          })}
                           value={selection.models
                             .filter((model) => modelIds.has(model.id))
                             .map((model) => model.id)}
@@ -441,8 +498,17 @@ export function Consent({
           onClick={() =>
             startTransition(async () => {
               try {
+                if (request.type === "device_code") {
+                  const result = await denyDeviceConsentAction(request)
+                  if ("error" in result) {
+                    setError(result.error)
+                    return
+                  }
+                  window.location.assign("/oauth/authorize?result=denied")
+                  return
+                }
                 const result = await authClient.oauth2.consent({
-                  oauth_query: oauthQuery,
+                  oauth_query: request.oauthQuery,
                   accept: false,
                 })
                 if (result.error) {
@@ -468,7 +534,7 @@ export function Consent({
               setError(undefined)
               try {
                 const result = await approveConsentAction(
-                  oauthQuery,
+                  request,
                   resourceAccess ? organizationId || null : null,
                   selection
                 )
@@ -476,8 +542,12 @@ export function Consent({
                   setError(result.error)
                   return
                 }
+                if (request.type === "device_code") {
+                  window.location.assign("/oauth/authorize?result=approved")
+                  return
+                }
                 const continued = await authClient.oauth2.continue({
-                  oauth_query: oauthQuery,
+                  oauth_query: request.oauthQuery,
                   postLogin: true,
                 })
                 if (continued.error) {
@@ -498,10 +568,14 @@ export function Consent({
         </Button>
       </div>
       <p className="text-center text-sm leading-relaxed text-muted-foreground">
-        You will be redirected to
-        <strong className="block font-bold wrap-anywhere text-foreground">
-          {client.callback || "your application"}
-        </strong>
+        {request.type === "device_code"
+          ? "Return to your terminal after authorization."
+          : "You will be redirected to"}
+        {request.type === "authorization_code" ? (
+          <strong className="block font-bold wrap-anywhere text-foreground">
+            {client.callback || "your application"}
+          </strong>
+        ) : null}
       </p>
     </div>
   )

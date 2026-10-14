@@ -61,7 +61,10 @@ func kubeArmorAlertEvent(item *pb.Alert, agentName string) (event, bool) {
 
 	ns := item.GetNamespaceName()
 	ts := eventTime(item.GetUpdatedTime(), item.GetTimestamp())
-	action := kubeArmorAction(item.GetAction())
+	action := actionAllowed
+	if strings.Contains(item.GetAction(), "Block") {
+		action = actionBlocked
+	}
 	switch item.GetOperation() {
 	case "Process":
 		process := processName(item.GetProcessName(), item.GetResource())
@@ -101,13 +104,6 @@ func kubeArmorAlertEvent(item *pb.Alert, agentName string) (event, bool) {
 	default:
 		return event{}, false
 	}
-}
-
-func kubeArmorAction(action string) string {
-	if strings.Contains(action, "Block") {
-		return actionBlocked
-	}
-	return actionAllowed
 }
 
 func parseLabels(raw string) map[string]string {

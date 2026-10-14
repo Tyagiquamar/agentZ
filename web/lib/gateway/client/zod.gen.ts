@@ -2,17 +2,6 @@
 
 import * as z from "zod"
 
-export const zDelegationModel = z.object({
-  id: z.string().min(1),
-  workspace_id: z.string().min(1),
-  namespace: z.string().min(1),
-  provider: z.string().min(1),
-  provider_display_name: z.string(),
-  uid: z.string().min(1),
-  model: z.string().min(1),
-  model_display_name: z.string(),
-})
-
 export const zDelegationMcp = z.object({
   id: z.string().min(1),
   workspace_id: z.string().min(1),
@@ -22,11 +11,6 @@ export const zDelegationMcp = z.object({
   tools: z.array(z.string().min(1)),
   prompts: z.array(z.string().min(1)),
   resources: z.array(z.string().min(1)),
-})
-
-export const zDelegationCatalog = z.object({
-  models: z.array(zDelegationModel),
-  mcp: z.array(zDelegationMcp),
 })
 
 export const zChatSessionKind = z.enum(["chat", "workflow_run"])
@@ -1646,6 +1630,29 @@ export const zInferenceProviderKind = z.enum([
 ])
 
 export const zInferenceModelApi = z.enum(["ChatCompletions", "Responses", "Messages"])
+
+export const zDelegationApiCompatibility = z.object({
+  api: zInferenceModelApi,
+  support: z.enum(["native", "translated", "unsupported"]),
+  warning: z.string(),
+})
+
+export const zDelegationModel = z.object({
+  api_compatibility: z.array(zDelegationApiCompatibility).optional(),
+  id: z.string().min(1),
+  workspace_id: z.string().min(1),
+  namespace: z.string().min(1),
+  provider: z.string().min(1),
+  provider_display_name: z.string(),
+  uid: z.string().min(1),
+  model: z.string().min(1),
+  model_display_name: z.string(),
+})
+
+export const zDelegationCatalog = z.object({
+  models: z.array(zDelegationModel),
+  mcp: z.array(zDelegationMcp),
+})
 
 export const zInferenceModelModality = z.enum(["text", "audio", "image", "video", "pdf"])
 
@@ -4365,6 +4372,11 @@ export const zListInferenceProviderCatalogResponse = zInferenceProviderCatalog
  * Model suggestions with cache provenance.
  */
 export const zListInferenceModelSuggestionsResponse = zInferenceModelSuggestions
+
+/**
+ * Approved models in the immutable grant's order, with current API compatibility.
+ */
+export const zGetDelegatedCatalogResponse = zDelegationCatalog
 
 /**
  * Paginated inference Pools.

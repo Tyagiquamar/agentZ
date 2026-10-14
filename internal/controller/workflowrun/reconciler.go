@@ -590,7 +590,10 @@ func (r *Reconciler) syncTerminalStatus(ctx context.Context, run *agentzv1alpha1
 	if err != nil {
 		return err
 	}
-	if !apimeta.IsStatusConditionFalse(run.Status.Conditions, agentzv1alpha1.WorkflowRunConditionSessionAborted) {
+	abortPending := apimeta.IsStatusConditionFalse(
+		run.Status.Conditions, agentzv1alpha1.WorkflowRunConditionSessionAborted,
+	)
+	if !abortPending {
 		return nil
 	}
 

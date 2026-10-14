@@ -7,7 +7,12 @@ import { z } from "zod"
 import { getDB, schema } from "@/db"
 import { getAuth, getAuthSession } from "@/lib/auth"
 import { activateOrganization, isActiveSuperadmin } from "@/data/organizations"
-import { checkDelegationSelection, delegationTransaction } from "@/lib/delegation"
+import {
+  checkDelegationSelection,
+  delegationRequest,
+  type DelegationRequest,
+} from "@/lib/delegation"
+import { DEVICE_CODE_GRANT_TYPE } from "@better-auth/oauth-provider"
 import { oauthApplicationInput } from "@/data/schema"
 import type { DelegationCatalog } from "@/lib/gateway/client"
 
@@ -22,6 +27,13 @@ export async function saveOAuthApplication(
   if (!session || !(await isActiveSuperadmin(getDB(), organizationId, session.session.user.id)))
     throw new Error("Only an organization superadmin can manage applications.")
   await activateOrganization(organizationId)
+  const grantTypes = [
+    "refresh_token",
+    ...data.loginMethods.map((method) =>
+      method === "device_code" ? DEVICE_CODE_GRANT_TYPE : method
+    ),
+  ]
+  const responseTypes: "code"[] = data.loginMethods.includes("authorization_code") ? ["code"] : []
   const auth = getAuth()
   let savedClientId: string
   let secret: string | undefined
@@ -48,8 +60,10 @@ export async function saveOAuthApplication(
         client_id: clientId,
         update: {
           client_name: data.name,
-          redirect_uris: data.redirectUris,
+          redirect_uris: data.redirectUris.length ? data.redirectUris : undefined,
           scope: data.scopes.join(" "),
+          grant_types: grantTypes,
+          response_types: responseTypes,
           skip_consent: false,
         },
       },
@@ -60,12 +74,12 @@ export async function saveOAuthApplication(
       headers: session.requestHeaders,
       body: {
         client_name: data.name,
-        redirect_uris: data.redirectUris,
+        redirect_uris: data.redirectUris.length ? data.redirectUris : undefined,
         scope: data.scopes.join(" "),
         application_type: data.type === "native" ? "native" : "web",
         token_endpoint_auth_method: data.type === "confidential" ? "client_secret_basic" : "none",
-        grant_types: ["authorization_code", "refresh_token"],
-        response_types: ["code"],
+        grant_types: grantTypes,
+        response_types: responseTypes,
         require_pkce: true,
         skip_consent: false,
       },
@@ -84,6 +98,8 @@ export async function saveOAuthApplication(
           name: data.name,
           redirectUris: data.redirectUris,
           scopes: data.scopes,
+          grantTypes,
+          responseTypes,
           skipConsent: false,
         })
         .where(eq(schema.oauthClients.clientId, savedClientId))
@@ -255,16 +271,14 @@ export async function disconnectOAuthApplication(clientId: string) {
 
 /** approveDelegation records an immutable selection against one signed authorization request. */
 export async function approveDelegation(
-  oauthQuery: string,
+  request: DelegationRequest,
   organizationId: string | null,
   selection: DelegationCatalog
 ) {
   const session = await getAuthSession()
   if (!session) throw new Error("Sign in to continue.")
   const user = session.session.user
-  const transaction = await delegationTransaction(oauthQuery, user.id, session.session.session.id)
-  if (!transaction)
-    throw new Error("This authorization request has expired. Start again from the application.")
+  const transaction = await delegationRequest(request, user.id, session.session.session.id)
   const inference = transaction.scopes.includes("inference:use")
   const mcp = transaction.scopes.includes("mcp:use")
   if ((!inference && selection.models.length) || (!mcp && selection.mcp.length))
@@ -321,26 +335,44 @@ export async function approveDelegation(
         .for("update")
       if (!setting) throw new Error("This organization no longer allows resource delegation.")
     }
-    const [pending] = await tx
-      .select()
-      .from(schema.delegationTransactions)
-      .where(
-        and(
-          eq(schema.delegationTransactions.id, transaction.id),
-          gt(schema.delegationTransactions.expiresAt, new Date())
+    let grantId: string | null = null
+    if (transaction.type === "authorization_code") {
+      const [pending] = await tx
+        .select()
+        .from(schema.delegationTransactions)
+        .where(
+          and(
+            eq(schema.delegationTransactions.id, transaction.id),
+            gt(schema.delegationTransactions.expiresAt, new Date())
+          )
         )
-      )
-      .for("update")
-    if (!pending) throw new Error("Authorization request expired.")
-    if (pending.grantId) {
+        .for("update")
+      if (!pending) throw new Error("Authorization request expired.")
+      grantId = pending.grantId
+    } else {
+      const [pending] = await tx
+        .select()
+        .from(schema.deviceCodes)
+        .where(
+          and(
+            eq(schema.deviceCodes.id, transaction.id),
+            eq(schema.deviceCodes.userId, user.id),
+            eq(schema.deviceCodes.oauthClientId, client.clientId),
+            eq(schema.deviceCodes.status, "pending"),
+            gt(schema.deviceCodes.expiresAt, new Date())
+          )
+        )
+        .for("update")
+      if (!pending || !client.grantTypes?.includes("urn:ietf:params:oauth:grant-type:device_code"))
+        throw new Error("This device request expired or is no longer allowed.")
+      grantId = pending.referenceId
+    }
+    if (grantId) {
       const [grant] = await tx
         .select()
         .from(schema.delegationGrants)
         .where(
-          and(
-            eq(schema.delegationGrants.id, pending.grantId),
-            isNull(schema.delegationGrants.revokedAt)
-          )
+          and(eq(schema.delegationGrants.id, grantId), isNull(schema.delegationGrants.revokedAt))
         )
       if (!grant || grant.organizationId !== organizationId || !matchesSelection(grant.selection))
         throw new Error(
@@ -379,11 +411,44 @@ export async function approveDelegation(
         selection,
         approvedAt: new Date(),
       })
+    if (transaction.type === "device_code") {
+      await tx
+        .update(schema.deviceCodes)
+        .set({ referenceId: id, sessionId: session.session.session.id, status: "approved" })
+        .where(eq(schema.deviceCodes.id, transaction.id))
+      return id
+    }
     await tx
       .update(schema.delegationTransactions)
       .set({ grantId: id })
-      .where(eq(schema.delegationTransactions.id, pending.id))
+      .where(eq(schema.delegationTransactions.id, transaction.id))
     return id
   })
   return { grantId }
+}
+
+/** denyDeviceDelegation rejects only a pending device owned by the signed-in account. */
+export async function denyDeviceDelegation(
+  request: Extract<DelegationRequest, { type: "device_code" }>
+) {
+  const session = await getAuthSession()
+  if (!session) throw new Error("Sign in to continue.")
+  const device = await delegationRequest(
+    request,
+    session.session.user.id,
+    session.session.session.id
+  )
+  const denied = await getDB()
+    .update(schema.deviceCodes)
+    .set({ status: "denied" })
+    .where(
+      and(
+        eq(schema.deviceCodes.id, device.id),
+        eq(schema.deviceCodes.userId, session.session.user.id),
+        eq(schema.deviceCodes.status, "pending"),
+        gt(schema.deviceCodes.expiresAt, new Date())
+      )
+    )
+    .returning({ id: schema.deviceCodes.id })
+  if (!denied.length) throw new Error("This device request expired or was already used.")
 }

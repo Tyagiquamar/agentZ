@@ -208,7 +208,9 @@ func ReconcileRuntimeIsolation(ctx context.Context, c client.Client, namespace *
 				}},
 			}},
 			Ingress: []ciliumapi.IngressRule{{
-				IngressCommonRule: ciliumapi.IngressCommonRule{FromEntities: ciliumapi.EntitySlice{ciliumapi.EntityHost}},
+				IngressCommonRule: ciliumapi.IngressCommonRule{
+					FromEntities: ciliumapi.EntitySlice{ciliumapi.EntityHost},
+				},
 				ToPorts: ciliumapi.PortRules{{Ports: []ciliumapi.PortProtocol{{
 					Port:     "15021",
 					Protocol: ciliumapi.ProtoTCP,

@@ -271,7 +271,11 @@ func dnsLabel(prefix string) string {
 	if value == "" {
 		return "mcp"
 	}
-	if len(value) <= 63 && len(validation.IsDNS1123Label(value)) == 0 {
+	valid := len(value) <= 63
+	if valid {
+		valid = len(validation.IsDNS1123Label(value)) == 0
+	}
+	if valid {
 		return value
 	}
 

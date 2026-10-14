@@ -1101,7 +1101,11 @@ func (s *Service) judgeEvaluation(ctx context.Context, namespace string, evaluat
 	judge := evaluation.Request.Judge
 	permissions := gatewayapi.OpencodePermissionRuleset{
 		{Permission: "*", Pattern: "*", Action: gatewayapi.OpencodePermissionActionDeny},
-		{Permission: "StructuredOutput", Pattern: "*", Action: gatewayapi.OpencodePermissionActionAllow},
+		{
+			Permission: "StructuredOutput",
+			Pattern:    "*",
+			Action:     gatewayapi.OpencodePermissionActionAllow,
+		},
 	}
 	session, err := upstream.SessionCreateWithResponse(ctx, evaluation.Workflow.AgentName, nil, gatewayapi.SessionCreateJSONRequestBody{
 		Title:    new("Judge workflow execution"),
@@ -1192,7 +1196,10 @@ func (s *Service) judgeEvaluation(ctx context.Context, namespace string, evaluat
 			Format:    &format,
 			Parts:     []gatewayapi.OpencodePromptPartInput{part},
 			Variant:   judge.Variant,
-			Model:     &gatewayapi.OpencodePromptModel{ProviderID: judge.ProviderId, ModelID: judge.ModelId},
+			Model: &gatewayapi.OpencodePromptModel{
+				ProviderID: judge.ProviderId,
+				ModelID:    judge.ModelId,
+			},
 		})
 		if err != nil {
 			return err

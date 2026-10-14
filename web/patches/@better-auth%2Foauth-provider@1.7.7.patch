@@ -108,3 +108,37 @@ index 11279b41bb6ce329ef73263e935d2a257df9ac02..3b014108c9acdaa36eb19abe852967ed
    /**
     * The scopes that the client is allowed to request.
     * Must contain "openid" to be considered an OIDC server,
+diff --git a/dist/index.mjs b/dist/index.mjs
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -52,7 +52,7 @@
+ 	const body = ctx.body;
+ 	const deviceCode = body?.device_code;
+ 	if (!deviceCode) tokenError("BAD_REQUEST", "invalid_request", "device_code is required");
+-	const { authorizationContext: { client, confirmation, scopes }, redemptionContext: resources, user } = await redeemDeviceCode({
++	const { authorizationContext: { client, confirmation, scopes }, redemptionContext: { resources, referenceId, sessionId }, user } = await redeemDeviceCode({
+ 		ctx,
+ 		deviceCode,
+ 		authorizeRedemption: async (record) => {
+@@ -86,7 +86,11 @@
+ 				clientId: authorization.client.clientId,
+ 				requestedScopes: authorization.scopes
+ 			});
+-			return resources;
++			return {
++				resources,
++				referenceId: record.referenceId ?? void 0,
++				sessionId: record.sessionId ?? void 0
++			};
+ 		}
+ 	});
+ 	return provider.issueTokens({
+@@ -94,6 +98,8 @@
+ 		scopes,
+ 		user,
+ 		resources,
++		referenceId: referenceId ?? void 0,
++		sessionId: sessionId ?? void 0,
+ 		confirmation
+ 	});
+ }

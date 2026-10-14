@@ -26,6 +26,7 @@ import { toast } from "sonner"
 import { AdministrationPageHeader } from "@/components/administration"
 import type { oauthClients } from "@/db/auth-schema"
 import { Button } from "@/components/ui/button"
+import { MultiSelectDropdown } from "@/components/ui/multi-select-dropdown"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
@@ -148,6 +149,7 @@ type Application = Pick<
   | "scopes"
   | "tokenEndpointAuthMethod"
   | "applicationType"
+  | "grantTypes"
   | "disabled"
 > & { authorizedOrigins: string[] }
 
@@ -165,6 +167,7 @@ export function Applications({
   const [pending, startTransition] = useTransition()
   const [editor, setEditor] = useState<Application | "new">()
   const [credential, setCredential] = useState<Credential>()
+  const [setup, setSetup] = useState<Application>()
   const [confirmation, setConfirmation] = useState<
     { client: Application; operation: "delete" | "rotate" | "disable" } | "delegation"
   >()
@@ -300,6 +303,16 @@ export function Applications({
                     )}
                     {client.disabled ? "Enable" : "Disable"}
                   </DropdownMenuItem>
+                  {client.applicationType === "native" &&
+                  client.tokenEndpointAuthMethod === "none" ? (
+                    <DropdownMenuItem
+                      disabled={!!client.disabled}
+                      onSelect={() => setSetup(client)}
+                    >
+                      <Monitor aria-hidden="true" />
+                      Set up coding agent
+                    </DropdownMenuItem>
+                  ) : null}
                   <DropdownMenuItem
                     variant="destructive"
                     onSelect={() => setConfirmation({ client, operation: "delete" })}
@@ -418,6 +431,81 @@ export function Applications({
             setCredential(credential)
           }}
         />
+      ) : null}
+      {setup ? (
+        <Sheet
+          open
+          onOpenChange={(open) => {
+            if (!open) setSetup(undefined)
+          }}
+        >
+          <SheetContent size="md">
+            <SheetHeader>
+              <SheetTitle>Set up coding agent</SheetTitle>
+              <SheetDescription>
+                Install the AgentZ CLI and create its configuration file. Your agent handles browser
+                login and refresh. Models are chosen during consent.
+              </SheetDescription>
+            </SheetHeader>
+            <FieldGroup className="overflow-y-auto p-4">
+              <Field>
+                <FieldLabel>Configuration file</FieldLabel>
+                <FieldDescription>
+                  Linux: $XDG_CONFIG_HOME/agentz/config.yaml, or ~/.config/agentz/config.yaml.
+                  macOS: ~/Library/Application Support/agentz/config.yaml. Windows:
+                  %APPDATA%\agentz\config.yaml.
+                </FieldDescription>
+                <div className="flex items-start gap-2 rounded-md border bg-muted p-3">
+                  <pre className="min-w-0 flex-1 overflow-x-auto text-sm">{`server_url: ${window.location.origin}\nclient_id: ${setup.clientId}\n`}</pre>
+                  <CopyButton
+                    content={`server_url: ${window.location.origin}\nclient_id: ${setup.clientId}\n`}
+                    label="Copy AgentZ configuration"
+                  />
+                </div>
+              </Field>
+              <Field>
+                <FieldLabel>Launch Claude</FieldLabel>
+                <div className="flex items-center gap-2 rounded-md border p-3">
+                  <code className="flex-1 text-sm">agentz launch claude</code>
+                  <CopyButton content="agentz launch claude" label="Copy Claude command" />
+                </div>
+                <FieldDescription>
+                  Pass your Claude flags after its name. Requires Claude Code 2.1.299 or later.
+                  AgentZ uses a local relay to reach the public SaaS.
+                </FieldDescription>
+                {!setup.grantTypes?.includes("urn:ietf:params:oauth:grant-type:device_code") ? (
+                  <Alert>
+                    <AlertDescription>
+                      Enable Device authorization in this application&apos;s login methods first.
+                    </AlertDescription>
+                  </Alert>
+                ) : null}
+                <FieldDescription>
+                  Allow openid, profile, email, offline_access, inference:use and mcp:use scopes.
+                  The CLI stores the client ID, never a client secret.
+                </FieldDescription>
+              </Field>
+              <Field>
+                <FieldLabel>Connect MCP tools</FieldLabel>
+                <FieldDescription>
+                  Enable Browser login with PKCE and register http://localhost:8765/callback in this
+                  application. MCP has its own native login and refresh.
+                </FieldDescription>
+                <div className="flex items-start gap-2 rounded-md border bg-muted p-3">
+                  <code className="min-w-0 flex-1 text-sm break-all">{`agentz launch claude mcp add --transport http --scope user --client-id ${setup.clientId} --callback-port 8765 agentz ${window.location.origin}/api/mcp`}</code>
+                  <CopyButton
+                    content={`agentz launch claude mcp add --transport http --scope user --client-id ${setup.clientId} --callback-port 8765 agentz ${window.location.origin}/api/mcp`}
+                    label="Copy MCP command"
+                  />
+                </div>
+                <FieldDescription>
+                  Then run agentz launch claude mcp login agentz. Choose the tools to grant in your
+                  browser. No provider keys are copied to Claude.
+                </FieldDescription>
+              </Field>
+            </FieldGroup>
+          </SheetContent>
+        </Sheet>
       ) : null}
       <Dialog
         open={credential !== undefined}
@@ -554,6 +642,7 @@ const applicationFormSchema = z
   .object({
     name: z.string(),
     type: oauthApplicationInput.shape.type,
+    loginMethods: oauthApplicationInput.shape.loginMethods,
     redirectUris: z.string(),
     authorizedOrigins: z.string(),
     scopes: z.array(z.string()),
@@ -604,12 +693,23 @@ function ApplicationEditor({
     defaultValues: {
       name: client?.name ?? "",
       type: initialType,
+      loginMethods: client
+        ? [
+            ...(client.grantTypes?.includes("authorization_code")
+              ? ["authorization_code" as const]
+              : []),
+            ...(client.grantTypes?.includes("urn:ietf:params:oauth:grant-type:device_code")
+              ? ["device_code" as const]
+              : []),
+          ]
+        : ["authorization_code"],
       redirectUris: client?.redirectUris.join("\n") ?? "",
       authorizedOrigins: client?.authorizedOrigins.join("\n") ?? "",
       scopes: client ? (client.scopes ?? []) : ["openid", "profile", "email"],
     },
   })
   const type = useWatch({ control: form.control, name: "type" })
+  const loginMethods = useWatch({ control: form.control, name: "loginMethods" })
   const pending = form.formState.isSubmitting
   const error = form.formState.errors.root?.message
   const save = form.handleSubmit(async (input) => {
@@ -672,7 +772,11 @@ function ApplicationEditor({
                       name={field.name}
                       value={field.value}
                       disabled={!!client || pending}
-                      onValueChange={field.onChange}
+                      onValueChange={(value) => {
+                        field.onChange(value)
+                        if (value !== "native")
+                          form.setValue("loginMethods", ["authorization_code"])
+                      }}
                     >
                       <SelectTrigger
                         ref={field.ref}
@@ -707,18 +811,53 @@ function ApplicationEditor({
                   </Field>
                 )}
               />
+              {type === "native" ? (
+                <Controller
+                  name="loginMethods"
+                  control={form.control}
+                  render={({ field, fieldState }) => (
+                    <Field data-invalid={fieldState.invalid}>
+                      <FieldLabel htmlFor="application-login-methods" required>
+                        Login methods
+                      </FieldLabel>
+                      <MultiSelectDropdown
+                        id="application-login-methods"
+                        disabled={pending}
+                        options={[
+                          {
+                            value: "authorization_code",
+                            label: "Browser login with PKCE",
+                            icon: Monitor,
+                          },
+                          { value: "device_code", label: "Device authorization", icon: Smartphone },
+                        ]}
+                        value={field.value ?? []}
+                        onValueChangeAction={(values) => field.onChange(values)}
+                      />
+                      <FieldDescription>
+                        Claude uses device authorization. Codex uses browser login with PKCE. Public
+                        clients have no secret.
+                      </FieldDescription>
+                      <FieldError errors={[fieldState.error]} />
+                    </Field>
+                  )}
+                />
+              ) : null}
               <Controller
                 name="redirectUris"
                 control={form.control}
                 render={({ field, fieldState }) => (
                   <Field data-invalid={fieldState.invalid}>
-                    <FieldLabel htmlFor="application-redirects" required>
+                    <FieldLabel
+                      htmlFor="application-redirects"
+                      required={loginMethods?.includes("authorization_code")}
+                    >
                       Callback URLs
                     </FieldLabel>
                     <Textarea
                       {...field}
                       id="application-redirects"
-                      required
+                      required={loginMethods?.includes("authorization_code")}
                       disabled={pending}
                       aria-invalid={fieldState.invalid}
                       aria-describedby="application-redirects-description application-redirects-error"
@@ -732,7 +871,7 @@ function ApplicationEditor({
                         process.env.NODE_ENV === "development" &&
                         " In development, browser clients may also use HTTP on localhost, 127.0.0.1, or [::1]."}
                       {type === "native" &&
-                        " Native clients can use HTTP loopback URLs or a reverse-domain URI scheme."}
+                        " Native clients can use HTTP loopback URLs or a reverse-domain URI scheme. Device-only applications need no callback URL."}
                     </FieldDescription>
                     <FieldError id="application-redirects-error" errors={[fieldState.error]} />
                   </Field>

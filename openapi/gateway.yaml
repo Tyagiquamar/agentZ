@@ -3033,6 +3033,24 @@ components:
       - half
       - third
       type: string
+    DelegationAPICompatibility:
+      additionalProperties: false
+      properties:
+        api:
+          $ref: '#/components/schemas/InferenceModelAPI'
+        support:
+          enum:
+          - native
+          - translated
+          - unsupported
+          type: string
+        warning:
+          type: string
+      required:
+      - api
+      - support
+      - warning
+      type: object
     DelegationCatalog:
       additionalProperties: false
       properties:
@@ -3097,6 +3115,10 @@ components:
     DelegationModel:
       additionalProperties: false
       properties:
+        api_compatibility:
+          items:
+            $ref: '#/components/schemas/DelegationAPICompatibility'
+          type: array
         id:
           minLength: 1
           type: string
@@ -29089,6 +29111,24 @@ paths:
       - GatewayBearer:
         - inference_provider.read
       summary: Watch inference provider status changes.
+      tags:
+      - inference
+  /api/inference/v1/catalog:
+    get:
+      operationId: getDelegatedCatalog
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DelegationCatalog'
+          description: Approved models in the immutable grant's order, with current API compatibility.
+        default:
+          $ref: '#/components/responses/BadRequest'
+      security:
+      - GatewayBearer:
+        - inference:use
+      summary: Read the approved model catalog using a delegated inference credential.
       tags:
       - inference
   /api/lens/{agentName}/{sessionID}/trace:

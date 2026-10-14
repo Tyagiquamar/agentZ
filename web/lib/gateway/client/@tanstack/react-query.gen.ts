@@ -55,6 +55,7 @@ import {
   getCodingProject,
   getCodingThread,
   getDashboard,
+  getDelegatedCatalog,
   getDelegationCatalog,
   getEventTrailEvent,
   getInferencePool,
@@ -294,6 +295,9 @@ import type {
   GetDashboardData,
   GetDashboardError,
   GetDashboardResponse,
+  GetDelegatedCatalogData,
+  GetDelegatedCatalogError,
+  GetDelegatedCatalogResponse,
   GetDelegationCatalogData,
   GetDelegationCatalogError,
   GetDelegationCatalogResponse,
@@ -3384,6 +3388,31 @@ export const listInferenceModelSuggestionsOptions = (
       return data
     },
     queryKey: listInferenceModelSuggestionsQueryKey(options),
+  })
+
+export const getDelegatedCatalogQueryKey = (options?: Options<GetDelegatedCatalogData>) =>
+  createQueryKey("getDelegatedCatalog", options)
+
+/**
+ * Read the approved model catalog using a delegated inference credential.
+ */
+export const getDelegatedCatalogOptions = (options?: Options<GetDelegatedCatalogData>) =>
+  queryOptions<
+    GetDelegatedCatalogResponse,
+    GetDelegatedCatalogError,
+    GetDelegatedCatalogResponse,
+    ReturnType<typeof getDelegatedCatalogQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await getDelegatedCatalog({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      })
+      return data
+    },
+    queryKey: getDelegatedCatalogQueryKey(options),
   })
 
 export const listInferencePoolsQueryKey = (options: Options<ListInferencePoolsData>) =>

@@ -2955,6 +2955,22 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /api/inference/v1/catalog:
+    get:
+      operationId: getDelegatedCatalog
+      summary: Read the approved model catalog using a delegated inference credential.
+      tags: [inference]
+      responses:
+        "200":
+          description: Approved models in the immutable grant's order, with current API compatibility.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DelegationCatalog'
+        default:
+          $ref: '#/components/responses/BadRequest'
+      security:
+      - GatewayBearer: [inference:use]
   /api/inference/pool:
     get:
       operationId: listInferencePools
@@ -5044,11 +5060,27 @@ components:
             $ref: '#/components/schemas/Error'
 
   schemas:
+    DelegationAPICompatibility:
+      additionalProperties: false
+      properties:
+        api:
+          $ref: '#/components/schemas/InferenceModelAPI'
+        support:
+          type: string
+          enum: [native, translated, unsupported]
+        warning:
+          type: string
+      required: [api, support, warning]
+      type: object
     DelegationModel:
       type: object
       additionalProperties: false
       required: [id, workspace_id, namespace, provider, provider_display_name, uid, model, model_display_name]
       properties:
+        api_compatibility:
+          type: array
+          items:
+            $ref: '#/components/schemas/DelegationAPICompatibility'
         id: {type: string, minLength: 1}
         workspace_id: {type: string, minLength: 1}
         namespace: {type: string, minLength: 1}

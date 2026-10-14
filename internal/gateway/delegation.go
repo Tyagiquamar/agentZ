@@ -88,6 +88,58 @@ type openAIError struct {
 	Error openAIErrorDetail `json:"error"`
 }
 
+type anthropicError struct {
+	Type  string            `json:"type"`
+	Error openAIErrorDetail `json:"error"`
+}
+
+// GetDelegatedCatalog returns current compatibility for the caller's approved models.
+func (s *Service) GetDelegatedCatalog(w http.ResponseWriter, r *http.Request) {
+	s.handleDelegatedRequest(w, r)
+}
+
+func delegatedModelCompatibility(kind agentzv1alpha1.InferenceProviderKind, model agentzv1alpha1.InferenceModel) []gatewayapi.DelegationAPICompatibility {
+	upstream := inference.ProviderAPI(kind, model)
+	endpoints := inference.DelegatedProviderEndpoints(kind)
+	apis := []gatewayapi.InferenceModelAPI{
+		gatewayapi.ChatCompletions,
+		gatewayapi.Responses,
+		gatewayapi.Messages,
+	}
+	paths := []string{"/chat/completions", "/responses", "/messages"}
+	result := make([]gatewayapi.DelegationAPICompatibility, 0, len(apis))
+	for i, api := range apis {
+		compatibility := gatewayapi.DelegationAPICompatibility{
+			Api:     api,
+			Support: gatewayapi.Unsupported,
+			Warning: "AgentGateway does not support this direct conversion.",
+		}
+		if slices.Contains(endpoints, paths[i]) {
+			compatibility.Support = gatewayapi.Translated
+			compatibility.Warning = "Conversion may omit provider-specific reasoning, media or tool fields. Use the native API for full fidelity."
+			native := false
+			switch upstream {
+			case agentzv1alpha1.InferenceModelAPIChatCompletions:
+				native = api == gatewayapi.ChatCompletions
+			case agentzv1alpha1.InferenceModelAPIResponses:
+				native = api == gatewayapi.Responses
+			case agentzv1alpha1.InferenceModelAPIMessages:
+				native = api == gatewayapi.Messages
+			}
+			openAI := kind == agentzv1alpha1.InferenceProviderKindOpenAI || kind == agentzv1alpha1.InferenceProviderKindAzure
+			dualOpenAI := model.API == nil && openAI && api != gatewayapi.Messages
+			providerConversion := kind == agentzv1alpha1.InferenceProviderKindGemini ||
+				kind == agentzv1alpha1.InferenceProviderKindVertexAI || kind == agentzv1alpha1.InferenceProviderKindBedrock
+			if (native || dualOpenAI) && !providerConversion {
+				compatibility.Support = gatewayapi.Native
+				compatibility.Warning = ""
+			}
+		}
+		result = append(result, compatibility)
+	}
+	return result
+}
+
 // GetDelegationCatalog discovers exact capabilities under current Workspace permissions.
 func (s *Service) GetDelegationCatalog(w http.ResponseWriter, r *http.Request, params gatewayapi.GetDelegationCatalogParams) {
 	auth, ok := requestAuthState(r.Context())
@@ -96,7 +148,8 @@ func (s *Service) GetDelegationCatalog(w http.ResponseWriter, r *http.Request, p
 		return
 	}
 	catalog, err := s.delegationCatalog(
-		r.Context(), auth.claims.UserID, auth.claims.OrganizationID, auth.claims.WorkspaceID, params.IncludeUnavailable != nil && *params.IncludeUnavailable,
+		r.Context(), auth.claims.UserID, auth.claims.OrganizationID,
+		auth.claims.WorkspaceID, params.IncludeUnavailable != nil && *params.IncludeUnavailable,
 	)
 	if err != nil {
 		apiutil.WriteInternalError(w, r, err)
@@ -159,6 +212,7 @@ func (s *Service) delegationCatalog(ctx context.Context, userID, organizationID,
 					if err != nil || target.Policies.TLS == nil || target.Policies.TLS.InsecureSkipVerify != nil {
 						continue
 					}
+					compatibility := delegatedModelCompatibility(provider.Spec.Kind, model)
 					catalog.Models = append(catalog.Models, gatewayapi.DelegationModel{
 						Id:                  workspaceID + "/" + string(provider.UID) + "/" + model.ID,
 						WorkspaceId:         workspaceID,
@@ -168,6 +222,7 @@ func (s *Service) delegationCatalog(ctx context.Context, userID, organizationID,
 						Uid:                 string(provider.UID),
 						Model:               model.ID,
 						ModelDisplayName:    model.DisplayName,
+						ApiCompatibility:    &compatibility,
 					})
 				}
 			}
@@ -479,10 +534,26 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 		s.delegationError(w, r, http.StatusForbidden, "access_denied", "The gateway resource was not granted.")
 		return
 	}
-	if r.URL.Path == "/api/inference/v1/models" {
+	if r.URL.Path == "/api/inference/v1/models" || r.URL.Path == "/api/inference/v1/catalog" {
 		resources, err := s.resolveDelegation(r.Context(), grant, gatewayapi.DelegationCatalog{Models: selection.Models})
 		if err != nil {
 			deny(err, false)
+			return
+		}
+		if r.URL.Path == "/api/inference/v1/catalog" {
+			for i := range selection.Models {
+				selected := &selection.Models[i]
+				provider := resources.providers[ctrlclient.ObjectKey{Namespace: selected.Namespace, Name: selected.Provider}]
+				for _, model := range provider.Spec.Models {
+					if model.ID == selected.Model {
+						compatibility := delegatedModelCompatibility(provider.Spec.Kind, model)
+						selected.ApiCompatibility = &compatibility
+						break
+					}
+				}
+			}
+			selection.Mcp = []gatewayapi.DelegationMCP{}
+			apiutil.WriteJSON(w, http.StatusOK, selection)
 			return
 		}
 		models := openAIModels{Object: "list", Data: []openAIModel{}}
@@ -562,7 +633,14 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 	path := "/delegations/" + claims.GrantID + "/mcp"
 	if !mcpRequest {
 		responses := strings.HasSuffix(r.URL.Path, "/responses")
-		input, err := inference.ValidateDelegatedRequest(body, responses)
+		var input *inference.DelegatedRequest
+		var err error
+		switch r.URL.Path {
+		case "/api/inference/v1/messages", "/api/inference/v1/messages/count_tokens":
+			input, err = inference.ValidateDelegatedMessages(body, strings.HasSuffix(r.URL.Path, "/count_tokens"))
+		default:
+			input, err = inference.ValidateDelegatedRequest(body, responses)
+		}
 		if err != nil {
 			s.delegationError(w, r, http.StatusBadRequest, "invalid_request_error", err.Error())
 			return
@@ -724,7 +802,8 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 			return
 		}
 	}
-	if err := controller.SetReadDeadline(time.Time{}); err != nil && !errors.Is(err, http.ErrNotSupported) {
+	err = controller.SetReadDeadline(time.Time{})
+	if err != nil && !errors.Is(err, http.ErrNotSupported) {
 		s.delegationError(
 			w,
 			r,
@@ -795,11 +874,16 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 				}
 				response.Header = http.Header{"Cache-Control": {"no-store, no-transform"}}
 				response.Trailer = nil
-				body, err := json.Marshal(openAIError{Error: openAIErrorDetail{
+				detail := openAIErrorDetail{
 					Message: "The upstream service could not complete this request.",
 					Type:    "server_error",
 					Code:    "upstream_error",
-				}})
+				}
+				body, err := json.Marshal(openAIError{Error: detail})
+				if strings.HasPrefix(r.URL.Path, "/api/inference/v1/messages") {
+					detail.Type = "api_error"
+					body, err = json.Marshal(anthropicError{Type: "error", Error: detail})
+				}
 				if err != nil {
 					return err
 				}
@@ -862,8 +946,33 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *Service) delegationError(w http.ResponseWriter, r *http.Request, status int, code, message string) {
-	if r.URL.Path == "/api/mcp" {
+	if r.URL.Path == "/api/mcp" || r.URL.Path == "/api/inference/v1/catalog" {
 		apiutil.WriteError(w, r, apiutil.NewError(status, code, message, nil))
+		return
+	}
+	if strings.HasPrefix(r.URL.Path, "/api/inference/v1/messages") {
+		if status == http.StatusUnauthorized || status == http.StatusForbidden {
+			w.Header().Set("x-should-retry", "false")
+		}
+		errorType := "invalid_request_error"
+		switch status {
+		case http.StatusUnauthorized:
+			errorType = "authentication_error"
+		case http.StatusForbidden:
+			errorType = "permission_error"
+		case http.StatusNotFound:
+			errorType = "not_found_error"
+		case http.StatusTooManyRequests:
+			errorType = "rate_limit_error"
+		default:
+			if status >= http.StatusInternalServerError {
+				errorType = "api_error"
+			}
+		}
+		apiutil.WriteJSON(w, status, anthropicError{
+			Type:  "error",
+			Error: openAIErrorDetail{Message: message, Type: errorType},
+		})
 		return
 	}
 	apiutil.WriteJSON(w, status, openAIError{Error: openAIErrorDetail{
@@ -930,9 +1039,9 @@ func (s *Service) delegationCORS(next http.Handler) http.Handler {
 			switch r.URL.Path {
 			case "/api/mcp":
 				methods = []string{http.MethodGet, http.MethodPost, http.MethodDelete}
-			case "/api/inference/v1/models":
+			case "/api/inference/v1/models", "/api/inference/v1/catalog":
 				methods = []string{http.MethodGet}
-			case "/api/inference/v1/chat/completions", "/api/inference/v1/responses":
+			case "/api/inference/v1/chat/completions", "/api/inference/v1/responses", "/api/inference/v1/messages", "/api/inference/v1/messages/count_tokens":
 			default:
 				methods = nil
 			}
