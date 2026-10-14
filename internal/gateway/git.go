@@ -168,7 +168,9 @@ func (s *Service) codingIdentity(ctx context.Context, userID string) (codingIden
 	}
 	identity.client, err = github.NewClient(
 		github.WithAuthToken(identity.token),
-		github.WithHTTPClient(&http.Client{Timeout: 30 * time.Second}),
+		github.WithHTTPClient(&http.Client{
+			Timeout: 30 * time.Second,
+		}),
 	)
 	if err != nil {
 		return identity, err
@@ -192,7 +194,9 @@ func (s *Service) codingIdentity(ctx context.Context, userID string) (codingIden
 // Public repository metadata alone does not establish installation access.
 func (identity codingIdentity) repositories(ctx context.Context) iter.Seq2[*github.Repository, error] {
 	return func(yield func(*github.Repository, error) bool) {
-		opts := &github.ListOptions{PerPage: 100}
+		opts := &github.ListOptions{
+			PerPage: 100,
+		}
 		for installation, err := range identity.client.Apps.ListUserInstallationsIter(ctx, opts) {
 			if err != nil {
 				yield(nil, err)
@@ -257,7 +261,9 @@ func (s *Service) ListCodingRepositories(w http.ResponseWriter, r *http.Request,
 	if params.Query != nil {
 		query = strings.ToLower(strings.TrimSpace(*params.Query))
 	}
-	result := gatewayapi.CodingRepositoryPage{Repositories: []gatewayapi.CodingRepositoryItem{}}
+	result := gatewayapi.CodingRepositoryPage{
+		Repositories: []gatewayapi.CodingRepositoryItem{},
+	}
 	seen := make(map[int64]bool)
 	for repo, err := range identity.repositories(r.Context()) {
 		if err != nil {
@@ -306,7 +312,11 @@ func newCodingRepository(ctx context.Context, repository, token string) (*coding
 	if err != nil {
 		return nil, err
 	}
-	repo := &codingRepository{dir: dir, url: "https://github.com/" + repository + ".git", token: token}
+	repo := &codingRepository{
+		dir:   dir,
+		url:   "https://github.com/" + repository + ".git",
+		token: token,
+	}
 	if _, err := repo.run(ctx, false, "init", "--bare", "."); err != nil {
 		os.RemoveAll(dir)
 		return nil, err

@@ -44,7 +44,9 @@ type sinjectorPolicyData struct {
 // NewOpenBaoProvisioner shares the manager's authenticated client so repeated
 // provisioning does not create additional tokens or renewal goroutines.
 func NewOpenBaoProvisioner(client *baoapi.Client) OpenBaoProvisioner {
-	return &openBaoProvisioner{client: client}
+	return &openBaoProvisioner{
+		client: client,
+	}
 }
 
 // ProvisionSinjector binds the service account to its Agent's secret policy.

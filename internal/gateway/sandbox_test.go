@@ -207,34 +207,44 @@ func TestSandboxMutationAuthorizationIncludesCreatorPrivilege(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			queries := &sandboxQueries{permissions: []gatewaydb.GatewayResolvePermissionsRow{{
-				Active: true,
-				Resource: gatewaydb.NullPermissionResource{
-					PermissionResource: gatewaydb.PermissionResourceSandbox,
-					Valid:              true,
-				},
-				Action: gatewaydb.NullPermissionAction{
-					PermissionAction: tt.action,
-					Valid:            true,
-				},
-			}}}
+			queries := &sandboxQueries{
+				permissions: []gatewaydb.GatewayResolvePermissionsRow{{
+					Active: true,
+					Resource: gatewaydb.NullPermissionResource{
+						PermissionResource: gatewaydb.PermissionResourceSandbox,
+						Valid:              true,
+					},
+					Action: gatewaydb.NullPermissionAction{
+						PermissionAction: tt.action,
+						Valid:            true,
+					},
+				}},
+			}
 			svc := sandboxTestService(t, queries)
 			ctx := context.Background()
 			ctx = context.WithValue(
 				ctx,
 				authContextKey{},
-				requestAuth{claims: &gatewayClaims{
-					OrganizationID: testOrganizationID,
-					UserID:         tt.userID,
-				}},
+				requestAuth{
+					claims: &gatewayClaims{
+						OrganizationID: testOrganizationID,
+						UserID:         tt.userID,
+					},
+				},
 			)
 			ctx = context.WithValue(
 				ctx,
 				tenantContextKey{},
-				tenantRequest{tenant: &agentzv1alpha1.Tenant{
-					Spec:   agentzv1alpha1.TenantSpec{OrganizationID: testOrganizationID},
-					Status: agentzv1alpha1.TenantStatus{Namespace: testOrgNamespace},
-				}},
+				tenantRequest{
+					tenant: &agentzv1alpha1.Tenant{
+						Spec: agentzv1alpha1.TenantSpec{
+							OrganizationID: testOrganizationID,
+						},
+						Status: agentzv1alpha1.TenantStatus{
+							Namespace: testOrgNamespace,
+						},
+					},
+				},
 			)
 			scope, ok := tt.operation.BearerScope()
 			if !ok {
@@ -299,25 +309,27 @@ func TestValidateSandboxDependenciesAllowsWorkspaceReadForInheritedResources(t *
 
 	svc := sandboxTestService(t, queries)
 	ctx := context.Background()
-	sandbox := &agentzv1alpha1.Sandbox{Spec: agentzv1alpha1.SandboxSpec{
-		Skills: []agentzv1alpha1.ResourceReference{{
-			Scope: agentzv1alpha1.ResourceScopeOrganisation,
-			Name:  "skill",
-		}},
-		MCPConnectionRefs: []agentzv1alpha1.MCPConnectionRef{{
-			ResourceReference: agentzv1alpha1.ResourceReference{
+	sandbox := &agentzv1alpha1.Sandbox{
+		Spec: agentzv1alpha1.SandboxSpec{
+			Skills: []agentzv1alpha1.ResourceReference{{
 				Scope: agentzv1alpha1.ResourceScopeOrganisation,
-				Name:  "mcp",
-			},
-		}},
-		Inference: agentzv1alpha1.SandboxInference{
-			Models: []agentzv1alpha1.InferenceModelRef{{
-				Scope:    agentzv1alpha1.ResourceScopeOrganisation,
-				Provider: "provider",
-				Model:    "model",
+				Name:  "skill",
 			}},
+			MCPConnectionRefs: []agentzv1alpha1.MCPConnectionRef{{
+				ResourceReference: agentzv1alpha1.ResourceReference{
+					Scope: agentzv1alpha1.ResourceScopeOrganisation,
+					Name:  "mcp",
+				},
+			}},
+			Inference: agentzv1alpha1.SandboxInference{
+				Models: []agentzv1alpha1.InferenceModelRef{{
+					Scope:    agentzv1alpha1.ResourceScopeOrganisation,
+					Provider: "provider",
+					Model:    "model",
+				}},
+			},
 		},
-	}}
+	}
 	access := resourceAccess{
 		claims: gatewayClaims{
 			OrganizationID: testOrganizationID,
@@ -344,11 +356,16 @@ func TestUpdateSecretSandboxHostsAllowsInheritedSandbox(t *testing.T) {
 		testOrganizationID,
 	)
 	agt := &agentzv1alpha1.Agent{
-		ObjectMeta: metav1.ObjectMeta{Name: "agent", Namespace: testWorkspaceNS},
-		Spec: agentzv1alpha1.AgentSpec{SandboxRef: agentzv1alpha1.ResourceReference{
-			Scope: agentzv1alpha1.ResourceScopeOrganisation,
-			Name:  "organization-sandbox",
-		}},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "agent",
+			Namespace: testWorkspaceNS,
+		},
+		Spec: agentzv1alpha1.AgentSpec{
+			SandboxRef: agentzv1alpha1.ResourceReference{
+				Scope: agentzv1alpha1.ResourceScopeOrganisation,
+				Name:  "organization-sandbox",
+			},
+		},
 	}
 	sandbox := &agentzv1alpha1.Sandbox{
 		ObjectMeta: metav1.ObjectMeta{
@@ -363,7 +380,11 @@ func TestUpdateSecretSandboxHostsAllowsInheritedSandbox(t *testing.T) {
 		},
 	}
 	client := agentzfake.NewSimpleClientset(agt, sandbox)
-	svc := &Service{resolver: &resolver{client: client}}
+	svc := &Service{
+		resolver: &resolver{
+			client: client,
+		},
+	}
 
 	warning, apiErr := svc.updateSecretSandboxHosts(
 		context.Background(),
@@ -400,41 +421,51 @@ func sandboxTestService(t *testing.T, queries gatewaydb.Querier) *Service {
 		testOrganizationID,
 	)
 	objects := []ctrlclient.Object{
-		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
-			Name: organizationNamespace,
-			Labels: map[string]string{
-				agentzv1alpha1.TenantNameLabel: organizationNamespace,
+		&corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: organizationNamespace,
+				Labels: map[string]string{
+					agentzv1alpha1.TenantNameLabel: organizationNamespace,
+				},
 			},
-		}},
-		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
-			Name: testWorkspaceNS,
-			Labels: map[string]string{
-				agentzv1alpha1.WorkspaceNameLabel:        testWorkspaceNS,
-				agentzv1alpha1.TenantOrganizationIDLabel: organizationNamespace,
+		},
+		&corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: testWorkspaceNS,
+				Labels: map[string]string{
+					agentzv1alpha1.WorkspaceNameLabel:        testWorkspaceNS,
+					agentzv1alpha1.TenantOrganizationIDLabel: organizationNamespace,
+				},
 			},
-		}},
+		},
 		&agentzv1alpha1.Sandbox{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "organization-sandbox",
 				Namespace: testOrgNamespace,
 			},
-			Spec: agentzv1alpha1.SandboxSpec{ResourceAudit: agentzv1alpha1.ResourceAudit{
-				CreatedByUserID:      testUserID,
-				LastModifiedByUserID: testUserID,
-			}},
+			Spec: agentzv1alpha1.SandboxSpec{
+				ResourceAudit: agentzv1alpha1.ResourceAudit{
+					CreatedByUserID:      testUserID,
+					LastModifiedByUserID: testUserID,
+				},
+			},
 		},
 		&agentzv1alpha1.Sandbox{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "workspace-sandbox",
 				Namespace: testWorkspaceNS,
 			},
-			Spec: agentzv1alpha1.SandboxSpec{ResourceAudit: agentzv1alpha1.ResourceAudit{
-				CreatedByUserID:      testUserID,
-				LastModifiedByUserID: testUserID,
-			}},
+			Spec: agentzv1alpha1.SandboxSpec{
+				ResourceAudit: agentzv1alpha1.ResourceAudit{
+					CreatedByUserID:      testUserID,
+					LastModifiedByUserID: testUserID,
+				},
+			},
 		},
 		&agentzv1alpha1.Workspace{
-			ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceNS},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: testWorkspaceNS,
+			},
 			Spec: agentzv1alpha1.WorkspaceSpec{
 				WorkspaceID:    testWorkspaceID,
 				OrganizationID: testOrganizationID,
@@ -442,12 +473,19 @@ func sandboxTestService(t *testing.T, queries gatewaydb.Querier) *Service {
 					InferenceProviders: []string{"provider"},
 				},
 			},
-			Status: agentzv1alpha1.WorkspaceStatus{Namespace: testWorkspaceNS},
+			Status: agentzv1alpha1.WorkspaceStatus{
+				Namespace: testWorkspaceNS,
+			},
 		},
 		&agentzv1alpha1.InferenceProvider{
-			ObjectMeta: metav1.ObjectMeta{Name: "provider", Namespace: organizationNamespace},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "provider",
+				Namespace: organizationNamespace,
+			},
 			Spec: agentzv1alpha1.InferenceProviderSpec{
-				Models: []agentzv1alpha1.InferenceModel{{ID: "model"}},
+				Models: []agentzv1alpha1.InferenceModel{{
+					ID: "model",
+				}},
 			},
 		},
 	}
@@ -463,19 +501,27 @@ func sandboxTestAuth(next http.Handler) http.Handler {
 		ctx := context.WithValue(
 			r.Context(),
 			authContextKey{},
-			requestAuth{claims: &gatewayClaims{
-				OrganizationID: testOrganizationID,
-				WorkspaceID:    workspaceID,
-				UserID:         testUserID,
-			}},
+			requestAuth{
+				claims: &gatewayClaims{
+					OrganizationID: testOrganizationID,
+					WorkspaceID:    workspaceID,
+					UserID:         testUserID,
+				},
+			},
 		)
 		ctx = context.WithValue(
 			ctx,
 			tenantContextKey{},
-			tenantRequest{tenant: &agentzv1alpha1.Tenant{
-				Spec:   agentzv1alpha1.TenantSpec{OrganizationID: testOrganizationID},
-				Status: agentzv1alpha1.TenantStatus{Namespace: testOrgNamespace},
-			}},
+			tenantRequest{
+				tenant: &agentzv1alpha1.Tenant{
+					Spec: agentzv1alpha1.TenantSpec{
+						OrganizationID: testOrganizationID,
+					},
+					Status: agentzv1alpha1.TenantStatus{
+						Namespace: testOrgNamespace,
+					},
+				},
+			},
 		)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})

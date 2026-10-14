@@ -75,12 +75,14 @@ func (q *permissionQueries) GatewayResolvePermissions(_ context.Context, params 
 func TestResolverDirectRoleUnionAndScopeIsolation(t *testing.T) {
 	t.Parallel()
 
-	queries := &permissionQueries{rows: []gatewaydb.GatewayResolvePermissionsRow{
-		permissionRow(gatewaydb.PermissionResourceSandbox, "", gatewaydb.PermissionActionRead),
-		permissionRow(gatewaydb.PermissionResourceSandbox, "workspace-a", gatewaydb.PermissionActionCreate),
-		permissionRow(gatewaydb.PermissionResourceSandbox, "workspace-a", gatewaydb.PermissionActionModify),
-		permissionRow(gatewaydb.PermissionResourceSandbox, "workspace-b", gatewaydb.PermissionActionDelete),
-	}}
+	queries := &permissionQueries{
+		rows: []gatewaydb.GatewayResolvePermissionsRow{
+			permissionRow(gatewaydb.PermissionResourceSandbox, "", gatewaydb.PermissionActionRead),
+			permissionRow(gatewaydb.PermissionResourceSandbox, "workspace-a", gatewaydb.PermissionActionCreate),
+			permissionRow(gatewaydb.PermissionResourceSandbox, "workspace-a", gatewaydb.PermissionActionModify),
+			permissionRow(gatewaydb.PermissionResourceSandbox, "workspace-b", gatewaydb.PermissionActionDelete),
+		},
+	}
 	effective, err := authorization.New(queries).Resolve(
 		context.Background(),
 		authorization.Subject{
@@ -247,7 +249,10 @@ func TestResolverFailClosedAndSuperadminBypass(t *testing.T) {
 			tt.name,
 			func(t *testing.T) {
 				t.Parallel()
-				queries := &permissionQueries{rows: tt.rows, err: tt.queryErr}
+				queries := &permissionQueries{
+					rows: tt.rows,
+					err:  tt.queryErr,
+				}
 				effective, err := authorization.New(queries).Resolve(
 					context.Background(),
 					authorization.Subject{
@@ -286,7 +291,10 @@ func TestDelegationRequiresWorkspaceAuthority(t *testing.T) {
 	for _, resource := range resources {
 		t.Run(string(resource), func(t *testing.T) {
 			t.Parallel()
-			scope := authorization.Scope{OrganizationID: "organization-a", WorkspaceID: "workspace-a"}
+			scope := authorization.Scope{
+				OrganizationID: "organization-a",
+				WorkspaceID:    "workspace-a",
+			}
 			foreignWorkspace := authorization.Scope{
 				OrganizationID: "organization-a",
 				WorkspaceID:    "workspace-b",
@@ -301,24 +309,45 @@ func TestDelegationRequiresWorkspaceAuthority(t *testing.T) {
 			workspaceAdmin := []gatewaydb.GatewayResolvePermissionsRow{{
 				Active:         true,
 				WorkspaceAdmin: true,
-				WorkspaceID:    pgtype.Text{String: "workspace-a", Valid: true},
+				WorkspaceID: pgtype.Text{
+					String: "workspace-a",
+					Valid:  true,
+				},
 			}}
-			superadmin := []gatewaydb.GatewayResolvePermissionsRow{{Active: true, Superadmin: true}}
+			superadmin := []gatewaydb.GatewayResolvePermissionsRow{{
+				Active:     true,
+				Superadmin: true,
+			}}
 			otherResource := gatewaydb.PermissionResourceMcpConnection
 			if resource == otherResource {
 				otherResource = gatewaydb.PermissionResourceInferenceProvider
 			}
 			cases := []delegationPermissionCase{
-				{name: "no grants", scope: scope},
-				{name: "read alone", rows: []gatewaydb.GatewayResolvePermissionsRow{read}, scope: scope},
+				{
+					name:  "no grants",
+					scope: scope,
+				},
+				{
+					name:  "read alone",
+					rows:  []gatewaydb.GatewayResolvePermissionsRow{read},
+					scope: scope,
+				},
 				{
 					name:  "delegate alone",
 					want:  true,
 					rows:  []gatewaydb.GatewayResolvePermissionsRow{delegate},
 					scope: scope,
 				},
-				{name: "other workspace", rows: grants, scope: foreignWorkspace},
-				{name: "other organization", rows: grants, scope: foreignOrganization},
+				{
+					name:  "other workspace",
+					rows:  grants,
+					scope: foreignWorkspace,
+				},
+				{
+					name:  "other organization",
+					rows:  grants,
+					scope: foreignOrganization,
+				},
 				{
 					name: "other resource",
 					rows: []gatewaydb.GatewayResolvePermissionsRow{
@@ -333,25 +362,49 @@ func TestDelegationRequiresWorkspaceAuthority(t *testing.T) {
 					},
 					scope: scope,
 				},
-				{name: "workspace admin", rows: workspaceAdmin, scope: scope, want: true},
-				{name: "workspace admin cannot cross workspace", rows: workspaceAdmin, scope: foreignWorkspace},
-				{name: "superadmin", rows: superadmin, scope: scope, want: true},
 				{
-					name:  "organization delegation is unavailable",
-					rows:  superadmin,
-					scope: authorization.Scope{OrganizationID: "organization-a"},
+					name:  "workspace admin",
+					rows:  workspaceAdmin,
+					scope: scope,
+					want:  true,
 				},
-				{name: "superadmin cannot cross organization", rows: superadmin, scope: foreignOrganization},
 				{
-					name:  "inactive superadmin",
-					rows:  []gatewaydb.GatewayResolvePermissionsRow{{Superadmin: true}},
+					name:  "workspace admin cannot cross workspace",
+					rows:  workspaceAdmin,
+					scope: foreignWorkspace,
+				},
+				{
+					name:  "superadmin",
+					rows:  superadmin,
+					scope: scope,
+					want:  true,
+				},
+				{
+					name: "organization delegation is unavailable",
+					rows: superadmin,
+					scope: authorization.Scope{
+						OrganizationID: "organization-a",
+					},
+				},
+				{
+					name:  "superadmin cannot cross organization",
+					rows:  superadmin,
+					scope: foreignOrganization,
+				},
+				{
+					name: "inactive superadmin",
+					rows: []gatewaydb.GatewayResolvePermissionsRow{{
+						Superadmin: true,
+					}},
 					scope: scope,
 				},
 			}
 			for _, test := range cases {
 				t.Run(test.name, func(t *testing.T) {
 					t.Parallel()
-					effective, err := authorization.New(&permissionQueries{rows: test.rows}).Resolve(
+					effective, err := authorization.New(&permissionQueries{
+						rows: test.rows,
+					}).Resolve(
 						t.Context(),
 						authorization.Subject{
 							UserID:         "user-a",
@@ -375,11 +428,13 @@ func TestAgentCapabilities(t *testing.T) {
 
 	tests := []agentCapabilitiesCase{
 		{
-			name:            "shared use does not confer edit authority",
-			owner:           "user-b",
-			permissions:     []gatewaydb.PermissionAction{gatewaydb.PermissionActionUseShared},
-			shares:          []gatewaydb.AgentShareCapability{gatewaydb.AgentShareCapabilityUseShared},
-			want:            authorization.AgentCapabilities{Use: true},
+			name:        "shared use does not confer edit authority",
+			owner:       "user-b",
+			permissions: []gatewaydb.PermissionAction{gatewaydb.PermissionActionUseShared},
+			shares:      []gatewaydb.AgentShareCapability{gatewaydb.AgentShareCapabilityUseShared},
+			want: authorization.AgentCapabilities{
+				Use: true,
+			},
 			wantCoversShare: true,
 		},
 		{
@@ -408,7 +463,10 @@ func TestAgentCapabilities(t *testing.T) {
 			shares: []gatewaydb.AgentShareCapability{
 				gatewaydb.AgentShareCapabilityShareNonAuthored,
 			},
-			want:            authorization.AgentCapabilities{Use: true, Share: true},
+			want: authorization.AgentCapabilities{
+				Use:   true,
+				Share: true,
+			},
 			wantCoversShare: true,
 		},
 		{
@@ -441,7 +499,9 @@ func TestAgentCapabilities(t *testing.T) {
 			shares: []gatewaydb.AgentShareCapability{
 				gatewaydb.AgentShareCapabilityDeleteSharedSecret,
 			},
-			want: authorization.AgentCapabilities{Use: true},
+			want: authorization.AgentCapabilities{
+				Use: true,
+			},
 		},
 	}
 	for _, tt := range tests {
@@ -460,9 +520,14 @@ func TestAgentCapabilities(t *testing.T) {
 						),
 					)
 				}
-				effective, err := authorization.New(&permissionQueries{rows: rows}).Resolve(
+				effective, err := authorization.New(&permissionQueries{
+					rows: rows,
+				}).Resolve(
 					context.Background(),
-					authorization.Subject{UserID: "user-a", OrganizationID: "organization-a"},
+					authorization.Subject{
+						UserID:         "user-a",
+						OrganizationID: "organization-a",
+					},
 				)
 				if err != nil {
 					t.Fatalf("Resolve() error = %v", err)
@@ -494,8 +559,11 @@ func TestAgentCapabilities(t *testing.T) {
 
 func permissionRow(resource gatewaydb.PermissionResource, workspaceID string, action gatewaydb.PermissionAction) gatewaydb.GatewayResolvePermissionsRow {
 	return gatewaydb.GatewayResolvePermissionsRow{
-		Active:      true,
-		WorkspaceID: pgtype.Text{String: workspaceID, Valid: workspaceID != ""},
+		Active: true,
+		WorkspaceID: pgtype.Text{
+			String: workspaceID,
+			Valid:  workspaceID != "",
+		},
 		Resource: gatewaydb.NullPermissionResource{
 			PermissionResource: resource,
 			Valid:              true,

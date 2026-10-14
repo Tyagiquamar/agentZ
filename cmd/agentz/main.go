@@ -921,7 +921,9 @@ var managerCmd = &cli.Command{
 			for ns := range strings.SplitSeq(watchNamespace, ",") {
 				defaultNamespaces[strings.TrimSpace(ns)] = cache.Config{}
 			}
-			mgrOptions.Cache = cache.Options{DefaultNamespaces: defaultNamespaces}
+			mgrOptions.Cache = cache.Options{
+				DefaultNamespaces: defaultNamespaces,
+			}
 			setupLog.InfoContext(ctx, "watching namespace(s)", "namespaces", watchNamespace)
 		}
 
@@ -1129,7 +1131,9 @@ var managerCmd = &cli.Command{
 				CellsPerRequest:          tenantDashboardQuotaCellsPerRequest,
 				ResponseBytes:            dashboardResponseBytes,
 				PointsPerSeries:          tenantDashboardQuotaPointsPerSeries,
-				Timeout:                  metav1.Duration{Duration: tenantDashboardQuotaTimeout},
+				Timeout: metav1.Duration{
+					Duration: tenantDashboardQuotaTimeout,
+				},
 			},
 		}
 		if defQuota.Count < 1 {
@@ -1422,7 +1426,9 @@ var managerCmd = &cli.Command{
 		// responding. The timeout also covers reading the response body.
 		runClient, err := gatewayapi.NewClientWithResponses(
 			gatewayURL,
-			gatewayapi.WithHTTPClient(&http.Client{Timeout: 15 * time.Second}),
+			gatewayapi.WithHTTPClient(&http.Client{
+				Timeout: 15 * time.Second,
+			}),
 		)
 		if err != nil {
 			return fmt.Errorf("create workflow run gateway client: %w", err)
@@ -1475,7 +1481,9 @@ var managerCmd = &cli.Command{
 			os.Exit(1)
 		}
 
-		directClient, err := client.New(restCfg, client.Options{Scheme: mgr.GetScheme()})
+		directClient, err := client.New(restCfg, client.Options{
+			Scheme: mgr.GetScheme(),
+		})
 		if err != nil {
 			setupLog.ErrorContext(ctx,
 				"failed to create direct controller client",

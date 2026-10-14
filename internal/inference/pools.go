@@ -105,7 +105,10 @@ func ResolvePool(ctx context.Context, reader client.Reader, pool *agentzv1alpha1
 		}
 		seen[ref] = struct{}{}
 
-		key := types.NamespacedName{Namespace: ns, Name: ref.Provider}
+		key := types.NamespacedName{
+			Namespace: ns,
+			Name:      ref.Provider,
+		}
 		provider := providers[key]
 		if provider == nil {
 			provider = &agentzv1alpha1.InferenceProvider{}
@@ -176,7 +179,9 @@ func ResolvePool(ctx context.Context, reader client.Reader, pool *agentzv1alpha1
 		)
 	}
 	if len(issues) > 0 || len(resolved) == 0 {
-		return PoolDefinition{Members: resolved}, issues, nil
+		return PoolDefinition{
+			Members: resolved,
+		}, issues, nil
 	}
 
 	first := resolved[0]
@@ -219,7 +224,9 @@ func ResolvePool(ctx context.Context, reader client.Reader, pool *agentzv1alpha1
 		input = min(input, memberInput)
 	}
 	if len(issues) > 0 {
-		return PoolDefinition{Members: resolved}, issues, nil
+		return PoolDefinition{
+			Members: resolved,
+		}, issues, nil
 	}
 	contract.Limits.Input = &input
 	warnings := []agentzv1alpha1.InferencePoolWarning{}
@@ -320,7 +327,9 @@ func RenderPoolBackend(pool *agentzv1alpha1.InferencePool, definition PoolDefini
 			policies.Health = &agentgatewayv1alpha1.Health{
 				UnhealthyCondition: &condition,
 				Eviction: &agentgatewayv1alpha1.BackendEviction{
-					Duration:            &agentgatewayv1alpha1.Duration{Duration: 60 * time.Second},
+					Duration: &agentgatewayv1alpha1.Duration{
+						Duration: 60 * time.Second,
+					},
 					ConsecutiveFailures: &failures,
 					RestoreHealth:       &restore,
 				},
@@ -353,7 +362,9 @@ func RenderPoolBackend(pool *agentzv1alpha1.InferencePool, definition PoolDefini
 			Labels:    map[string]string{PoolLabel: pool.Name},
 		},
 		Spec: agentgatewayv1alpha1.AgentgatewayBackendSpec{
-			AI: &agentgatewayv1alpha1.AIBackend{PriorityGroups: groups},
+			AI: &agentgatewayv1alpha1.AIBackend{
+				PriorityGroups: groups,
+			},
 			Policies: &agentgatewayv1alpha1.BackendFull{
 				AI: &agentgatewayv1alpha1.BackendAI{
 					Routes: map[string]agentgatewayv1alpha1.RouteType{

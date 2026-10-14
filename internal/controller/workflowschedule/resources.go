@@ -200,8 +200,14 @@ func (r *Reconciler) reconcileRunnerPolicy(ctx context.Context, schedule *agentz
 						},
 						ToPorts: []ciliumapi.PortRule{{
 							Ports: []ciliumapi.PortProtocol{
-								{Port: "53", Protocol: ciliumapi.ProtoUDP},
-								{Port: "53", Protocol: ciliumapi.ProtoTCP},
+								{
+									Port:     "53",
+									Protocol: ciliumapi.ProtoUDP,
+								},
+								{
+									Port:     "53",
+									Protocol: ciliumapi.ProtoTCP,
+								},
 							},
 						}},
 					},

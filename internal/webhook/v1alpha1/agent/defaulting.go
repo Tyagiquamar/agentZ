@@ -45,7 +45,10 @@ var _ admission.Defaulter[*agentzv1alpha1.Agent] = &Defaulter{}
 
 // NewDefaulter builds an Agent defaulter.
 func NewDefaulter(reader client.Reader, cfg WebhookConfig) *Defaulter {
-	return &Defaulter{reader: reader, agentDefaultImage: cfg.AgentDefaultImage}
+	return &Defaulter{
+		reader:            reader,
+		agentDefaultImage: cfg.AgentDefaultImage,
+	}
 }
 
 // Default applies defaults to an Agent resource.

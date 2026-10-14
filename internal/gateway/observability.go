@@ -139,7 +139,10 @@ func (s *Service) ListTraceSessions(w http.ResponseWriter, r *http.Request, agen
 				"invalid_request",
 				"request validation failed",
 				errBadRequest,
-				gatewayapi.FieldError{Field: "sessionID", Message: "required"},
+				gatewayapi.FieldError{
+					Field:   "sessionID",
+					Message: "required",
+				},
 			),
 		)
 		return
@@ -150,7 +153,10 @@ func (s *Service) ListTraceSessions(w http.ResponseWriter, r *http.Request, agen
 		gatewaydb.GatewayListTraceSessionsParams{
 			TenantNamespace: ns,
 			AgentName:       agentName,
-			SessionID:       pgtype.Text{String: sessionID, Valid: true},
+			SessionID: pgtype.Text{
+				String: sessionID,
+				Valid:  true,
+			},
 			StartedAfter:    startedAfter,
 			StartedBefore:   startedBefore,
 			CursorSet:       cursorSet,
@@ -233,7 +239,10 @@ func (s *Service) ListSpans(w http.ResponseWriter, r *http.Request, agentName ga
 				"invalid_request",
 				"request validation failed",
 				errBadRequest,
-				gatewayapi.FieldError{Field: "sessionID", Message: "required"},
+				gatewayapi.FieldError{
+					Field:   "sessionID",
+					Message: "required",
+				},
 			),
 		)
 		return
@@ -313,7 +322,10 @@ func (s *Service) GetSpanDetail(w http.ResponseWriter, r *http.Request, agentNam
 				"invalid_request",
 				"request validation failed",
 				errBadRequest,
-				gatewayapi.FieldError{Field: "sessionID", Message: "required"},
+				gatewayapi.FieldError{
+					Field:   "sessionID",
+					Message: "required",
+				},
 			),
 		)
 		return
@@ -591,7 +603,10 @@ func (s *Service) ListProcessObservability(w http.ResponseWriter, r *http.Reques
 	}
 
 	items, next := eventPage(rows, req.limit, processEvent, func(row gatewaydb.GatewayListProcessEventsRow) eventPageCursor {
-		return eventPageCursor{EventTime: row.EventTime, ID: row.ID}
+		return eventPageCursor{
+			EventTime: row.EventTime,
+			ID:        row.ID,
+		}
 	})
 	apiutil.WriteJSON(
 		w,
@@ -649,7 +664,9 @@ func (s *Service) ListProcessObservabilitySummary(w http.ResponseWriter, r *http
 		req.limit,
 		processAggregatedEvent,
 		func(row gatewaydb.GatewayListProcessEventsAggregatedRow) aggregatedEventPageCursor {
-			return aggregatedEventPageCursor{LastSeen: row.LastSeen}
+			return aggregatedEventPageCursor{
+				LastSeen: row.LastSeen,
+			}
 		},
 	)
 	apiutil.WriteJSON(
@@ -706,7 +723,10 @@ func (s *Service) ListFileObservability(w http.ResponseWriter, r *http.Request, 
 	}
 
 	items, next := eventPage(rows, req.limit, fileEvent, func(row gatewaydb.GatewayListFileEventsRow) eventPageCursor {
-		return eventPageCursor{EventTime: row.EventTime, ID: row.ID}
+		return eventPageCursor{
+			EventTime: row.EventTime,
+			ID:        row.ID,
+		}
 	})
 	apiutil.WriteJSON(
 		w,
@@ -764,7 +784,9 @@ func (s *Service) ListFileObservabilitySummary(w http.ResponseWriter, r *http.Re
 		req.limit,
 		fileAggregatedEvent,
 		func(row gatewaydb.GatewayListFileEventsAggregatedRow) aggregatedEventPageCursor {
-			return aggregatedEventPageCursor{LastSeen: row.LastSeen}
+			return aggregatedEventPageCursor{
+				LastSeen: row.LastSeen,
+			}
 		},
 	)
 	apiutil.WriteJSON(
@@ -821,7 +843,10 @@ func (s *Service) ListNetworkObservability(w http.ResponseWriter, r *http.Reques
 	}
 
 	items, next := eventPage(rows, req.limit, networkEvent, func(row gatewaydb.GatewayListNetworkEventsRow) eventPageCursor {
-		return eventPageCursor{EventTime: row.EventTime, ID: row.ID}
+		return eventPageCursor{
+			EventTime: row.EventTime,
+			ID:        row.ID,
+		}
 	})
 	apiutil.WriteJSON(
 		w,
@@ -879,7 +904,9 @@ func (s *Service) ListNetworkObservabilitySummary(w http.ResponseWriter, r *http
 		req.limit,
 		networkAggregatedEvent,
 		func(row gatewaydb.GatewayListNetworkEventsAggregatedRow) aggregatedEventPageCursor {
-			return aggregatedEventPageCursor{LastSeen: row.LastSeen}
+			return aggregatedEventPageCursor{
+				LastSeen: row.LastSeen,
+			}
 		},
 	)
 	apiutil.WriteJSON(

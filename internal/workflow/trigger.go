@@ -82,13 +82,18 @@ func RunSchedule(ctx context.Context, cfg Config) error {
 	if err != nil {
 		return fmt.Errorf("get kubernetes config: %w", err)
 	}
-	k8sClient, err := client.New(restCfg, client.Options{Scheme: scheme})
+	k8sClient, err := client.New(restCfg, client.Options{
+		Scheme: scheme,
+	})
 	if err != nil {
 		return fmt.Errorf("create kubernetes client: %w", err)
 	}
 
 	schedule := &agentzv1alpha1.WorkflowSchedule{}
-	key := types.NamespacedName{Namespace: cfg.Namespace, Name: cfg.ScheduleName}
+	key := types.NamespacedName{
+		Namespace: cfg.Namespace,
+		Name:      cfg.ScheduleName,
+	}
 	err = k8sClient.Get(ctx, key, schedule)
 	if err != nil {
 		return fmt.Errorf("get workflow schedule: %w", err)
@@ -109,9 +114,11 @@ func RunSchedule(ctx context.Context, cfg Config) error {
 			},
 		},
 		Spec: agentzv1alpha1.WorkflowRunSpec{
-			AgentName:      cfg.AgentName,
-			WorkflowName:   cfg.WorkflowName,
-			Inputs:         apiextensionsv1.JSON{Raw: rawInputs},
+			AgentName:    cfg.AgentName,
+			WorkflowName: cfg.WorkflowName,
+			Inputs: apiextensionsv1.JSON{
+				Raw: rawInputs,
+			},
 			TimeoutSeconds: cfg.TimeoutSeconds,
 			ScheduleRef: &corev1.LocalObjectReference{
 				Name: cfg.ScheduleName,

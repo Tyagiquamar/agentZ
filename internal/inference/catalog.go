@@ -97,9 +97,14 @@ type CatalogEntry struct {
 // five-second HTTP timeout.
 func NewCatalog(client *http.Client) *Catalog {
 	if client == nil {
-		client = &http.Client{Timeout: 5 * time.Second}
+		client = &http.Client{
+			Timeout: 5 * time.Second,
+		}
 	}
-	return &Catalog{client: client, url: modelsDevURL}
+	return &Catalog{
+		client: client,
+		url:    modelsDevURL,
+	}
 }
 
 // Entries returns the pinned supported catalog variants matching query.
@@ -366,8 +371,10 @@ func modelsFromCatalog(provider catalogProvider, providerID string, providerKind
 				Input:  slices.Clone(model.Modalities.Input),
 				Output: slices.Clone(model.Modalities.Output),
 			},
-			Limits:  model.Limit,
-			Catalog: &agentzv1alpha1.InferenceModelCatalog{Provider: providerID},
+			Limits: model.Limit,
+			Catalog: &agentzv1alpha1.InferenceModelCatalog{
+				Provider: providerID,
+			},
 		}
 		if providerKind == agentzv1alpha1.InferenceProviderKindOpenAICodex {
 			api := agentzv1alpha1.InferenceModelAPIResponses
@@ -401,7 +408,9 @@ var catalogSnapshot = map[string][]agentzv1alpha1.InferenceModel{
 			Context: 400000,
 			Output:  128000,
 		},
-		Catalog: &agentzv1alpha1.InferenceModelCatalog{Provider: "openai"},
+		Catalog: &agentzv1alpha1.InferenceModelCatalog{
+			Provider: "openai",
+		},
 	}},
 	"anthropic": {{
 		ID:          "claude-sonnet-4-5",
@@ -422,7 +431,9 @@ var catalogSnapshot = map[string][]agentzv1alpha1.InferenceModel{
 			Context: 1000000,
 			Output:  64000,
 		},
-		Catalog: &agentzv1alpha1.InferenceModelCatalog{Provider: "anthropic"},
+		Catalog: &agentzv1alpha1.InferenceModelCatalog{
+			Provider: "anthropic",
+		},
 	}},
 	"google": {{
 		ID:          "gemini-2.5-pro",
@@ -443,7 +454,9 @@ var catalogSnapshot = map[string][]agentzv1alpha1.InferenceModel{
 			Context: 1048576,
 			Output:  65536,
 		},
-		Catalog: &agentzv1alpha1.InferenceModelCatalog{Provider: "google"},
+		Catalog: &agentzv1alpha1.InferenceModelCatalog{
+			Provider: "google",
+		},
 	}},
 	"google-vertex": {{
 		ID:          "gemini-2.5-pro",
@@ -464,7 +477,9 @@ var catalogSnapshot = map[string][]agentzv1alpha1.InferenceModel{
 			Context: 1048576,
 			Output:  65536,
 		},
-		Catalog: &agentzv1alpha1.InferenceModelCatalog{Provider: "google-vertex"},
+		Catalog: &agentzv1alpha1.InferenceModelCatalog{
+			Provider: "google-vertex",
+		},
 	}},
 	"amazon-bedrock": {{
 		ID:          "anthropic.claude-sonnet-4-5-20250929-v1:0",
@@ -505,6 +520,8 @@ var catalogSnapshot = map[string][]agentzv1alpha1.InferenceModel{
 			Context: 400000,
 			Output:  128000,
 		},
-		Catalog: &agentzv1alpha1.InferenceModelCatalog{Provider: "azure"},
+		Catalog: &agentzv1alpha1.InferenceModelCatalog{
+			Provider: "azure",
+		},
 	}},
 }

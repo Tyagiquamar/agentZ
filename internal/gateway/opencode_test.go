@@ -33,7 +33,11 @@ type ptyWebSocketCase struct {
 
 // TestPTYWebSocketAuthentication keeps browser bearers out of upstream protocols.
 func TestPTYWebSocketAuthentication(t *testing.T) {
-	service := &Service{cfg: Config{AllowedWebOrigins: []string{"https://app.example.com"}}}
+	service := &Service{
+		cfg: Config{
+			AllowedWebOrigins: []string{"https://app.example.com"},
+		},
+	}
 	cases := []ptyWebSocketCase{
 		{
 			"allowed origin",
@@ -47,7 +51,12 @@ func TestPTYWebSocketAuthentication(t *testing.T) {
 			"agentz.pty, agentz.bearer.test-token",
 			http.StatusForbidden,
 		},
-		{"missing origin", "", "agentz.pty, agentz.bearer.test-token", http.StatusForbidden},
+		{
+			"missing origin",
+			"",
+			"agentz.pty, agentz.bearer.test-token",
+			http.StatusForbidden,
+		},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -89,13 +98,18 @@ func TestPTYProxyOrigins(t *testing.T) {
 	defer upstream.Close()
 	index := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
 	err := index.Add(&agentzv1alpha1.Agent{
-		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "workspace"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "workspace",
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	s := &Service{
-		cfg: Config{AllowedWebOrigins: []string{"https://app.example.com"}},
+		cfg: Config{
+			AllowedWebOrigins: []string{"https://app.example.com"},
+		},
 		resolver: &resolver{
 			agents:         listersv1alpha1.NewAgentLister(index),
 			targetOverride: upstream.URL,
@@ -152,9 +166,22 @@ type openCodeStreamCase struct {
 // TestOpenCodeEventTransport exercises native envelopes and large multiline frames.
 func TestOpenCodeEventTransport(t *testing.T) {
 	cases := []openCodeStreamCase{
-		{name: "coding global", coding: true, global: true, upstream: "/event"},
-		{name: "coding scoped", coding: true, upstream: "/event"},
-		{name: "general global", global: true, upstream: "/global/event"},
+		{
+			name:     "coding global",
+			coding:   true,
+			global:   true,
+			upstream: "/event",
+		},
+		{
+			name:     "coding scoped",
+			coding:   true,
+			upstream: "/event",
+		},
+		{
+			name:     "general global",
+			global:   true,
+			upstream: "/global/event",
+		},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -172,7 +199,9 @@ func TestOpenCodeEventTransport(t *testing.T) {
 				t.Fatal(err)
 			}
 			if test.global && !test.coding {
-				envelope := gatewayapi.OpencodeGlobalEvent{Directory: "/upstream/checkout"}
+				envelope := gatewayapi.OpencodeGlobalEvent{
+					Directory: "/upstream/checkout",
+				}
 				if err := envelope.Payload.UnmarshalJSON(raw); err != nil {
 					t.Fatal(err)
 				}
@@ -208,15 +237,21 @@ func TestOpenCodeEventTransport(t *testing.T) {
 			req.Header.Set("Authorization", "Basic secret")
 			req.Header.Set("Cookie", "session=secret")
 			req = req.WithContext(context.WithValue(req.Context(), authContextKey{}, auth))
-			route := &opencodeRouteMatch{ID: "event.subscribe"}
+			route := &opencodeRouteMatch{
+				ID: "event.subscribe",
+			}
 			if test.global {
 				route.ID = "global.event"
 			}
 			response := httptest.NewRecorder()
-			service := Service{outboundHTTP: upstream.Client()}
+			service := Service{
+				outboundHTTP: upstream.Client(),
+			}
 			service.streamOpenCodeEvents(response, req, route, target, resourceAccess{}, "agent")
 			count := 0
-			for event, err := range sse.Read(response.Body, &sse.ReadConfig{MaxEventSize: 1 << 20}) {
+			for event, err := range sse.Read(response.Body, &sse.ReadConfig{
+				MaxEventSize: 1 << 20,
+			}) {
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -267,7 +302,9 @@ func TestAPIKeyPromptIdentity(t *testing.T) {
 		userID:    "user_test",
 		userName:  "Terminal user",
 	}
-	route := &opencodeRouteMatch{ID: "session.prompt"}
+	route := &opencodeRouteMatch{
+		ID: "session.prompt",
+	}
 	if err := attributeOpenCodePrompt(req, route, auth); err != nil {
 		t.Fatal(err)
 	}
@@ -304,16 +341,53 @@ type codingModelCase struct {
 // boundary, including scoped sandbox access and session cleanup on failure.
 func TestCodingSuggestionModels(t *testing.T) {
 	cases := []codingModelCase{
-		{name: "small", small: true},
-		{name: "thread"},
-		{name: "default", noParent: true},
-		{name: "override", small: true, override: true, missing: true},
-		{name: "organization", small: true, organization: true},
-		{name: "unselected", small: true, organization: true, unselected: true},
-		{name: "missing sandbox", missing: true},
-		{name: "model failure", small: true, failure: true},
-		{name: "branch output", small: true, purpose: gatewayapi.CodingTextBranch},
-		{name: "PR output", small: true, purpose: gatewayapi.CodingTextPR},
+		{
+			name:  "small",
+			small: true,
+		},
+		{
+			name: "thread",
+		},
+		{
+			name:     "default",
+			noParent: true,
+		},
+		{
+			name:     "override",
+			small:    true,
+			override: true,
+			missing:  true,
+		},
+		{
+			name:         "organization",
+			small:        true,
+			organization: true,
+		},
+		{
+			name:         "unselected",
+			small:        true,
+			organization: true,
+			unselected:   true,
+		},
+		{
+			name:    "missing sandbox",
+			missing: true,
+		},
+		{
+			name:    "model failure",
+			small:   true,
+			failure: true,
+		},
+		{
+			name:    "branch output",
+			small:   true,
+			purpose: gatewayapi.CodingTextBranch,
+		},
+		{
+			name:    "PR output",
+			small:   true,
+			purpose: gatewayapi.CodingTextPR,
+		},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -332,15 +406,19 @@ func TestCodingSuggestionModels(t *testing.T) {
 			org := agentzv1alpha1.ScopeNamespace(
 				agentzv1alpha1.ResourceScopeOrganisation, "org",
 			)
-			ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
-				Name: "workspace",
-				Labels: map[string]string{
-					agentzv1alpha1.WorkspaceNameLabel:        "workspace",
-					agentzv1alpha1.TenantOrganizationIDLabel: org,
+			ns := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "workspace",
+					Labels: map[string]string{
+						agentzv1alpha1.WorkspaceNameLabel:        "workspace",
+						agentzv1alpha1.TenantOrganizationIDLabel: org,
+					},
 				},
-			}}
+			}
 			workspace := &agentzv1alpha1.Workspace{
-				ObjectMeta: metav1.ObjectMeta{Name: ns.Name},
+				ObjectMeta: metav1.ObjectMeta{
+					Name: ns.Name,
+				},
 			}
 			workspace.Spec.OrganizationID = "org"
 			workspace.Spec.SelectedOrganizationResources.Sandboxes = []string{"sandbox"}
@@ -348,14 +426,20 @@ func TestCodingSuggestionModels(t *testing.T) {
 				workspace.Spec.SelectedOrganizationResources.Sandboxes = nil
 			}
 			agent := &agentzv1alpha1.Agent{
-				ObjectMeta: metav1.ObjectMeta{Name: "agent", Namespace: ns.Name},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "agent",
+					Namespace: ns.Name,
+				},
 			}
 			agent.Spec.SandboxRef = agentzv1alpha1.ResourceReference{
 				Name:  "sandbox",
 				Scope: agentzv1alpha1.ResourceScopeWorkspace,
 			}
 			sandbox := &agentzv1alpha1.Sandbox{
-				ObjectMeta: metav1.ObjectMeta{Name: "sandbox", Namespace: ns.Name},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "sandbox",
+					Namespace: ns.Name,
+				},
 			}
 			if test.organization {
 				agent.Spec.SandboxRef.Scope = agentzv1alpha1.ResourceScopeOrganisation
@@ -409,7 +493,10 @@ func TestCodingSuggestionModels(t *testing.T) {
 					if test.small || test.override {
 						t.Error("loaded parent despite selected model")
 					}
-					session := gatewayapi.OpencodeSession{Id: "parent", Model: parent}
+					session := gatewayapi.OpencodeSession{
+						Id:    "parent",
+						Model: parent,
+					}
 					_ = json.NewEncoder(w).Encode(session)
 				case "/session":
 					var body gatewayapi.SessionCreateJSONRequestBody
@@ -493,8 +580,12 @@ func TestCodingSuggestionModels(t *testing.T) {
 				}
 			}
 			result, err := svc.codingSuggestion(
-				t.Context(), resourceAccess{namespace: ns.Name},
-				gatewaydb.CodingWorktree{AgentName: agent.Name},
+				t.Context(), resourceAccess{
+					namespace: ns.Name,
+				},
+				gatewaydb.CodingWorktree{
+					AgentName: agent.Name,
+				},
 				gatewaydb.CodingProject{}, "parent", input,
 			)
 			wantErr := test.failure || test.unselected || (test.missing && !test.override)
@@ -616,9 +707,21 @@ func TestChatInputAdmissionRecovery(t *testing.T) {
 			active:   true,
 			want:     gatewayapi.ChatInputStateSending,
 		},
-		{name: "provider error", messages: []int{http.StatusServiceUnavailable}, wantErr: true},
-		{name: "forbidden", messages: []int{http.StatusForbidden}, wantErr: true},
-		{name: "empty success", messages: []int{http.StatusNoContent}, wantErr: true},
+		{
+			name:     "provider error",
+			messages: []int{http.StatusServiceUnavailable},
+			wantErr:  true,
+		},
+		{
+			name:     "forbidden",
+			messages: []int{http.StatusForbidden},
+			wantErr:  true,
+		},
+		{
+			name:     "empty success",
+			messages: []int{http.StatusNoContent},
+			wantErr:  true,
+		},
 		{
 			name:     "second lookup failed",
 			messages: []int{http.StatusNotFound, http.StatusServiceUnavailable},
@@ -680,8 +783,13 @@ func TestChatInputAdmissionRecovery(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			q := &admissionQueries{row: row, active: tt.active}
-			s := &Service{queries: q}
+			q := &admissionQueries{
+				row:    row,
+				active: tt.active,
+			}
+			s := &Service{
+				queries: q,
+			}
 			got, err := s.reconcileChatInput(t.Context(), client, "/checkout", row)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("reconcile error = %v, want error %v", err, tt.wantErr)

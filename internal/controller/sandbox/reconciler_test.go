@@ -67,24 +67,34 @@ func TestReconcileMCPAgentRouteIdentity(t *testing.T) {
 	}
 
 	sandbox := &agentzv1alpha1.Sandbox{
-		ObjectMeta: metav1.ObjectMeta{Name: sandboxName, Namespace: namespace},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      sandboxName,
+			Namespace: namespace,
+		},
 	}
 	agt := &agentzv1alpha1.Agent{
-		ObjectMeta: metav1.ObjectMeta{Name: agentName, Namespace: namespace},
-		Spec: agentzv1alpha1.AgentSpec{SandboxRef: agentzv1alpha1.ResourceReference{
-			Scope: agentzv1alpha1.ResourceScopeWorkspace,
-			Name:  sandboxName,
-		}},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      agentName,
+			Namespace: namespace,
+		},
+		Spec: agentzv1alpha1.AgentSpec{
+			SandboxRef: agentzv1alpha1.ResourceReference{
+				Scope: agentzv1alpha1.ResourceScopeWorkspace,
+				Name:  sandboxName,
+			},
+		},
 	}
 	k8sClient := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(
-			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
-				Name: namespace,
-				Labels: map[string]string{
-					agentzv1alpha1.WorkspaceNameLabel: namespace,
+			&corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: namespace,
+					Labels: map[string]string{
+						agentzv1alpha1.WorkspaceNameLabel: namespace,
+					},
 				},
-			}},
+			},
 			sandbox,
 			agt,
 		).
@@ -121,7 +131,10 @@ func TestReconcileMCPAgentRouteIdentity(t *testing.T) {
 	}
 
 	route := &gwv1.HTTPRoute{}
-	key := client.ObjectKey{Name: mcp.SandboxRouteName(sandboxName), Namespace: namespace}
+	key := client.ObjectKey{
+		Name:      mcp.SandboxRouteName(sandboxName),
+		Namespace: namespace,
+	}
 	if err := k8sClient.Get(ctx, key, route); err != nil {
 		t.Fatalf("get MCP HTTPRoute: %v", err)
 	}
@@ -134,7 +147,10 @@ func TestReconcileMCPAgentRouteIdentity(t *testing.T) {
 	}
 
 	policy := &ciliumv2.CiliumNetworkPolicy{}
-	key = client.ObjectKey{Name: mcp.GatewayName, Namespace: namespace}
+	key = client.ObjectKey{
+		Name:      mcp.GatewayName,
+		Namespace: namespace,
+	}
 	if err := k8sClient.Get(ctx, key, policy); err != nil {
 		t.Fatalf("get MCP CiliumNetworkPolicy: %v", err)
 	}
@@ -169,7 +185,10 @@ func TestReconcileMCPAgentRouteIdentity(t *testing.T) {
 	if err := r.reconcileRoute(ctx, sandbox); err != nil {
 		t.Fatalf("reconcileRoute() after Agent deletion error = %v", err)
 	}
-	key = client.ObjectKey{Name: mcp.SandboxRouteName(sandboxName), Namespace: namespace}
+	key = client.ObjectKey{
+		Name:      mcp.SandboxRouteName(sandboxName),
+		Namespace: namespace,
+	}
 	if err := k8sClient.Get(ctx, key, route); !apierrors.IsNotFound(err) {
 		t.Fatalf("get MCP HTTPRoute after Agent deletion error = %v, want not found", err)
 	}
@@ -232,15 +251,19 @@ func TestReconcileInferenceGatewayExtAuthEgress(t *testing.T) {
 			}
 
 			objects := []client.Object{
-				&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
-					Name: workspaceNamespace,
-					Labels: map[string]string{
-						agentzv1alpha1.WorkspaceNameLabel:        workspaceNamespace,
-						agentzv1alpha1.TenantOrganizationIDLabel: organizationNamespace,
+				&corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: workspaceNamespace,
+						Labels: map[string]string{
+							agentzv1alpha1.WorkspaceNameLabel:        workspaceNamespace,
+							agentzv1alpha1.TenantOrganizationIDLabel: organizationNamespace,
+						},
 					},
-				}},
+				},
 				&agentzv1alpha1.Workspace{
-					ObjectMeta: metav1.ObjectMeta{Name: workspaceNamespace},
+					ObjectMeta: metav1.ObjectMeta{
+						Name: workspaceNamespace,
+					},
 					Spec: agentzv1alpha1.WorkspaceSpec{
 						WorkspaceID:    workspaceID,
 						OrganizationID: organizationID,
@@ -301,7 +324,10 @@ func TestReconcileInferenceGatewayExtAuthEgress(t *testing.T) {
 			}
 
 			policy := &ciliumv2.CiliumNetworkPolicy{}
-			key := client.ObjectKey{Name: inference.GatewayName, Namespace: workspaceNamespace}
+			key := client.ObjectKey{
+				Name:      inference.GatewayName,
+				Namespace: workspaceNamespace,
+			}
 			if err := k8sClient.Get(context.Background(), key, policy); err != nil {
 				t.Fatalf("get inference CiliumNetworkPolicy: %v", err)
 			}
@@ -357,29 +383,37 @@ func TestReconcileDeletionFindsOrganisationSandboxAgentAcrossWorkspaces(t *testi
 	}
 
 	now := metav1.Now()
-	sandbox := &agentzv1alpha1.Sandbox{ObjectMeta: metav1.ObjectMeta{
-		Name:              sandboxName,
-		Namespace:         organizationNamespace,
-		DeletionTimestamp: &now,
-		Finalizers:        []string{mcp.SandboxFinalizer},
-	}}
+	sandbox := &agentzv1alpha1.Sandbox{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              sandboxName,
+			Namespace:         organizationNamespace,
+			DeletionTimestamp: &now,
+			Finalizers:        []string{mcp.SandboxFinalizer},
+		},
+	}
 	objects := []client.Object{
 		sandbox,
-		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
-			Name: organizationNamespace,
-			Labels: map[string]string{
-				agentzv1alpha1.TenantNameLabel: organizationNamespace,
+		&corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: organizationNamespace,
+				Labels: map[string]string{
+					agentzv1alpha1.TenantNameLabel: organizationNamespace,
+				},
 			},
-		}},
-		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
-			Name: workspaceNamespace,
-			Labels: map[string]string{
-				agentzv1alpha1.WorkspaceNameLabel:        workspaceNamespace,
-				agentzv1alpha1.TenantOrganizationIDLabel: organizationNamespace,
+		},
+		&corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: workspaceNamespace,
+				Labels: map[string]string{
+					agentzv1alpha1.WorkspaceNameLabel:        workspaceNamespace,
+					agentzv1alpha1.TenantOrganizationIDLabel: organizationNamespace,
+				},
 			},
-		}},
+		},
 		&agentzv1alpha1.Workspace{
-			ObjectMeta: metav1.ObjectMeta{Name: workspaceNamespace},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: workspaceNamespace,
+			},
 			Spec: agentzv1alpha1.WorkspaceSpec{
 				WorkspaceID:    workspaceID,
 				OrganizationID: organizationID,
@@ -389,18 +423,28 @@ func TestReconcileDeletionFindsOrganisationSandboxAgentAcrossWorkspaces(t *testi
 			},
 		},
 		&agentzv1alpha1.Agent{
-			ObjectMeta: metav1.ObjectMeta{Name: "organisation-agent", Namespace: workspaceNamespace},
-			Spec: agentzv1alpha1.AgentSpec{SandboxRef: agentzv1alpha1.ResourceReference{
-				Scope: agentzv1alpha1.ResourceScopeOrganisation,
-				Name:  sandboxName,
-			}},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "organisation-agent",
+				Namespace: workspaceNamespace,
+			},
+			Spec: agentzv1alpha1.AgentSpec{
+				SandboxRef: agentzv1alpha1.ResourceReference{
+					Scope: agentzv1alpha1.ResourceScopeOrganisation,
+					Name:  sandboxName,
+				},
+			},
 		},
 		&agentzv1alpha1.Agent{
-			ObjectMeta: metav1.ObjectMeta{Name: "workspace-agent", Namespace: workspaceNamespace},
-			Spec: agentzv1alpha1.AgentSpec{SandboxRef: agentzv1alpha1.ResourceReference{
-				Scope: agentzv1alpha1.ResourceScopeWorkspace,
-				Name:  sandboxName,
-			}},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "workspace-agent",
+				Namespace: workspaceNamespace,
+			},
+			Spec: agentzv1alpha1.AgentSpec{
+				SandboxRef: agentzv1alpha1.ResourceReference{
+					Scope: agentzv1alpha1.ResourceScopeWorkspace,
+					Name:  sandboxName,
+				},
+			},
 		},
 	}
 	k8sClient := fake.NewClientBuilder().
@@ -415,7 +459,10 @@ func TestReconcileDeletionFindsOrganisationSandboxAgentAcrossWorkspaces(t *testi
 			},
 		).
 		Build()
-	r := &Reconciler{Client: k8sClient, Scheme: scheme}
+	r := &Reconciler{
+		Client: k8sClient,
+		Scheme: scheme,
+	}
 	referencing, err := r.referencingAgents(context.Background(), sandbox)
 	if err != nil {
 		t.Fatalf("referencingAgents() error = %v", err)

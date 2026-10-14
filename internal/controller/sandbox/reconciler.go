@@ -249,7 +249,10 @@ func (r *Reconciler) updateStatus(ctx context.Context, sandbox *agentzv1alpha1.S
 		retry.DefaultRetry,
 		func() error {
 			current := &agentzv1alpha1.Sandbox{}
-			key := types.NamespacedName{Namespace: sandbox.Namespace, Name: sandbox.Name}
+			key := types.NamespacedName{
+				Namespace: sandbox.Namespace,
+				Name:      sandbox.Name,
+			}
 			if err := r.Get(ctx, key, current); err != nil {
 				return client.IgnoreNotFound(err)
 			}
@@ -299,10 +302,12 @@ func (r *Reconciler) sandboxesForInferenceGateway(ctx context.Context, obj clien
 
 func (r *Reconciler) sandboxesForInferencePolicy(ctx context.Context, obj client.Object) []reconcile.Request {
 	if name := obj.GetLabels()[inference.SandboxLabel]; name != "" {
-		return []reconcile.Request{{NamespacedName: types.NamespacedName{
-			Namespace: obj.GetNamespace(),
-			Name:      name,
-		}}}
+		return []reconcile.Request{{
+			NamespacedName: types.NamespacedName{
+				Namespace: obj.GetNamespace(),
+				Name:      name,
+			},
+		}}
 	}
 	if obj.GetName() != inferenceTracePolicyName {
 		return nil
@@ -323,10 +328,12 @@ func (r *Reconciler) inferenceSandboxRequests(ctx context.Context, namespace str
 		}
 		requests = append(
 			requests,
-			reconcile.Request{NamespacedName: types.NamespacedName{
-				Namespace: namespace,
-				Name:      sandboxes.Items[i].Name,
-			}},
+			reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Namespace: namespace,
+					Name:      sandboxes.Items[i].Name,
+				},
+			},
 		)
 	}
 	return requests
@@ -1304,11 +1311,22 @@ func (r *Reconciler) reconcileGatewayNetworkPolicy(ctx context.Context, namespac
 									Port:     "80",
 									Protocol: ciliumapi.ProtoTCP,
 								}},
-								Rules: &ciliumapi.L7Rules{HTTP: ciliumapi.PortRulesHTTP{
-									{Method: "GET", Path: path},
-									{Method: "POST", Path: path},
-									{Method: "DELETE", Path: path},
-								}},
+								Rules: &ciliumapi.L7Rules{
+									HTTP: ciliumapi.PortRulesHTTP{
+										{
+											Method: "GET",
+											Path:   path,
+										},
+										{
+											Method: "POST",
+											Path:   path,
+										},
+										{
+											Method: "DELETE",
+											Path:   path,
+										},
+									},
+								},
 							}},
 						},
 					)
@@ -1435,7 +1453,9 @@ func (r *Reconciler) ensureAgentgatewayParameters(ctx context.Context, namespace
 	desiredSpec := agentgatewayv1alpha1.AgentgatewayParametersSpec{
 		AgentgatewayParametersOverlays: agentgatewayv1alpha1.AgentgatewayParametersOverlays{
 			Service: &agentgatewayv1alpha1.KubernetesResourceOverlay{
-				Spec: &apiextensionsv1.JSON{Raw: specBytes},
+				Spec: &apiextensionsv1.JSON{
+					Raw: specBytes,
+				},
 			},
 		},
 	}

@@ -146,11 +146,20 @@ func (s *Service) listDashboards(w http.ResponseWriter, r *http.Request, agentNa
 		PageSize:        dashboardPageSize + 1,
 	}
 	if agentName != nil {
-		args.AgentName = pgtype.Text{String: *agentName, Valid: true}
+		args.AgentName = pgtype.Text{
+			String: *agentName,
+			Valid:  true,
+		}
 	}
 	if cursorSet {
-		args.CursorCreatedAt = pgtype.Timestamptz{Time: cursor.CreatedAt, Valid: true}
-		args.CursorID = pgtype.UUID{Bytes: cursor.ID, Valid: true}
+		args.CursorCreatedAt = pgtype.Timestamptz{
+			Time:  cursor.CreatedAt,
+			Valid: true,
+		}
+		args.CursorID = pgtype.UUID{
+			Bytes: cursor.ID,
+			Valid: true,
+		}
 	}
 
 	rows, err := s.dashboards.DashboardList(r.Context(), args)
@@ -162,7 +171,10 @@ func (s *Service) listDashboards(w http.ResponseWriter, r *http.Request, agentNa
 	next := ""
 	if len(rows) > dashboardPageSize {
 		last := rows[dashboardPageSize-1]
-		next = encodeCursorPageToken(dashboardPageCursor{CreatedAt: last.CreatedAt, ID: last.ID})
+		next = encodeCursorPageToken(dashboardPageCursor{
+			CreatedAt: last.CreatedAt,
+			ID:        last.ID,
+		})
 		rows = rows[:dashboardPageSize]
 	}
 	items := make([]gatewayapi.DashboardSummary, len(rows))
@@ -201,7 +213,10 @@ func (s *Service) CreateDashboard(w http.ResponseWriter, r *http.Request, agentN
 				"invalid_dashboard",
 				"dashboard definition is invalid",
 				err,
-				gatewayapi.FieldError{Field: "dashboard", Message: err.Error()},
+				gatewayapi.FieldError{
+					Field:   "dashboard",
+					Message: err.Error(),
+				},
 			),
 		)
 		return
@@ -478,7 +493,10 @@ func (s *Service) PublishDashboardData(w http.ResponseWriter, r *http.Request, a
 				"invalid_dashboard_data",
 				"dashboard data does not match the widget definition",
 				err,
-				gatewayapi.FieldError{Field: "records", Message: err.Error()},
+				gatewayapi.FieldError{
+					Field:   "records",
+					Message: err.Error(),
+				},
 			),
 		)
 		return
@@ -979,7 +997,9 @@ func (s *Service) QueryDashboard(w http.ResponseWriter, r *http.Request, agentNa
 
 	ctx, cancel := context.WithTimeout(r.Context(), quota.Query.Timeout.Duration)
 	defer cancel()
-	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly})
+	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{
+		AccessMode: pgx.ReadOnly,
+	})
 	if err != nil {
 		apiutil.WriteError(w, r, mapDashboardStoreError("begin dashboard query", err))
 		return
@@ -1169,14 +1189,18 @@ func (s *Service) QueryDashboard(w http.ResponseWriter, r *http.Request, agentNa
 					source = int32(len(result.SankeyNodes))
 					indices[*record.Source] = source
 					result.SankeyNodes = append(result.SankeyNodes,
-						gatewayapi.DashboardSankeyNode{Name: *record.Source})
+						gatewayapi.DashboardSankeyNode{
+							Name: *record.Source,
+						})
 				}
 				target, ok := indices[*record.Target]
 				if !ok {
 					target = int32(len(result.SankeyNodes))
 					indices[*record.Target] = target
 					result.SankeyNodes = append(result.SankeyNodes,
-						gatewayapi.DashboardSankeyNode{Name: *record.Target})
+						gatewayapi.DashboardSankeyNode{
+							Name: *record.Target,
+						})
 				}
 				result.SankeyLinks = append(result.SankeyLinks, gatewayapi.DashboardSankeyLink{
 					Source: source,
@@ -1262,7 +1286,11 @@ func (s *Service) QueryDashboard(w http.ResponseWriter, r *http.Request, agentNa
 		apiutil.WriteError(w, r, mapDashboardStoreError("commit dashboard query", err))
 		return
 	}
-	response := gatewayapi.QueryDashboardResponse{From: req.From, To: req.To, Widgets: results}
+	response := gatewayapi.QueryDashboardResponse{
+		From:    req.From,
+		To:      req.To,
+		Widgets: results,
+	}
 	raw, err := json.Marshal(response)
 	if err != nil {
 		apiutil.WriteInternalError(w, r, fmt.Errorf("encode dashboard query: %w", err))
@@ -1460,7 +1488,10 @@ func (s *Service) ListDashboardTableRows(w http.ResponseWriter, r *http.Request,
 				)
 				return
 			}
-			sortIndices[i] = pgtype.Int4{Int32: int32(column), Valid: true}
+			sortIndices[i] = pgtype.Int4{
+				Int32: int32(column),
+				Valid: true,
+			}
 			sortAscending[i] = direction == "asc"
 			sortDatetime[i] = definition.Columns[column].Type ==
 				gatewayapi.DashboardTableColumnTypeDatetime
@@ -1536,7 +1567,10 @@ func (s *Service) ListDashboardTableRows(w http.ResponseWriter, r *http.Request,
 			})
 			return
 		}
-		result[i] = gatewayapi.DashboardTableRow{At: row.At, Cells: *record.Cells}
+		result[i] = gatewayapi.DashboardTableRow{
+			At:    row.At,
+			Cells: *record.Cells,
+		}
 	}
 	status := gatewayapi.Ok
 	if len(result) == 0 {

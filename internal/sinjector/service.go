@@ -107,7 +107,9 @@ func Serve(ctx context.Context, cfg Config) error {
 	if err != nil {
 		return fmt.Errorf("load kube config: %w", err)
 	}
-	k8sClient, err := ctrlclient.New(kubeCfg, ctrlclient.Options{Scheme: scheme})
+	k8sClient, err := ctrlclient.New(kubeCfg, ctrlclient.Options{
+		Scheme: scheme,
+	})
 	if err != nil {
 		return fmt.Errorf("create kubernetes client: %w", err)
 	}
@@ -132,13 +134,15 @@ func Serve(ctx context.Context, cfg Config) error {
 	}
 
 	res := &resolver{
-		kv:            baoClient.KVv2(cfg.OpenBaoSecretMountPath),
-		namespace:     namespace,
-		agentName:     cfg.AgentName,
-		http:          http.DefaultClient,
-		k8sClient:     k8sClient,
-		secrets:       secretInformer.Lister().Secrets(namespace),
-		probeQueue:    workqueue.NewTypedWithConfig(workqueue.TypedQueueConfig[string]{Name: probeQueueName}),
+		kv:        baoClient.KVv2(cfg.OpenBaoSecretMountPath),
+		namespace: namespace,
+		agentName: cfg.AgentName,
+		http:      http.DefaultClient,
+		k8sClient: k8sClient,
+		secrets:   secretInformer.Lister().Secrets(namespace),
+		probeQueue: workqueue.NewTypedWithConfig(workqueue.TypedQueueConfig[string]{
+			Name: probeQueueName,
+		}),
 		probeInterval: cfg.SecretProbeInterval,
 		probeTimes:    map[string]time.Time{},
 	}
@@ -325,7 +329,10 @@ func (r *resolver) resolve(ctx context.Context, name string) (resolvedSecret, er
 			)
 			return resolvedSecret{}, fmt.Errorf("%w: %s", errBadSecret, name)
 		}
-		return resolvedSecret{value: record.Value, hosts: hosts}, nil
+		return resolvedSecret{
+			value: record.Value,
+			hosts: hosts,
+		}, nil
 	case agentzv1alpha1.SecretTypeOAuth:
 		return r.resolveOAuth(ctx, name, rawSecret.Data)
 	default:
@@ -355,7 +362,10 @@ func (r *resolver) resolveOAuth(ctx context.Context, key string, raw map[string]
 	}
 	now := time.Now().UTC()
 	if oauth.TokenUsable(record.Token, now) {
-		return resolvedSecret{value: record.Token.AccessToken, hosts: hosts}, nil
+		return resolvedSecret{
+			value: record.Token.AccessToken,
+			hosts: hosts,
+		}, nil
 	}
 
 	refreshed, err := r.refreshOAuth(ctx, key, record)

@@ -89,14 +89,20 @@ func parseRequestTarget(host string) (requestTarget, error) {
 		return requestTarget{}, fmt.Errorf("host is required")
 	}
 	if addr, err := netip.ParseAddr(host); err == nil {
-		return requestTarget{raw: addr.String(), addr: addr}, nil
+		return requestTarget{
+			raw:  addr.String(),
+			addr: addr,
+		}, nil
 	}
 	host = strings.ToLower(host)
 	if err := validateHostname(host); err != nil {
 		return requestTarget{}, err
 	}
 	domain := strings.TrimSuffix(host, ".")
-	return requestTarget{raw: domain, domain: domain}, nil
+	return requestTarget{
+		raw:    domain,
+		domain: domain,
+	}, nil
 }
 
 func parseSecretHost(target string) (secretHost, error) {

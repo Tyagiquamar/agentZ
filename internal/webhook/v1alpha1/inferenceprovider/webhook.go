@@ -45,7 +45,9 @@ var _ admission.Validator[*agentzv1alpha1.InferenceProvider] = &Validator{}
 // RegisterWithManager registers the InferenceProvider webhook.
 func RegisterWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr, &agentzv1alpha1.InferenceProvider{}).
-		WithValidator(&Validator{client: mgr.GetClient()}).
+		WithValidator(&Validator{
+			client: mgr.GetClient(),
+		}).
 		Complete()
 }
 

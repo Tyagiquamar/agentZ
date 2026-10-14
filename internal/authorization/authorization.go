@@ -169,7 +169,9 @@ type Resolver struct {
 
 // New returns a Resolver backed by generated sqlc queries.
 func New(queries Queries) *Resolver {
-	return &Resolver{queries: queries}
+	return &Resolver{
+		queries: queries,
+	}
 }
 
 // Effective is an immutable snapshot of one Subject's effective permissions.
@@ -361,14 +363,38 @@ func (e Effective) AgentCapabilities(scope Scope, agent Agent) (AgentCapabilitie
 
 	var capabilities AgentCapabilities
 	actions := []agentCapabilityCheck{
-		{name: "use", allowed: &capabilities.Use},
-		{name: "modify", allowed: &capabilities.Modify},
-		{name: "delete", allowed: &capabilities.Delete},
-		{name: "share", allowed: &capabilities.Share},
-		{name: "manage_ownership", allowed: &capabilities.ManageOwnership},
-		{name: "read_secrets", allowed: &capabilities.ReadSecrets},
-		{name: "write_secrets", allowed: &capabilities.WriteSecrets},
-		{name: "delete_secrets", allowed: &capabilities.DeleteSecrets},
+		{
+			name:    "use",
+			allowed: &capabilities.Use,
+		},
+		{
+			name:    "modify",
+			allowed: &capabilities.Modify,
+		},
+		{
+			name:    "delete",
+			allowed: &capabilities.Delete,
+		},
+		{
+			name:    "share",
+			allowed: &capabilities.Share,
+		},
+		{
+			name:    "manage_ownership",
+			allowed: &capabilities.ManageOwnership,
+		},
+		{
+			name:    "read_secrets",
+			allowed: &capabilities.ReadSecrets,
+		},
+		{
+			name:    "write_secrets",
+			allowed: &capabilities.WriteSecrets,
+		},
+		{
+			name:    "delete_secrets",
+			allowed: &capabilities.DeleteSecrets,
+		},
 	}
 	for _, action := range actions {
 		value, err := allowed(action.name)

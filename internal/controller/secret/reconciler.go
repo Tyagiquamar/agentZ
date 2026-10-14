@@ -104,7 +104,9 @@ func (r *SecretReconciler) reconcileActive(ctx context.Context, secret *agentzv1
 			status := current.Status
 			status.ObservedGeneration = current.Generation
 			status.State = agentzv1alpha1.SecretStateAccepted
-			status.RuntimeRef = &agentzv1alpha1.SecretRuntimeRef{Path: path}
+			status.RuntimeRef = &agentzv1alpha1.SecretRuntimeRef{
+				Path: path,
+			}
 			now := metav1.Now()
 			status.LastRuntimeUpdateTime = &now
 			status.TokenExpiryTime = nil

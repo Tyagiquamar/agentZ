@@ -117,15 +117,21 @@ func (r *ExtAuthRuntimeReconciler) namespaceForWorkspace(_ context.Context, obj 
 	if !ok {
 		return nil
 	}
-	return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: agentzv1alpha1.ScopeNamespace(
-		agentzv1alpha1.ResourceScopeOrganisation,
-		workspace.Spec.OrganizationID,
-	)}}}
+	return []reconcile.Request{{
+		NamespacedName: types.NamespacedName{
+			Name: agentzv1alpha1.ScopeNamespace(
+				agentzv1alpha1.ResourceScopeOrganisation,
+				workspace.Spec.OrganizationID,
+			),
+		},
+	}}
 }
 
 func (r *ExtAuthRuntimeReconciler) namespaceForObject(_ context.Context, obj client.Object) []reconcile.Request {
 	return []reconcile.Request{{
-		NamespacedName: types.NamespacedName{Name: obj.GetNamespace()},
+		NamespacedName: types.NamespacedName{
+			Name: obj.GetNamespace(),
+		},
 	}}
 }
 
@@ -158,7 +164,10 @@ func (r *ExtAuthRuntimeReconciler) runtimeNeeded(ctx context.Context, ns string)
 // Reconcile creates or removes the namespace-shared ext-auth runtime.
 func (r *ExtAuthRuntimeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	ns := &corev1.Namespace{}
-	if err := r.Get(ctx, client.ObjectKey{Name: req.Name}, ns); err != nil {
+	err := r.Get(ctx, client.ObjectKey{
+		Name: req.Name,
+	}, ns)
+	if err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 	if ns.Labels[agentzv1alpha1.TenantManagedByLabel] != agentzv1alpha1.TenantManagedByValue {
@@ -396,7 +405,11 @@ func (r *ExtAuthRuntimeReconciler) reconcileExtAuthScopeReader(ctx context.Conte
 		namespaces = append(namespaces, workspace.namespace)
 		workspaceNames = append(workspaceNames, workspace.name)
 	}
-	role := &rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: name}}
+	role := &rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
+	}
 	_, err := ctrlutil.CreateOrPatch(
 		ctx,
 		r.Client,
@@ -430,7 +443,11 @@ func (r *ExtAuthRuntimeReconciler) reconcileExtAuthScopeReader(ctx context.Conte
 		return fmt.Errorf("create or patch ext auth scope reader role: %w", err)
 	}
 
-	binding := &rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: name}}
+	binding := &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
+	}
 	_, err = ctrlutil.CreateOrPatch(
 		ctx,
 		r.Client,
@@ -461,10 +478,12 @@ func (r *ExtAuthRuntimeReconciler) reconcileExtAuthWorkspaceAccess(ctx context.C
 	org, workspaces, labels := scope.namespace, scope.workspaces, scope.labels
 	name := mcp.ExtAuthOpenBaoName(org)
 	for _, workspace := range workspaces {
-		grant := &gwv1.ReferenceGrant{ObjectMeta: metav1.ObjectMeta{
-			Name:      mcp.ExtAuthServiceName + "-" + workspace.name,
-			Namespace: org,
-		}}
+		grant := &gwv1.ReferenceGrant{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      mcp.ExtAuthServiceName + "-" + workspace.name,
+				Namespace: org,
+			},
+		}
 		if workspace.mcp {
 			_, err := ctrlutil.CreateOrPatch(
 				ctx,
@@ -499,14 +518,18 @@ func (r *ExtAuthRuntimeReconciler) reconcileExtAuthWorkspaceAccess(ctx context.C
 			}
 		}
 
-		role := &rbacv1.Role{ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: workspace.namespace,
-		}}
-		binding := &rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: workspace.namespace,
-		}}
+		role := &rbacv1.Role{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: workspace.namespace,
+			},
+		}
+		binding := &rbacv1.RoleBinding{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: workspace.namespace,
+			},
+		}
 		if !workspace.mcp && !workspace.inference {
 			if err := r.Delete(ctx, binding); err != nil && !apierrors.IsNotFound(err) {
 				return fmt.Errorf("delete workspace ext auth role binding: %w", err)
@@ -832,22 +855,26 @@ func (r *ExtAuthRuntimeReconciler) reconcileExtAuthPolicy(ctx context.Context, s
 			policy.Spec = extAuthPolicySpec(ns, workspaces)
 			if r.DelegationNamespace != "" {
 				policy.Spec.Ingress = append(policy.Spec.Ingress, ciliumapi.IngressRule{
-					IngressCommonRule: ciliumapi.IngressCommonRule{FromEndpoints: []ciliumapi.EndpointSelector{
-						ciliumapi.NewESFromLabels(
-							ciliumlabels.NewLabel("io.kubernetes.pod.namespace", ns, ciliumlabels.LabelSourceK8s),
-							ciliumlabels.NewLabel("io.cilium.k8s.policy.serviceaccount", "mcp", ciliumlabels.LabelSourceK8s),
-							ciliumlabels.NewLabel("gateway.networking.k8s.io/gateway-name", mcp.GatewayName, ciliumlabels.LabelSourceK8s),
-						),
-						ciliumapi.NewESFromLabels(
-							ciliumlabels.NewLabel("io.kubernetes.pod.namespace", ns, ciliumlabels.LabelSourceK8s),
-							ciliumlabels.NewLabel("io.cilium.k8s.policy.serviceaccount", "inference", ciliumlabels.LabelSourceK8s),
-							ciliumlabels.NewLabel("gateway.networking.k8s.io/gateway-name", inference.GatewayName, ciliumlabels.LabelSourceK8s),
-						),
+					IngressCommonRule: ciliumapi.IngressCommonRule{
+						FromEndpoints: []ciliumapi.EndpointSelector{
+							ciliumapi.NewESFromLabels(
+								ciliumlabels.NewLabel("io.kubernetes.pod.namespace", ns, ciliumlabels.LabelSourceK8s),
+								ciliumlabels.NewLabel("io.cilium.k8s.policy.serviceaccount", "mcp", ciliumlabels.LabelSourceK8s),
+								ciliumlabels.NewLabel("gateway.networking.k8s.io/gateway-name", mcp.GatewayName, ciliumlabels.LabelSourceK8s),
+							),
+							ciliumapi.NewESFromLabels(
+								ciliumlabels.NewLabel("io.kubernetes.pod.namespace", ns, ciliumlabels.LabelSourceK8s),
+								ciliumlabels.NewLabel("io.cilium.k8s.policy.serviceaccount", "inference", ciliumlabels.LabelSourceK8s),
+								ciliumlabels.NewLabel("gateway.networking.k8s.io/gateway-name", inference.GatewayName, ciliumlabels.LabelSourceK8s),
+							),
+						},
+					},
+					ToPorts: []ciliumapi.PortRule{{
+						Ports: []ciliumapi.PortProtocol{{
+							Port:     "18084",
+							Protocol: ciliumapi.ProtoTCP,
+						}},
 					}},
-					ToPorts: []ciliumapi.PortRule{{Ports: []ciliumapi.PortProtocol{{
-						Port:     "18084",
-						Protocol: ciliumapi.ProtoTCP,
-					}}}},
 				})
 			}
 			policy.Spec.Egress = append(
@@ -970,8 +997,14 @@ func extAuthPolicySpec(ns string, workspaces []workspaceAccess) *ciliumapi.Rule 
 				},
 				ToPorts: ciliumapi.PortRules{{
 					Ports: []ciliumapi.PortProtocol{
-						{Port: "18081", Protocol: ciliumapi.ProtoTCP},
-						{Port: "18082", Protocol: ciliumapi.ProtoTCP},
+						{
+							Port:     "18081",
+							Protocol: ciliumapi.ProtoTCP,
+						},
+						{
+							Port:     "18082",
+							Protocol: ciliumapi.ProtoTCP,
+						},
 					},
 				}},
 			},
@@ -1156,13 +1189,17 @@ func (r *ExtAuthRuntimeReconciler) deleteExtAuthRuntime(ctx context.Context, ns 
 
 	scopeReaderName := accessName + "-scope-reader"
 	scopeReaderBinding := &rbacv1.ClusterRoleBinding{
-		ObjectMeta: metav1.ObjectMeta{Name: scopeReaderName},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: scopeReaderName,
+		},
 	}
 	if err := r.Delete(ctx, scopeReaderBinding); err != nil && !apierrors.IsNotFound(err) {
 		return fmt.Errorf("delete ext auth scope reader binding: %w", err)
 	}
 	scopeReader := &rbacv1.ClusterRole{
-		ObjectMeta: metav1.ObjectMeta{Name: scopeReaderName},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: scopeReaderName,
+		},
 	}
 	if err := r.Delete(ctx, scopeReader); err != nil && !apierrors.IsNotFound(err) {
 		return fmt.Errorf("delete ext auth scope reader role: %w", err)

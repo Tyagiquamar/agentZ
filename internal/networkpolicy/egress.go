@@ -69,7 +69,10 @@ func URLTarget(raw string) (Target, error) {
 		}
 		port = int32(value)
 	}
-	return Target{Host: u.Hostname(), Port: port}, nil
+	return Target{
+		Host: u.Hostname(),
+		Port: port,
+	}, nil
 }
 
 // ServiceEgress permits DNS resolution and exact Kubernetes Service TCP ports.
@@ -104,9 +107,11 @@ func ServiceEgress(namespace, name string, port int32, morePorts ...int32) []cil
 		},
 		ToPorts: ciliumapi.PortRules{{
 			Ports: dnsPorts(),
-			Rules: &ciliumapi.L7Rules{DNS: ciliumapi.PortRulesDNS{{
-				MatchName: name + "." + namespace + ".svc.cluster.local",
-			}}},
+			Rules: &ciliumapi.L7Rules{
+				DNS: ciliumapi.PortRulesDNS{{
+					MatchName: name + "." + namespace + ".svc.cluster.local",
+				}},
+			},
 		}},
 	}
 	return []ciliumapi.EgressRule{service, dns}
@@ -151,11 +156,15 @@ func ExternalEgress(targets []Target) []ciliumapi.EgressRule {
 		rules = append(
 			rules,
 			ciliumapi.EgressRule{
-				ToFQDNs: ciliumapi.FQDNSelectorSlice{{MatchName: target.Host}},
+				ToFQDNs: ciliumapi.FQDNSelectorSlice{{
+					MatchName: target.Host,
+				}},
 				ToPorts: port,
 			},
 		)
-		dns = append(dns, ciliumapi.PortRuleDNS{MatchName: target.Host})
+		dns = append(dns, ciliumapi.PortRuleDNS{
+			MatchName: target.Host,
+		})
 	}
 	if len(dns) == 0 {
 		return rules
@@ -168,7 +177,9 @@ func ExternalEgress(targets []Target) []ciliumapi.EgressRule {
 			},
 			ToPorts: ciliumapi.PortRules{{
 				Ports: dnsPorts(),
-				Rules: &ciliumapi.L7Rules{DNS: dns},
+				Rules: &ciliumapi.L7Rules{
+					DNS: dns,
+				},
 			}},
 		},
 	)
@@ -176,43 +187,59 @@ func ExternalEgress(targets []Target) []ciliumapi.EgressRule {
 
 func dnsEndpointSelector() ciliumapi.EndpointSelector {
 	return ciliumapi.EndpointSelector{
-		LabelSelector: &slimv1.LabelSelector{MatchLabels: map[string]string{
-			"k8s:io.kubernetes.pod.namespace": "kube-system",
-			"k8s:k8s-app":                     "kube-dns",
-		}},
+		LabelSelector: &slimv1.LabelSelector{
+			MatchLabels: map[string]string{
+				"k8s:io.kubernetes.pod.namespace": "kube-system",
+				"k8s:k8s-app":                     "kube-dns",
+			},
+		},
 	}
 }
 
 func dnsPorts() []ciliumapi.PortProtocol {
 	return []ciliumapi.PortProtocol{
-		{Port: "53", Protocol: ciliumapi.ProtoUDP},
-		{Port: "53", Protocol: ciliumapi.ProtoTCP},
+		{
+			Port:     "53",
+			Protocol: ciliumapi.ProtoUDP,
+		},
+		{
+			Port:     "53",
+			Protocol: ciliumapi.ProtoTCP,
+		},
 	}
 }
 
 // ReconcileRuntimeIsolation keeps private runtime ingress denied independently of
 // grants and Sandboxes. Namespace ownership keeps it in place during pod teardown.
 func ReconcileRuntimeIsolation(ctx context.Context, c client.Client, namespace *corev1.Namespace) error {
-	policy := &ciliumv2.CiliumNetworkPolicy{ObjectMeta: metav1.ObjectMeta{
-		Name:      "runtime-isolation",
-		Namespace: namespace.Name,
-	}}
+	policy := &ciliumv2.CiliumNetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "runtime-isolation",
+			Namespace: namespace.Name,
+		},
+	}
 	_, err := ctrlutil.CreateOrPatch(ctx, c, policy, func() error {
 		policy.OwnerReferences = []metav1.OwnerReference{*metav1.NewControllerRef(namespace, corev1.SchemeGroupVersion.WithKind("Namespace"))}
 		policy.Spec = (&ciliumapi.Rule{
-			EndpointSelector: ciliumapi.EndpointSelector{LabelSelector: &slimv1.LabelSelector{
-				MatchExpressions: []slimv1.LabelSelectorRequirement{{
-					Key:      "k8s:io.cilium.k8s.policy.serviceaccount",
-					Operator: slimv1.LabelSelectorOpIn,
-					Values:   []string{"inference", "mcp", "extauth"},
-				}},
-			}},
+			EndpointSelector: ciliumapi.EndpointSelector{
+				LabelSelector: &slimv1.LabelSelector{
+					MatchExpressions: []slimv1.LabelSelectorRequirement{{
+						Key:      "k8s:io.cilium.k8s.policy.serviceaccount",
+						Operator: slimv1.LabelSelectorOpIn,
+						Values:   []string{"inference", "mcp", "extauth"},
+					}},
+				},
+			},
 			Ingress: []ciliumapi.IngressRule{{
-				IngressCommonRule: ciliumapi.IngressCommonRule{FromEntities: ciliumapi.EntitySlice{ciliumapi.EntityHost}},
-				ToPorts: ciliumapi.PortRules{{Ports: []ciliumapi.PortProtocol{{
-					Port:     "15021",
-					Protocol: ciliumapi.ProtoTCP,
-				}}}},
+				IngressCommonRule: ciliumapi.IngressCommonRule{
+					FromEntities: ciliumapi.EntitySlice{ciliumapi.EntityHost},
+				},
+				ToPorts: ciliumapi.PortRules{{
+					Ports: []ciliumapi.PortProtocol{{
+						Port:     "15021",
+						Protocol: ciliumapi.ProtoTCP,
+					}},
+				}},
 			}},
 		}).WithEnableDefaultDeny(true, false)
 		policy.Specs = nil

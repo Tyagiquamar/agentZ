@@ -54,6 +54,8 @@ func (v *Validator) ValidateDelete(ctx context.Context, skill *agentzv1alpha1.Sk
 // RegisterWithManager uses uncached reads so admission sees recent attachments.
 func RegisterWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr, &agentzv1alpha1.Skill{}).
-		WithValidator(&Validator{reader: mgr.GetAPIReader()}).
+		WithValidator(&Validator{
+			reader: mgr.GetAPIReader(),
+		}).
 		Complete()
 }

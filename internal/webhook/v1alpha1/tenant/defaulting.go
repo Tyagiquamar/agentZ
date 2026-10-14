@@ -38,7 +38,10 @@ var _ admission.Defaulter[*agentzv1alpha1.Tenant] = &Defaulter{}
 
 // NewDefaulter builds a Tenant defaulter.
 func NewDefaulter(agentQuota agentzv1alpha1.AgentQuota, dashboardQuota agentzv1alpha1.DashboardQuota) *Defaulter {
-	return &Defaulter{agentQuota: agentQuota, dashboardQuota: dashboardQuota}
+	return &Defaulter{
+		agentQuota:     agentQuota,
+		dashboardQuota: dashboardQuota,
+	}
 }
 
 // Default applies the configured quota when a Tenant omits it.

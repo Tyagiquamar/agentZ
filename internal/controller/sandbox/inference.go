@@ -43,7 +43,10 @@ func (r *Reconciler) reconcileInference(ctx context.Context, sandbox *agentzv1al
 		}
 		if ref.Provider == agentzv1alpha1.InferencePoolProvider {
 			pool := &agentzv1alpha1.InferencePool{}
-			key := client.ObjectKey{Namespace: ns, Name: ref.Model}
+			key := client.ObjectKey{
+				Namespace: ns,
+				Name:      ref.Model,
+			}
 			if err := r.Get(ctx, key, pool); err != nil {
 				return false, fmt.Errorf("get inference pool %q: %w", ref.Model, err)
 			}
@@ -90,7 +93,10 @@ func (r *Reconciler) reconcileInference(ctx context.Context, sandbox *agentzv1al
 		provider := providers[providerKey]
 		if provider == nil {
 			provider = &agentzv1alpha1.InferenceProvider{}
-			key := client.ObjectKey{Namespace: ns, Name: ref.Provider}
+			key := client.ObjectKey{
+				Namespace: ns,
+				Name:      ref.Provider,
+			}
 			if err := r.Get(ctx, key, provider); err != nil {
 				return false, fmt.Errorf("get inference provider %q: %w", ref.Provider, err)
 			}
@@ -144,7 +150,10 @@ func (r *Reconciler) reconcileInference(ctx context.Context, sandbox *agentzv1al
 		return false, nil
 	}
 	gateway := &gwv1.Gateway{}
-	key := client.ObjectKey{Namespace: sandbox.Namespace, Name: inference.GatewayName}
+	key := client.ObjectKey{
+		Namespace: sandbox.Namespace,
+		Name:      inference.GatewayName,
+	}
 	if err := r.Get(ctx, key, gateway); err != nil {
 		return false, fmt.Errorf("get inference gateway status: %w", err)
 	}
@@ -164,13 +173,15 @@ func (r *Reconciler) reconcileInference(ctx context.Context, sandbox *agentzv1al
 		runtime := inference.RenderSandboxTarget(sandbox.Namespace, sandbox.Name, target)
 		desired[runtime.Route.Name] = struct{}{}
 		if target.BackendNamespace != "" && target.BackendNamespace != sandbox.Namespace {
-			grant := &gwv1.ReferenceGrant{ObjectMeta: metav1.ObjectMeta{
-				Name: inference.SandboxProviderRuntimeName(
-					sandbox.Namespace+"-"+sandbox.Name,
-					target.Name,
-				),
-				Namespace: target.BackendNamespace,
-			}}
+			grant := &gwv1.ReferenceGrant{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: inference.SandboxProviderRuntimeName(
+						sandbox.Namespace+"-"+sandbox.Name,
+						target.Name,
+					),
+					Namespace: target.BackendNamespace,
+				},
+			}
 			_, err := ctrlutil.CreateOrPatch(
 				ctx,
 				r.Client,
@@ -324,13 +335,19 @@ func (r *Reconciler) reconcileInferenceGateway(ctx context.Context, namespace st
 	}
 	if len(owners) == 0 {
 		gateway := &gwv1.Gateway{
-			ObjectMeta: metav1.ObjectMeta{Name: inference.GatewayName, Namespace: namespace},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      inference.GatewayName,
+				Namespace: namespace,
+			},
 		}
 		if err := r.Delete(ctx, gateway); err != nil && !apierrors.IsNotFound(err) {
 			return fmt.Errorf("delete inference gateway: %w", err)
 		}
 		policy := &ciliumv2.CiliumNetworkPolicy{
-			ObjectMeta: metav1.ObjectMeta{Name: inference.GatewayName, Namespace: namespace},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      inference.GatewayName,
+				Namespace: namespace,
+			},
 		}
 		if err := r.Delete(ctx, policy); err != nil && !apierrors.IsNotFound(err) {
 			return fmt.Errorf("delete inference gateway network policy: %w", err)
@@ -339,7 +356,10 @@ func (r *Reconciler) reconcileInferenceGateway(ctx context.Context, namespace st
 			return err
 		}
 		tracePolicy := &agentgatewayv1alpha1.AgentgatewayPolicy{
-			ObjectMeta: metav1.ObjectMeta{Name: inferenceTracePolicyName, Namespace: namespace},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      inferenceTracePolicyName,
+				Namespace: namespace,
+			},
 		}
 		if err := r.Delete(ctx, tracePolicy); err != nil && !apierrors.IsNotFound(err) {
 			return fmt.Errorf("delete inference trace policy: %w", err)
@@ -351,7 +371,10 @@ func (r *Reconciler) reconcileInferenceGateway(ctx context.Context, namespace st
 		return err
 	}
 	tracePolicy := &agentgatewayv1alpha1.AgentgatewayPolicy{
-		ObjectMeta: metav1.ObjectMeta{Name: inferenceTracePolicyName, Namespace: namespace},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      inferenceTracePolicyName,
+			Namespace: namespace,
+		},
 	}
 	_, err = ctrlutil.CreateOrPatch(
 		ctx,
@@ -378,7 +401,10 @@ func (r *Reconciler) reconcileInferenceGateway(ctx context.Context, namespace st
 		return fmt.Errorf("reconcile inference trace policy: %w", err)
 	}
 	gateway := &gwv1.Gateway{
-		ObjectMeta: metav1.ObjectMeta{Name: inference.GatewayName, Namespace: namespace},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      inference.GatewayName,
+			Namespace: namespace,
+		},
 	}
 	_, err = ctrlutil.CreateOrPatch(
 		ctx,
@@ -402,7 +428,10 @@ func (r *Reconciler) reconcileInferenceGateway(ctx context.Context, namespace st
 		return fmt.Errorf("reconcile inference gateway: %w", err)
 	}
 	policy := &ciliumv2.CiliumNetworkPolicy{
-		ObjectMeta: metav1.ObjectMeta{Name: inference.GatewayName, Namespace: namespace},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      inference.GatewayName,
+			Namespace: namespace,
+		},
 	}
 	providerKeys := map[client.ObjectKey]struct{}{}
 	for i := range owners {
@@ -425,12 +454,18 @@ func (r *Reconciler) reconcileInferenceGateway(ctx context.Context, namespace st
 				if err != nil {
 					return fmt.Errorf("resolve inference policy provider scope: %w", err)
 				}
-				key := client.ObjectKey{Namespace: ns, Name: model.Provider}
+				key := client.ObjectKey{
+					Namespace: ns,
+					Name:      model.Provider,
+				}
 				providerKeys[key] = struct{}{}
 				continue
 			}
 			pool := &agentzv1alpha1.InferencePool{}
-			key := client.ObjectKey{Namespace: ns, Name: model.Model}
+			key := client.ObjectKey{
+				Namespace: ns,
+				Name:      model.Model,
+			}
 			if err := r.Get(ctx, key, pool); err != nil {
 				return fmt.Errorf("get inference policy pool: %w", err)
 			}

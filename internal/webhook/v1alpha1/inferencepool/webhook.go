@@ -46,7 +46,9 @@ var _ admission.Validator[*agentzv1alpha1.InferencePool] = &Validator{}
 // RegisterWithManager registers the InferencePool webhook.
 func RegisterWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr, &agentzv1alpha1.InferencePool{}).
-		WithValidator(&Validator{client: mgr.GetClient()}).
+		WithValidator(&Validator{
+			client: mgr.GetClient(),
+		}).
 		Complete()
 }
 

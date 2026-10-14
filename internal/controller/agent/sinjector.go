@@ -484,8 +484,14 @@ func (r *Reconciler) buildSinjectorDeployment(agt *agentzv1alpha1.Agent) *appsv1
 							Secret: &corev1.SecretVolumeSource{
 								SecretName: r.Config.SinjectorCASecretName,
 								Items: []corev1.KeyToPath{
-									{Key: r.Config.SinjectorCASecretCertKey, Path: "tls.crt"},
-									{Key: r.Config.SinjectorCASecretKeyKey, Path: "tls.key"},
+									{
+										Key:  r.Config.SinjectorCASecretCertKey,
+										Path: "tls.crt",
+									},
+									{
+										Key:  r.Config.SinjectorCASecretKeyKey,
+										Path: "tls.key",
+									},
 								},
 							},
 						},
@@ -522,7 +528,10 @@ func (r *Reconciler) buildSinjectorDeployment(agt *agentzv1alpha1.Agent) *appsv1
 
 func (r *Reconciler) sinjectorReady(ctx context.Context, agt *agentzv1alpha1.Agent) (bool, error) {
 	dep := &appsv1.Deployment{}
-	depKey := types.NamespacedName{Name: sinjectorName(agt), Namespace: agt.Namespace}
+	depKey := types.NamespacedName{
+		Name:      sinjectorName(agt),
+		Namespace: agt.Namespace,
+	}
 	err := r.Get(ctx, depKey, dep)
 	if err != nil {
 		return false, client.IgnoreNotFound(err)

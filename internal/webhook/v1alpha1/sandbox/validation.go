@@ -47,7 +47,9 @@ var _ admission.Validator[*agentzv1alpha1.Sandbox] = &Validator{}
 
 // NewValidator builds a Sandbox validator.
 func NewValidator(c client.Reader) *Validator {
-	return &Validator{client: c}
+	return &Validator{
+		client: c,
+	}
 }
 
 // ValidateCreate validates Sandbox creation.
@@ -192,7 +194,10 @@ func (v *Validator) validateInference(ctx context.Context, sandbox *agentzv1alph
 			continue
 		}
 		pool := &agentzv1alpha1.InferencePool{}
-		key := client.ObjectKey{Namespace: poolNamespace, Name: poolID}
+		key := client.ObjectKey{
+			Namespace: poolNamespace,
+			Name:      poolID,
+		}
 		err := v.client.Get(ctx, key, pool)
 		if apierrors.IsNotFound(err) {
 			fields = append(fields, field.NotFound(path.Child("models"), poolID))
@@ -242,7 +247,10 @@ func (v *Validator) validateInference(ctx context.Context, sandbox *agentzv1alph
 			continue
 		}
 		provider := &agentzv1alpha1.InferenceProvider{}
-		key := client.ObjectKey{Namespace: ns, Name: ref.Name}
+		key := client.ObjectKey{
+			Namespace: ns,
+			Name:      ref.Name,
+		}
 		err = v.client.Get(ctx, key, provider)
 		if apierrors.IsNotFound(err) {
 			fields = append(fields, field.NotFound(path.Child("models"), ref.Name))
@@ -324,7 +332,10 @@ func (v *Validator) validateMCPConnectionRefs(ctx context.Context, sandbox *agen
 			continue
 		}
 
-		key := agentzv1alpha1.ResourceReference{Scope: ref.Scope, Name: name}
+		key := agentzv1alpha1.ResourceReference{
+			Scope: ref.Scope,
+			Name:  name,
+		}
 		if first, ok := seen[key]; ok {
 			fields = append(
 				fields,
@@ -363,7 +374,10 @@ func (v *Validator) validateMCPConnectionRefs(ctx context.Context, sandbox *agen
 		}
 
 		conn := &agentzv1alpha1.MCPConnection{}
-		objKey := client.ObjectKey{Namespace: ns, Name: name}
+		objKey := client.ObjectKey{
+			Namespace: ns,
+			Name:      name,
+		}
 		err = v.client.Get(ctx, objKey, conn)
 		if apierrors.IsNotFound(err) {
 			fields = append(

@@ -54,7 +54,10 @@ var emptyDelegationMCP = func() http.Handler {
 	})
 	return mcpsdk.NewStreamableHTTPHandler(func(*http.Request) *mcpsdk.Server {
 		return server
-	}, &mcpsdk.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
+	}, &mcpsdk.StreamableHTTPOptions{
+		Stateless:    true,
+		JSONResponse: true,
+	})
 }()
 
 type delegatedMCPMessage struct {
@@ -127,7 +130,10 @@ func (s *Service) delegationCatalog(ctx context.Context, userID, organizationID,
 	if err != nil {
 		return catalog, err
 	}
-	selectedScope := authorization.Scope{OrganizationID: organizationID, WorkspaceID: workspaceID}
+	selectedScope := authorization.Scope{
+		OrganizationID: organizationID,
+		WorkspaceID:    workspaceID,
+	}
 	workspaceNamespace := agentzv1alpha1.ScopeNamespace(agentzv1alpha1.ResourceScopeWorkspace, workspaceID)
 	organizationNamespace := agentzv1alpha1.ScopeNamespace(agentzv1alpha1.ResourceScopeOrganisation, organizationID)
 	namespaces := []string{workspaceNamespace, organizationNamespace}
@@ -290,7 +296,10 @@ func (s *Service) resolveDelegation(ctx context.Context, grant gatewaydb.Delegat
 		if err != nil {
 			return nil, err
 		}
-		key := ctrlclient.ObjectKey{Namespace: model.Namespace, Name: model.Provider}
+		key := ctrlclient.ObjectKey{
+			Namespace: model.Namespace,
+			Name:      model.Provider,
+		}
 		provider := resources.providers[key]
 		if provider == nil {
 			provider = &agentzv1alpha1.InferenceProvider{}
@@ -321,7 +330,10 @@ func (s *Service) resolveDelegation(ctx context.Context, grant gatewaydb.Delegat
 		if err != nil {
 			return nil, err
 		}
-		key := ctrlclient.ObjectKey{Namespace: selected.Namespace, Name: selected.Connection}
+		key := ctrlclient.ObjectKey{
+			Namespace: selected.Namespace,
+			Name:      selected.Connection,
+		}
 		connection := resources.mcp[key]
 		if connection == nil {
 			connection = &agentzv1alpha1.MCPConnection{}
@@ -480,14 +492,22 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if r.URL.Path == "/api/inference/v1/models" {
-		resources, err := s.resolveDelegation(r.Context(), grant, gatewayapi.DelegationCatalog{Models: selection.Models})
+		resources, err := s.resolveDelegation(r.Context(), grant, gatewayapi.DelegationCatalog{
+			Models: selection.Models,
+		})
 		if err != nil {
 			deny(err, false)
 			return
 		}
-		models := openAIModels{Object: "list", Data: []openAIModel{}}
+		models := openAIModels{
+			Object: "list",
+			Data:   []openAIModel{},
+		}
 		for _, model := range selection.Models {
-			key := ctrlclient.ObjectKey{Namespace: model.Namespace, Name: model.Provider}
+			key := ctrlclient.ObjectKey{
+				Namespace: model.Namespace,
+				Name:      model.Provider,
+			}
 			provider := resources.providers[key]
 			models.Data = append(models.Data, openAIModel{
 				ID:                 model.Id,
@@ -502,7 +522,9 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if mcpRequest {
-		_, err := s.resolveDelegation(r.Context(), grant, gatewayapi.DelegationCatalog{Mcp: selection.Mcp})
+		_, err := s.resolveDelegation(r.Context(), grant, gatewayapi.DelegationCatalog{
+			Mcp: selection.Mcp,
+		})
 		if err != nil {
 			deny(err, false)
 			return
@@ -592,7 +614,10 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 			deny(err, false)
 			return
 		}
-		key := ctrlclient.ObjectKey{Namespace: selected.Namespace, Name: selected.Provider}
+		key := ctrlclient.ObjectKey{
+			Namespace: selected.Namespace,
+			Name:      selected.Provider,
+		}
 		provider := resources.providers[key]
 		err = input.ValidateProvider(provider.Spec.Kind)
 		if err != nil {
@@ -795,11 +820,13 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 				}
 				response.Header = http.Header{"Cache-Control": {"no-store, no-transform"}}
 				response.Trailer = nil
-				body, err := json.Marshal(openAIError{Error: openAIErrorDetail{
-					Message: "The upstream service could not complete this request.",
-					Type:    "server_error",
-					Code:    "upstream_error",
-				}})
+				body, err := json.Marshal(openAIError{
+					Error: openAIErrorDetail{
+						Message: "The upstream service could not complete this request.",
+						Type:    "server_error",
+						Code:    "upstream_error",
+					},
+				})
 				if err != nil {
 					return err
 				}
@@ -866,11 +893,13 @@ func (s *Service) delegationError(w http.ResponseWriter, r *http.Request, status
 		apiutil.WriteError(w, r, apiutil.NewError(status, code, message, nil))
 		return
 	}
-	apiutil.WriteJSON(w, status, openAIError{Error: openAIErrorDetail{
-		Message: message,
-		Type:    code,
-		Code:    code,
-	}})
+	apiutil.WriteJSON(w, status, openAIError{
+		Error: openAIErrorDetail{
+			Message: message,
+			Type:    code,
+			Code:    code,
+		},
+	})
 }
 
 func (s *Service) delegationCORS(next http.Handler) http.Handler {

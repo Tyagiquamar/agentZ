@@ -504,7 +504,10 @@ func MapCreateError(err error) *apiutil.APIError {
 				"conflict",
 				"request conflicts with existing data",
 				err,
-				gatewayapi.FieldError{Field: field, Message: "already in-use"},
+				gatewayapi.FieldError{
+					Field:   field,
+					Message: "already in-use",
+				},
 			)
 		}
 	}

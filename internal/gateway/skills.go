@@ -49,7 +49,10 @@ func (s *Service) resolveSkillAccess(ctx context.Context, workspaceID, name stri
 		req.creatorFallback = authorization.OperationCreateSkill
 		req.isCreator = func(ctx context.Context, namespace, userID string) (bool, error) {
 			item := &agentzv1alpha1.Skill{}
-			err := s.k8sClient.Get(ctx, ctrlclient.ObjectKey{Name: name, Namespace: namespace}, item)
+			err := s.k8sClient.Get(ctx, ctrlclient.ObjectKey{
+				Name:      name,
+				Namespace: namespace,
+			}, item)
 			return item.Spec.CreatedByUserID == userID, err
 		}
 	}
@@ -154,12 +157,18 @@ func (s *Service) ListSkills(w http.ResponseWriter, r *http.Request, params gate
 			continue
 		}
 		if params.AgentName != nil {
-			ref := agentzv1alpha1.ResourceReference{Scope: localScope, Name: item.Name}
+			ref := agentzv1alpha1.ResourceReference{
+				Scope: localScope,
+				Name:  item.Name,
+			}
 			if _, ok := effective[ref]; !ok {
 				continue
 			}
 		}
-		ref := agentzv1alpha1.ResourceReference{Scope: localScope, Name: item.Name}
+		ref := agentzv1alpha1.ResourceReference{
+			Scope: localScope,
+			Name:  item.Name,
+		}
 		items = append(items, skillFromCRD(item, refsBySkill[ref], access, actors))
 	}
 	if workspaceID != "" {
@@ -452,7 +461,10 @@ func (s *Service) UpdateSkill(w http.ResponseWriter, r *http.Request, skillName 
 		retry.DefaultRetry,
 		func() error {
 			current := &agentzv1alpha1.Skill{}
-			key := types.NamespacedName{Name: skillName, Namespace: ns}
+			key := types.NamespacedName{
+				Name:      skillName,
+				Namespace: ns,
+			}
 			if err := s.k8sClient.Get(r.Context(), key, current); err != nil {
 				return err
 			}
@@ -623,7 +635,10 @@ func (s *Service) GetSkillReferences(w http.ResponseWriter, r *http.Request, ski
 		return
 	}
 	skill := &agentzv1alpha1.Skill{}
-	key := types.NamespacedName{Name: skillName, Namespace: ns}
+	key := types.NamespacedName{
+		Name:      skillName,
+		Namespace: ns,
+	}
 	if err := s.k8sClient.Get(r.Context(), key, skill); err != nil {
 		apiutil.WriteError(w, r, mapKubeHTTPError("get skill", err))
 		return
@@ -737,7 +752,10 @@ func (s *Service) listSkillReferences(ctx context.Context, namespace string) (ma
 
 func (s *Service) effectiveAgentSkills(ctx context.Context, namespace string, agentName string) (map[agentzv1alpha1.ResourceReference]struct{}, error) {
 	agt := &agentzv1alpha1.Agent{}
-	key := types.NamespacedName{Name: agentName, Namespace: namespace}
+	key := types.NamespacedName{
+		Name:      agentName,
+		Namespace: namespace,
+	}
 	if err := s.k8sClient.Get(ctx, key, agt); err != nil {
 		return nil, err
 	}
@@ -746,7 +764,10 @@ func (s *Service) effectiveAgentSkills(ctx context.Context, namespace string, ag
 		out[ref] = struct{}{}
 	}
 	sandbox := &agentzv1alpha1.Sandbox{}
-	key = types.NamespacedName{Name: agt.Spec.SandboxRef.Name, Namespace: namespace}
+	key = types.NamespacedName{
+		Name:      agt.Spec.SandboxRef.Name,
+		Namespace: namespace,
+	}
 	if err := s.k8sClient.Get(ctx, key, sandbox); err != nil {
 		if apierrors.IsNotFound(err) {
 			return out, nil
@@ -761,7 +782,10 @@ func (s *Service) effectiveAgentSkills(ctx context.Context, namespace string, ag
 
 func validateSkillName(field string, name string) []gatewayapi.FieldError {
 	if err := skill.ValidateName(name); err != nil {
-		return []gatewayapi.FieldError{{Field: field, Message: err.Error()}}
+		return []gatewayapi.FieldError{{
+			Field:   field,
+			Message: err.Error(),
+		}}
 	}
 	return []gatewayapi.FieldError{}
 }
@@ -793,9 +817,14 @@ func validateSkillSpec(namespace, name, description string, version int64, stora
 func validateSkillStoragePath(field, namespace, name string, version int64, storagePath string) []gatewayapi.FieldError {
 	bucket, _, err := skill.ParseStoragePath(storagePath)
 	if err != nil {
-		return []gatewayapi.FieldError{{Field: field, Message: err.Error()}}
+		return []gatewayapi.FieldError{{
+			Field:   field,
+			Message: err.Error(),
+		}}
 	}
-	expected := (skill.Config{Bucket: bucket}).StoragePath(namespace, name, version)
+	expected := (skill.Config{
+		Bucket: bucket,
+	}).StoragePath(namespace, name, version)
 	if storagePath != expected {
 		return []gatewayapi.FieldError{{
 			Field:   field,
@@ -882,7 +911,10 @@ func (s *Service) validateSkillRefs(ctx context.Context, namespace string, refs 
 			continue
 		}
 		skill := &agentzv1alpha1.Skill{}
-		key := types.NamespacedName{Name: name, Namespace: ns}
+		key := types.NamespacedName{
+			Name:      name,
+			Namespace: ns,
+		}
 		if err := s.k8sClient.Get(ctx, key, skill); err != nil {
 			if apierrors.IsNotFound(err) {
 				fields = append(
@@ -1038,7 +1070,10 @@ func (s *Service) ImportMutableSkills(w http.ResponseWriter, r *http.Request, _ 
 					action = skill.DecisionOverwrite
 				}
 			}
-			plan = append(plan, skill.Decision{Action: action, Name: tree.Name})
+			plan = append(plan, skill.Decision{
+				Action: action,
+				Name:   tree.Name,
+			})
 		}
 		decisionHeaders[i], err = json.Marshal(plan)
 		if err != nil {
@@ -1299,11 +1334,17 @@ func (s *Service) importImmutableSkills(ctx context.Context, bundle skill.Bundle
 				"malformed_skill_metadata",
 				"The skill could not be imported.",
 				err,
-				gatewayapi.FieldError{Field: "file:" + tree.Name + "/SKILL.md", Message: err.Error()},
+				gatewayapi.FieldError{
+					Field:   "file:" + tree.Name + "/SKILL.md",
+					Message: err.Error(),
+				},
 			)
 		}
 		current := &agentzv1alpha1.Skill{}
-		key := types.NamespacedName{Namespace: namespace, Name: tree.Name}
+		key := types.NamespacedName{
+			Namespace: namespace,
+			Name:      tree.Name,
+		}
 		err := s.k8sClient.Get(ctx, key, current)
 		exists := err == nil
 		if err != nil && !apierrors.IsNotFound(err) {
@@ -1440,7 +1481,10 @@ func (s *Service) importImmutableSkills(ctx context.Context, bundle skill.Bundle
 			retry.DefaultRetry,
 			func() error {
 				item := &agentzv1alpha1.Skill{}
-				key := types.NamespacedName{Namespace: namespace, Name: plan.tree.Name}
+				key := types.NamespacedName{
+					Namespace: namespace,
+					Name:      plan.tree.Name,
+				}
 				if err := s.k8sClient.Get(ctx, key, item); err != nil {
 					return err
 				}
@@ -1489,7 +1533,10 @@ func (s *Service) rollbackImmutableImport(ctx context.Context, namespace string,
 	for _, plan := range slices.Backward(applied) {
 		if plan.current == nil {
 			item := &agentzv1alpha1.Skill{}
-			key := types.NamespacedName{Namespace: namespace, Name: plan.tree.Name}
+			key := types.NamespacedName{
+				Namespace: namespace,
+				Name:      plan.tree.Name,
+			}
 			err := s.k8sClient.Get(ctx, key, item)
 			if apierrors.IsNotFound(err) {
 				continue
@@ -1529,7 +1576,10 @@ func (s *Service) rollbackImmutableImport(ctx context.Context, namespace string,
 			retry.DefaultRetry,
 			func() error {
 				item := &agentzv1alpha1.Skill{}
-				key := types.NamespacedName{Namespace: namespace, Name: plan.tree.Name}
+				key := types.NamespacedName{
+					Namespace: namespace,
+					Name:      plan.tree.Name,
+				}
 				if err := s.k8sClient.Get(ctx, key, item); err != nil {
 					return err
 				}
@@ -1692,7 +1742,9 @@ func readSkillUpload(w http.ResponseWriter, r *http.Request) (skill.Bundle, bool
 		)
 		return skill.Bundle{}, false
 	}
-	r.MultipartForm = &multipart.Form{Value: values}
+	r.MultipartForm = &multipart.Form{
+		Value: values,
+	}
 	return bundle, true
 }
 
@@ -1953,7 +2005,10 @@ func (s *Service) DeleteImmutableSkills(w http.ResponseWriter, r *http.Request, 
 			return
 		}
 		item := &agentzv1alpha1.Skill{}
-		key := types.NamespacedName{Namespace: access.namespace, Name: name}
+		key := types.NamespacedName{
+			Namespace: access.namespace,
+			Name:      name,
+		}
 		if err := s.k8sClient.Get(r.Context(), key, item); err != nil {
 			apiutil.WriteError(w, r, mapKubeHTTPError("get immutable skill", err))
 			return
@@ -2012,7 +2067,10 @@ func (s *Service) ListImmutableSkillVersions(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	item := &agentzv1alpha1.Skill{}
-	key := types.NamespacedName{Namespace: ns, Name: skillName}
+	key := types.NamespacedName{
+		Namespace: ns,
+		Name:      skillName,
+	}
 	if err := s.k8sClient.Get(r.Context(), key, item); err != nil {
 		apiutil.WriteError(w, r, mapKubeHTTPError("get immutable skill", err))
 		return
@@ -2100,7 +2158,10 @@ func (s *Service) ListImmutableSkillSummaries(w http.ResponseWriter, r *http.Req
 		if !item.DeletionTimestamp.IsZero() {
 			continue
 		}
-		ref := agentzv1alpha1.ResourceReference{Scope: localScope, Name: item.Name}
+		ref := agentzv1alpha1.ResourceReference{
+			Scope: localScope,
+			Name:  item.Name,
+		}
 		if effective != nil {
 			if _, ok := effective[ref]; !ok {
 				continue
@@ -2351,7 +2412,10 @@ func (s *Service) ExportImmutableSkills(w http.ResponseWriter, r *http.Request, 
 			return
 		}
 		item := &agentzv1alpha1.Skill{}
-		key := types.NamespacedName{Namespace: ns, Name: name}
+		key := types.NamespacedName{
+			Namespace: ns,
+			Name:      name,
+		}
 		if err := s.k8sClient.Get(r.Context(), key, item); err != nil {
 			apiutil.WriteError(w, r, mapKubeHTTPError("get immutable skill", err))
 			return

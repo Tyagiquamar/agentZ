@@ -57,7 +57,10 @@ func mapGatewayStoreError(action string, err error) *apiutil.APIError {
 				"conflict",
 				"request conflicts with current state",
 				err,
-				gatewayapi.FieldError{Field: "name", Message: "already in-use"},
+				gatewayapi.FieldError{
+					Field:   "name",
+					Message: "already in-use",
+				},
 			)
 		}
 		return apiutil.NewError(http.StatusConflict, "conflict", action+" conflicts with existing data", err)
@@ -77,7 +80,10 @@ func mapKubeHTTPError(action string, err error) *apiutil.APIError {
 				"conflict",
 				"request conflicts with current state",
 				err,
-				gatewayapi.FieldError{Field: "name", Message: "already in-use"},
+				gatewayapi.FieldError{
+					Field:   "name",
+					Message: "already in-use",
+				},
 			)
 		}
 		return apiutil.NewError(http.StatusConflict, "conflict", action+" already exists", err)

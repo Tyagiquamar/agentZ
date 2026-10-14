@@ -51,6 +51,7 @@ var baseOperationCapabilities = map[string][]string{
 		"listSecrets", "watchSecrets",
 	},
 	"agent.use_shared": {
+		"getChatExecution", "getWorkflowExecution", "startWorkflowExecution",
 		"listChatInputs",
 		"submitChatInput",
 		"updateChatInput",
@@ -342,7 +343,9 @@ func rewriteOpenCode(doc map[string]any) (map[string]any, routeManifest, error) 
 	rewriteRefs(doc, refMap)
 
 	filteredPaths := make(map[string]any)
-	manifest := routeManifest{Routes: make([]routeSpec, 0)}
+	manifest := routeManifest{
+		Routes: make([]routeSpec, 0),
+	}
 	for path, itemAny := range paths {
 		item, ok := itemAny.(map[string]any)
 		if !ok {
@@ -420,7 +423,10 @@ func applyBaseCapabilities(doc map[string]any) error {
 			if _, exists := capabilities[operation]; exists {
 				return fmt.Errorf("base operation %q has multiple capability mappings", operation)
 			}
-			capabilities[operation] = operationCapability{Scheme: scheme, Scope: scope}
+			capabilities[operation] = operationCapability{
+				Scheme: scheme,
+				Scope:  scope,
+			}
 		}
 	}
 
@@ -899,7 +905,7 @@ func applyOAPICodegenFixups(doc map[string]any) error {
 		},
 	}
 	// Message roles and tool states are mutually exclusive wire discriminators.
-	discriminators := map[string]string{"Message": "role", "ToolState": "status"}
+	discriminators := map[string]string{"Message": "role", "ToolState": "status", "SessionMessage": "type"}
 	for name, field := range discriminators {
 		schema := schemas[name].(map[string]any)
 		mapping := make(map[string]any)

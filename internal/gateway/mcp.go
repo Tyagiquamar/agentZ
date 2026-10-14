@@ -44,12 +44,18 @@ func (s *Service) resolveMCPAccess(ctx context.Context, workspaceID, name string
 	case authorization.OperationDeleteMCPConnection:
 		creatorFallback = authorization.OperationCreateMCPConnection
 	default:
-		return resourceAccess{workspaceID: workspaceID, operation: operation},
+		return resourceAccess{
+				workspaceID: workspaceID,
+				operation:   operation,
+			},
 			resourceForbidden(fmt.Errorf("MCP Connection operation %q is unknown", operation))
 	}
 	_, mapped := operation.BearerScope()
 	if !mapped {
-		return resourceAccess{workspaceID: workspaceID, operation: operation},
+		return resourceAccess{
+				workspaceID: workspaceID,
+				operation:   operation,
+			},
 			resourceForbidden(fmt.Errorf("MCP Connection operation %q is unmapped", operation))
 	}
 
@@ -62,7 +68,10 @@ func (s *Service) resolveMCPAccess(ctx context.Context, workspaceID, name string
 			creatorFallback: creatorFallback,
 			isCreator: func(ctx context.Context, namespace, userID string) (bool, error) {
 				conn := &agentzv1alpha1.MCPConnection{}
-				err := s.k8sClient.Get(ctx, ctrlclient.ObjectKey{Name: name, Namespace: namespace}, conn)
+				err := s.k8sClient.Get(ctx, ctrlclient.ObjectKey{
+					Name:      name,
+					Namespace: namespace,
+				}, conn)
 				if err != nil {
 					return false, err
 				}
@@ -736,7 +745,10 @@ func (s *Service) getMCPConnection(w http.ResponseWriter, r *http.Request, names
 	}
 
 	conn := &agentzv1alpha1.MCPConnection{}
-	key := ctrlclient.ObjectKey{Name: name, Namespace: namespace}
+	key := ctrlclient.ObjectKey{
+		Name:      name,
+		Namespace: namespace,
+	}
 	if err := s.k8sClient.Get(r.Context(), key, conn); err != nil {
 		writeMCPAPIError(w, r, mapKubeHTTPError("get mcp connection", err))
 		return nil, false
@@ -868,7 +880,9 @@ func (s *Service) mcpConnectionDetail(access resourceAccess, scope gatewayapi.Re
 	status, reason, message := s.mcpConnectionStatus(conn)
 	tools := make([]gatewayapi.MCPConnectionTool, 0, len(conn.Status.Tools))
 	for _, tool := range conn.Status.Tools {
-		tools = append(tools, gatewayapi.MCPConnectionTool{Name: tool.Name})
+		tools = append(tools, gatewayapi.MCPConnectionTool{
+			Name: tool.Name,
+		})
 	}
 	var canDelete bool
 	if scope == resourceScope(access.workspaceID) {
@@ -978,7 +992,10 @@ func (s *Service) waitForMCPConnectionDeletion(ctx context.Context, name string)
 
 	for {
 		conn := &agentzv1alpha1.MCPConnection{}
-		key := ctrlclient.ObjectKey{Namespace: ns, Name: name}
+		key := ctrlclient.ObjectKey{
+			Namespace: ns,
+			Name:      name,
+		}
 		err := s.k8sClient.Get(ctx, key, conn)
 		if apierrors.IsNotFound(err) {
 			return nil
@@ -1024,7 +1041,9 @@ func mcpConnectionSpecFromRequest(endpoint gatewayapi.MCPConnectionEndpoint, aut
 				Message: "must be a valid duration",
 			}}
 		}
-		spec.Endpoint.Timeout = &metav1.Duration{Duration: duration}
+		spec.Endpoint.Timeout = &metav1.Duration{
+			Duration: duration,
+		}
 	}
 	maps.Copy(spec.Endpoint.Headers, endpoint.Headers)
 
@@ -1074,7 +1093,9 @@ func authLocationFromRequest(location *gatewayapi.MCPConnectionAuthLocation) *ag
 
 	out := &agentzv1alpha1.MCPConnectionAuthLocation{}
 	if location.Header != nil {
-		out.Header = &agentzv1alpha1.MCPConnectionHeaderLocation{Name: strings.TrimSpace(location.Header.Name)}
+		out.Header = &agentzv1alpha1.MCPConnectionHeaderLocation{
+			Name: strings.TrimSpace(location.Header.Name),
+		}
 		if location.Header.Prefix != nil {
 			prefix := strings.TrimSpace(*location.Header.Prefix)
 			out.Header.Prefix = &prefix
@@ -1086,7 +1107,9 @@ func authLocationFromRequest(location *gatewayapi.MCPConnectionAuthLocation) *ag
 		}
 	}
 	if location.Cookie != nil {
-		out.Cookie = &agentzv1alpha1.MCPConnectionCookieLocation{Name: strings.TrimSpace(location.Cookie.Name)}
+		out.Cookie = &agentzv1alpha1.MCPConnectionCookieLocation{
+			Name: strings.TrimSpace(location.Cookie.Name),
+		}
 	}
 	return out
 }
@@ -1098,17 +1121,23 @@ func authLocationToResponse(location *agentzv1alpha1.MCPConnectionAuthLocation) 
 
 	out := &gatewayapi.MCPConnectionAuthLocation{}
 	if location.Header != nil {
-		out.Header = &gatewayapi.MCPConnectionHeaderLocation{Name: location.Header.Name}
+		out.Header = &gatewayapi.MCPConnectionHeaderLocation{
+			Name: location.Header.Name,
+		}
 		if location.Header.Prefix != nil {
 			prefix := *location.Header.Prefix
 			out.Header.Prefix = &prefix
 		}
 	}
 	if location.QueryParameter != nil {
-		out.QueryParameter = &gatewayapi.MCPConnectionQueryParameterLocation{Name: location.QueryParameter.Name}
+		out.QueryParameter = &gatewayapi.MCPConnectionQueryParameterLocation{
+			Name: location.QueryParameter.Name,
+		}
 	}
 	if location.Cookie != nil {
-		out.Cookie = &gatewayapi.MCPConnectionCookieLocation{Name: location.Cookie.Name}
+		out.Cookie = &gatewayapi.MCPConnectionCookieLocation{
+			Name: location.Cookie.Name,
+		}
 	}
 	return out
 }
@@ -1116,7 +1145,10 @@ func authLocationToResponse(location *agentzv1alpha1.MCPConnectionAuthLocation) 
 func validateMCPConnectionName(name string, fieldName string) []gatewayapi.FieldError {
 	fields := []gatewayapi.FieldError{}
 	if name == "" {
-		return append(fields, gatewayapi.FieldError{Field: fieldName, Message: "required"})
+		return append(fields, gatewayapi.FieldError{
+			Field:   fieldName,
+			Message: "required",
+		})
 	}
 	if len(name) > 32 {
 		fields = append(fields, gatewayapi.FieldError{
@@ -1125,7 +1157,10 @@ func validateMCPConnectionName(name string, fieldName string) []gatewayapi.Field
 		})
 	}
 	for _, msg := range validation.IsDNS1123Label(name) {
-		fields = append(fields, gatewayapi.FieldError{Field: fieldName, Message: msg})
+		fields = append(fields, gatewayapi.FieldError{
+			Field:   fieldName,
+			Message: msg,
+		})
 	}
 	return fields
 }
@@ -1233,7 +1268,9 @@ func (s *Service) putMCPConnectionCredentials(ctx context.Context, spec agentzv1
 		}
 
 		record := internalmcp.OAuthSecretRecord{
-			Record: internaloauth.Record{UpdatedAt: now},
+			Record: internaloauth.Record{
+				UpdatedAt: now,
+			},
 		}
 		if req.Oauth.ClientId != nil {
 			record.ClientID = strings.TrimSpace(*req.Oauth.ClientId)

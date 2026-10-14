@@ -45,7 +45,10 @@ func (r *Reconciler) reconcileEgressPolicy(ctx context.Context, agt *agentzv1alp
 	}
 	if len(spec.Egress) == 0 {
 		policy := &ciliumv2.CiliumNetworkPolicy{
-			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: agt.Namespace},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: agt.Namespace,
+			},
 		}
 		if err := r.Delete(ctx, policy); err != nil && !apierr.IsNotFound(err) {
 			return fmt.Errorf("delete egress policy: %w", err)
@@ -132,11 +135,17 @@ func buildHostEgressRules(hosts []sandboxutil.Host, dnsHosts []sandboxutil.Host)
 	for _, host := range hosts {
 		switch host.Kind {
 		case sandboxutil.HostKindDomain:
-			fqdns = append(fqdns, ciliumapi.FQDNSelector{MatchName: host.Value})
+			fqdns = append(fqdns, ciliumapi.FQDNSelector{
+				MatchName: host.Value,
+			})
 		case sandboxutil.HostKindWildcard, sandboxutil.HostKindDeepWildcard:
-			fqdns = append(fqdns, ciliumapi.FQDNSelector{MatchPattern: host.Value})
+			fqdns = append(fqdns, ciliumapi.FQDNSelector{
+				MatchPattern: host.Value,
+			})
 		case sandboxutil.HostKindCIDR:
-			cidrs = append(cidrs, ciliumapi.CIDRRule{Cidr: ciliumapi.CIDR(host.Value)})
+			cidrs = append(cidrs, ciliumapi.CIDRRule{
+				Cidr: ciliumapi.CIDR(host.Value),
+			})
 		}
 	}
 
@@ -146,13 +155,17 @@ func buildHostEgressRules(hosts []sandboxutil.Host, dnsHosts []sandboxutil.Host)
 		egress = append(egress, *dnsRule)
 	}
 	if len(fqdns) > 0 {
-		egress = append(egress, ciliumapi.EgressRule{ToFQDNs: fqdns})
+		egress = append(egress, ciliumapi.EgressRule{
+			ToFQDNs: fqdns,
+		})
 	}
 	if len(cidrs) > 0 {
 		egress = append(
 			egress,
 			ciliumapi.EgressRule{
-				EgressCommonRule: ciliumapi.EgressCommonRule{ToCIDRSet: cidrs},
+				EgressCommonRule: ciliumapi.EgressCommonRule{
+					ToCIDRSet: cidrs,
+				},
 			},
 		)
 	}
@@ -177,9 +190,13 @@ func dnsEgressRule(hosts []sandboxutil.Host) *ciliumapi.EgressRule {
 	for _, host := range hosts {
 		switch host.Kind {
 		case sandboxutil.HostKindDomain:
-			dns = append(dns, ciliumapi.PortRuleDNS{MatchName: host.Value})
+			dns = append(dns, ciliumapi.PortRuleDNS{
+				MatchName: host.Value,
+			})
 		case sandboxutil.HostKindWildcard, sandboxutil.HostKindDeepWildcard:
-			dns = append(dns, ciliumapi.PortRuleDNS{MatchPattern: host.Value})
+			dns = append(dns, ciliumapi.PortRuleDNS{
+				MatchPattern: host.Value,
+			})
 		}
 	}
 	if len(dns) == 0 {
@@ -205,7 +222,10 @@ func dnsEgressRule(hosts []sandboxutil.Host) *ciliumapi.EgressRule {
 		},
 		ToPorts: ciliumapi.PortRules{{
 			Ports: []ciliumapi.PortProtocol{
-				{Port: "53", Protocol: ciliumapi.ProtoAny},
+				{
+					Port:     "53",
+					Protocol: ciliumapi.ProtoAny,
+				},
 			},
 			Rules: &ciliumapi.L7Rules{
 				DNS: dns,

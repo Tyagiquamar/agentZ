@@ -30,7 +30,9 @@ const poolUpdatedAtAnnotation = "agentz.accuknox.com/inference-pool-updated-at"
 func (s *Service) resolveInferencePoolAccess(ctx context.Context, workspaceID, name string, operation authorization.Operation) (resourceAccess, *apiutil.APIError) {
 	if workspaceID == "" {
 		err := errors.New("inference pool requires a Workspace scope")
-		return resourceAccess{operation: operation}, resourceForbidden(err)
+		return resourceAccess{
+			operation: operation,
+		}, resourceForbidden(err)
 	}
 	req := resourceAccessRequest{
 		resource:    "Inference Pool",
@@ -43,7 +45,10 @@ func (s *Service) resolveInferencePoolAccess(ctx context.Context, workspaceID, n
 		req.creatorFallback = authorization.OperationCreateInferencePool
 		req.isCreator = func(ctx context.Context, namespace, userID string) (bool, error) {
 			pool := &agentzv1alpha1.InferencePool{}
-			err := s.k8sClient.Get(ctx, ctrlclient.ObjectKey{Name: name, Namespace: namespace}, pool)
+			err := s.k8sClient.Get(ctx, ctrlclient.ObjectKey{
+				Name:      name,
+				Namespace: namespace,
+			}, pool)
 			return pool.Spec.CreatorUserID == userID, err
 		}
 	}
@@ -168,7 +173,9 @@ func (s *Service) WatchInferencePools(w http.ResponseWriter, r *http.Request, pa
 			return true
 		}
 		previous = items
-		raw, err := json.Marshal(gatewayapi.WatchInferencePoolsEvent{Pools: items})
+		raw, err := json.Marshal(gatewayapi.WatchInferencePoolsEvent{
+			Pools: items,
+		})
 		if err != nil {
 			apiutil.RecordRequestError(w, "internal_error", err)
 			return false
@@ -388,7 +395,10 @@ func (s *Service) UpdateInferencePool(w http.ResponseWriter, r *http.Request, po
 		return
 	}
 	current := &agentzv1alpha1.InferencePool{}
-	key := ctrlclient.ObjectKey{Namespace: access.namespace, Name: poolName}
+	key := ctrlclient.ObjectKey{
+		Namespace: access.namespace,
+		Name:      poolName,
+	}
 	if err := s.k8sClient.Get(r.Context(), key, current); err != nil {
 		apiutil.WriteError(w, r, mapKubeHTTPError("get inference pool", err))
 		return
@@ -494,7 +504,10 @@ func (s *Service) DeleteInferencePool(w http.ResponseWriter, r *http.Request, po
 	if len(usage) > 0 {
 		fields := make([]gatewayapi.FieldError, 0, len(usage))
 		for _, sandbox := range usage {
-			fields = append(fields, gatewayapi.FieldError{Field: "sandboxes", Message: sandbox})
+			fields = append(fields, gatewayapi.FieldError{
+				Field:   "sandboxes",
+				Message: sandbox,
+			})
 		}
 		apiutil.WriteError(
 			w,
@@ -551,7 +564,10 @@ func (s *Service) GetInferencePoolUsage(w http.ResponseWriter, r *http.Request, 
 
 func (s *Service) poolAndUsage(w http.ResponseWriter, r *http.Request, access resourceAccess, poolName string) (*agentzv1alpha1.InferencePool, []string, bool) {
 	pool := &agentzv1alpha1.InferencePool{}
-	key := ctrlclient.ObjectKey{Namespace: access.namespace, Name: strings.TrimSpace(poolName)}
+	key := ctrlclient.ObjectKey{
+		Namespace: access.namespace,
+		Name:      strings.TrimSpace(poolName),
+	}
 	if err := s.k8sClient.Get(r.Context(), key, pool); err != nil {
 		apiutil.WriteError(w, r, mapKubeHTTPError("get inference pool", err))
 		return nil, nil, false
@@ -592,7 +608,10 @@ func poolFromAPI(namespace, name string, input gatewayapi.InferencePoolWrite) *a
 			APIVersion: agentzv1alpha1.SchemeGroupVersion.String(),
 			Kind:       "InferencePool",
 		},
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
 		Spec: agentzv1alpha1.InferencePoolSpec{
 			DisplayName:       input.DisplayName,
 			AutomaticFailover: input.AutomaticFailover,
@@ -729,7 +748,10 @@ func poolToAPI(pool *agentzv1alpha1.InferencePool, usage int, access resourceAcc
 				Temperature: contract.Capabilities.Temperature,
 				ToolCall:    contract.Capabilities.ToolCall,
 			},
-			Modalities: gatewayapi.InferenceModelModalities{Input: input, Output: output},
+			Modalities: gatewayapi.InferenceModelModalities{
+				Input:  input,
+				Output: output,
+			},
 			Limits: gatewayapi.InferenceModelLimits{
 				Context: contract.Limits.Context,
 				Input:   contract.Limits.Input,

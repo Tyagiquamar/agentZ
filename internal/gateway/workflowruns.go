@@ -484,7 +484,9 @@ func (s *Service) ListWorkflowRuns(w http.ResponseWriter, r *http.Request, agtNa
 		return
 	}
 
-	resp := gatewayapi.ListWorkflowRunsResponse{WorkflowRuns: items}
+	resp := gatewayapi.ListWorkflowRunsResponse{
+		WorkflowRuns: items,
+	}
 	if nextOffset > 0 {
 		resp.NextPageToken = encodeOffsetToken(nextOffset)
 	}

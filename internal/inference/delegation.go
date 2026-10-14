@@ -102,7 +102,9 @@ type inferenceFile struct {
 // request. Case-sensitive decoding matches the upstream contract, while strict
 // duplicate detection prevents two parsers from authorizing different values.
 func ValidateDelegatedRequest(body []byte, responses bool) (*DelegatedRequest, error) {
-	input := DelegatedRequest{responses: responses}
+	input := DelegatedRequest{
+		responses: responses,
+	}
 	strictErrors, err := kjson.UnmarshalStrict(body, &input, kjson.DisallowDuplicateFields)
 	if err != nil || len(strictErrors) != 0 || input.Model == "" {
 		return nil, errors.New("provide a valid inference request with a model and no duplicate fields")

@@ -29,7 +29,10 @@ func (r *testResolver) resolve(_ context.Context, name string) (resolvedSecret, 
 	if len(hosts) == 0 {
 		hosts = []string{"example.com"}
 	}
-	return resolvedSecret{value: value, hosts: hosts}, nil
+	return resolvedSecret{
+		value: value,
+		hosts: hosts,
+	}, nil
 }
 
 func TestReplacePlaceholders(t *testing.T) {

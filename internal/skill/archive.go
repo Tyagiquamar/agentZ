@@ -173,7 +173,9 @@ func (b Bundle) Decide(decisions []Decision) (Bundle, error) {
 	}
 	seenSource := make(map[string]struct{}, len(decisions))
 	seenDestination := make(map[string]struct{}, len(decisions))
-	out := Bundle{Skills: make([]Tree, 0, len(decisions))}
+	out := Bundle{
+		Skills: make([]Tree, 0, len(decisions)),
+	}
 	for _, decision := range decisions {
 		tree, ok := byName[decision.Name]
 		if !ok {
@@ -275,11 +277,16 @@ func parseMarkdown(name string, content []byte) (Bundle, error) {
 	if err != nil {
 		return Bundle{}, err
 	}
-	return Bundle{Skills: []Tree{{
-		Name:        metadata.Name,
-		Description: strings.TrimSpace(metadata.Description),
-		Files:       []File{{Path: skillFileName, Content: canonical}},
-	}}}, nil
+	return Bundle{
+		Skills: []Tree{{
+			Name:        metadata.Name,
+			Description: strings.TrimSpace(metadata.Description),
+			Files: []File{{
+				Path:    skillFileName,
+				Content: canonical,
+			}},
+		}},
+	}, nil
 }
 
 func parseZIP(archiveName string, content io.ReaderAt, size int64) (Bundle, error) {
@@ -410,11 +417,15 @@ func parseZIP(archiveName string, content io.ReaderAt, size int64) (Bundle, erro
 		}
 	}
 
-	bundle := Bundle{Skills: make([]Tree, 0, len(roots))}
+	bundle := Bundle{
+		Skills: make([]Tree, 0, len(roots)),
+	}
 	seenNames := make(map[string]struct{}, len(roots))
 	claimed := make(map[string]struct{}, len(files))
 	for _, root := range roots {
-		tree := Tree{Files: []File{}}
+		tree := Tree{
+			Files: []File{},
+		}
 		for name, content := range files {
 			if root != "" && !strings.HasPrefix(name, root) {
 				continue
@@ -423,7 +434,10 @@ func parseZIP(archiveName string, content io.ReaderAt, size int64) (Bundle, erro
 			if rel == "" {
 				continue
 			}
-			tree.Files = append(tree.Files, File{Path: rel, Content: content})
+			tree.Files = append(tree.Files, File{
+				Path:    rel,
+				Content: content,
+			})
 			claimed[name] = struct{}{}
 		}
 		slices.SortFunc(

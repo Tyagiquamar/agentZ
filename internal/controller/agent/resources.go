@@ -452,10 +452,23 @@ func (r *Reconciler) buildDeployment(agt *agentzv1alpha1.Agent, hash string, env
 					},
 				},
 				VolumeMounts: []corev1.VolumeMount{
-					{Name: nixAgentVolume, MountPath: nixVolumeRootMount},
-					{Name: nixAgentVolume, MountPath: nixAgentMount, SubPath: nixStoreSubPath},
-					{Name: nixLinkVolume, MountPath: nixLinkStage},
-					{Name: nixRuntimeStoreVolume, MountPath: nixRuntimeStageMount},
+					{
+						Name:      nixAgentVolume,
+						MountPath: nixVolumeRootMount,
+					},
+					{
+						Name:      nixAgentVolume,
+						MountPath: nixAgentMount,
+						SubPath:   nixStoreSubPath,
+					},
+					{
+						Name:      nixLinkVolume,
+						MountPath: nixLinkStage,
+					},
+					{
+						Name:      nixRuntimeStoreVolume,
+						MountPath: nixRuntimeStageMount,
+					},
 				},
 			},
 		)
@@ -628,8 +641,14 @@ func (r *Reconciler) agentEnv(agt *agentzv1alpha1.Agent, envCfg sandboxConfig, m
 	if envCfg.WorkspaceType == agentzv1alpha1.WorkspaceTypeCoding {
 		// OpenCode registers native plan approval only for the CLI client.
 		forced = append(forced,
-			corev1.EnvVar{Name: "OPENCODE_EXPERIMENTAL_PLAN_MODE", Value: "true"},
-			corev1.EnvVar{Name: "OPENCODE_CLIENT", Value: "cli"},
+			corev1.EnvVar{
+				Name:  "OPENCODE_EXPERIMENTAL_PLAN_MODE",
+				Value: "true",
+			},
+			corev1.EnvVar{
+				Name:  "OPENCODE_CLIENT",
+				Value: "cli",
+			},
 		)
 	}
 	noProxy := r.agentNoProxyHosts(agt)
@@ -645,17 +664,50 @@ func (r *Reconciler) agentEnv(agt *agentzv1alpha1.Agent, envCfg sandboxConfig, m
 	noProxyValue := strings.Join(noProxy, ",")
 	forced = append(
 		forced,
-		corev1.EnvVar{Name: "https_proxy", Value: proxy},
-		corev1.EnvVar{Name: "HTTPS_PROXY", Value: proxy},
-		corev1.EnvVar{Name: "no_proxy", Value: noProxyValue},
-		corev1.EnvVar{Name: "NO_PROXY", Value: noProxyValue},
-		corev1.EnvVar{Name: "SSL_CERT_FILE", Value: r.Config.AgentCABundlePath},
-		corev1.EnvVar{Name: "REQUESTS_CA_BUNDLE", Value: r.Config.AgentCABundlePath},
-		corev1.EnvVar{Name: "CURL_CA_BUNDLE", Value: r.Config.AgentCABundlePath},
-		corev1.EnvVar{Name: "NODE_EXTRA_CA_CERTS", Value: r.Config.AgentCABundlePath},
-		corev1.EnvVar{Name: "OPENCODE_DISABLE_SHARE", Value: "1"},
-		corev1.EnvVar{Name: "AGENTZ_IMMUTABLE_SKILLS_PATH", Value: opencodeImmutableSkillsPath},
-		corev1.EnvVar{Name: "AGENTZ_TOOLS_PATH", Value: opencodeConfigDir + "/" + toolsManifestKey},
+		corev1.EnvVar{
+			Name:  "https_proxy",
+			Value: proxy,
+		},
+		corev1.EnvVar{
+			Name:  "HTTPS_PROXY",
+			Value: proxy,
+		},
+		corev1.EnvVar{
+			Name:  "no_proxy",
+			Value: noProxyValue,
+		},
+		corev1.EnvVar{
+			Name:  "NO_PROXY",
+			Value: noProxyValue,
+		},
+		corev1.EnvVar{
+			Name:  "SSL_CERT_FILE",
+			Value: r.Config.AgentCABundlePath,
+		},
+		corev1.EnvVar{
+			Name:  "REQUESTS_CA_BUNDLE",
+			Value: r.Config.AgentCABundlePath,
+		},
+		corev1.EnvVar{
+			Name:  "CURL_CA_BUNDLE",
+			Value: r.Config.AgentCABundlePath,
+		},
+		corev1.EnvVar{
+			Name:  "NODE_EXTRA_CA_CERTS",
+			Value: r.Config.AgentCABundlePath,
+		},
+		corev1.EnvVar{
+			Name:  "OPENCODE_DISABLE_SHARE",
+			Value: "1",
+		},
+		corev1.EnvVar{
+			Name:  "AGENTZ_IMMUTABLE_SKILLS_PATH",
+			Value: opencodeImmutableSkillsPath,
+		},
+		corev1.EnvVar{
+			Name:  "AGENTZ_TOOLS_PATH",
+			Value: opencodeConfigDir + "/" + toolsManifestKey,
+		},
 	)
 	var telemetryURL string
 	if telemetryEndpoint != "" {
@@ -669,10 +721,22 @@ func (r *Reconciler) agentEnv(agt *agentzv1alpha1.Agent, envCfg sandboxConfig, m
 			Name:  "OPENCODE_ENABLE_TELEMETRY",
 			Value: strconv.FormatBool(agt.Spec.Telemetry.Enabled),
 		},
-		corev1.EnvVar{Name: "OPENCODE_OTLP_PROTOCOL", Value: "grpc"},
-		corev1.EnvVar{Name: "OPENCODE_OTLP_ENDPOINT", Value: telemetryURL},
-		corev1.EnvVar{Name: "AGENTZ_AGENT_NAME", Value: agt.Name},
-		corev1.EnvVar{Name: "AGENTZ_WORKSPACE_TYPE", Value: string(envCfg.WorkspaceType)},
+		corev1.EnvVar{
+			Name:  "OPENCODE_OTLP_PROTOCOL",
+			Value: "grpc",
+		},
+		corev1.EnvVar{
+			Name:  "OPENCODE_OTLP_ENDPOINT",
+			Value: telemetryURL,
+		},
+		corev1.EnvVar{
+			Name:  "AGENTZ_AGENT_NAME",
+			Value: agt.Name,
+		},
+		corev1.EnvVar{
+			Name:  "AGENTZ_WORKSPACE_TYPE",
+			Value: string(envCfg.WorkspaceType),
+		},
 		corev1.EnvVar{
 			Name:  "AGENTZ_MEMORY_ENABLED",
 			Value: strconv.FormatBool(memoryEnabled),
@@ -685,9 +749,18 @@ func (r *Reconciler) agentEnv(agt *agentzv1alpha1.Agent, envCfg sandboxConfig, m
 			Name:  "OTEL_RESOURCE_ATTRIBUTES",
 			Value: resourceAttributes,
 		},
-		corev1.EnvVar{Name: "AGENTZ_GATEWAY_URL", Value: r.Config.GatewayURL},
-		corev1.EnvVar{Name: "AGENTZ_GATEWAY_TOKEN_PATH", Value: gatewayTokenPath},
-		corev1.EnvVar{Name: "AGENTZ_ATTACHMENT_MODEL", Value: envCfg.AttachmentModel},
+		corev1.EnvVar{
+			Name:  "AGENTZ_GATEWAY_URL",
+			Value: r.Config.GatewayURL,
+		},
+		corev1.EnvVar{
+			Name:  "AGENTZ_GATEWAY_TOKEN_PATH",
+			Value: gatewayTokenPath,
+		},
+		corev1.EnvVar{
+			Name:  "AGENTZ_ATTACHMENT_MODEL",
+			Value: envCfg.AttachmentModel,
+		},
 		corev1.EnvVar{
 			Name:  "AGENTZ_OPENAI_CODEX_PROVIDER_IDS",
 			Value: strings.Join(envCfg.OpenAICodexProviderIDs, ","),

@@ -66,7 +66,9 @@ func (s *Service) ListWorkspaces(w http.ResponseWriter, r *http.Request, params 
 		apiutil.WriteInternalError(w, r, fmt.Errorf("resolve workspace authority: %w", err))
 		return
 	}
-	organizationScope := authorization.Scope{OrganizationID: claims.OrganizationID}
+	organizationScope := authorization.Scope{
+		OrganizationID: claims.OrganizationID,
+	}
 	rows, err := s.workspaceAccessPage(
 		r.Context(),
 		claims,
@@ -200,7 +202,10 @@ func (s *Service) CreateWorkspace(w http.ResponseWriter, r *http.Request) {
 				"invalid_request",
 				"request validation failed",
 				errBadRequest,
-				gatewayapi.FieldError{Field: "name", Message: "must not be blank"},
+				gatewayapi.FieldError{
+					Field:   "name",
+					Message: "must not be blank",
+				},
 			),
 		)
 		return
@@ -258,7 +263,10 @@ func (s *Service) CreateWorkspace(w http.ResponseWriter, r *http.Request) {
 				action:         "workspace.create",
 				result:         gatewaydb.EventTrailResultDenied,
 				after: []gatewayapi.EventTrailField{
-					{Field: gatewayapi.EventTrailFieldName, Value: req.Name},
+					{
+						Field: gatewayapi.EventTrailFieldName,
+						Value: req.Name,
+					},
 				},
 			},
 		)
@@ -369,7 +377,10 @@ func (s *Service) CreateWorkspace(w http.ResponseWriter, r *http.Request) {
 			RoleID:         role.RoleID,
 			MemberIds:      req.AdminMemberIds,
 			OrganizationID: claims.OrganizationID,
-			WorkspaceID:    pgtype.Text{String: id, Valid: true},
+			WorkspaceID: pgtype.Text{
+				String: id,
+				Valid:  true,
+			},
 		},
 	)
 	if err != nil {
@@ -389,7 +400,10 @@ func (s *Service) CreateWorkspace(w http.ResponseWriter, r *http.Request) {
 				action:         "workspace.create",
 				result:         gatewaydb.EventTrailResultDenied,
 				after: []gatewayapi.EventTrailField{
-					{Field: gatewayapi.EventTrailFieldName, Value: req.Name},
+					{
+						Field: gatewayapi.EventTrailFieldName,
+						Value: req.Name,
+					},
 				},
 			},
 		)
@@ -439,10 +453,22 @@ func (s *Service) CreateWorkspace(w http.ResponseWriter, r *http.Request) {
 			action:         "workspace.create",
 			result:         gatewaydb.EventTrailResultSucceeded,
 			after: []gatewayapi.EventTrailField{
-				{Field: gatewayapi.EventTrailFieldName, Value: req.Name},
-				{Field: gatewayapi.EventTrailFieldSlug, Value: workspaceSlug},
-				{Field: gatewayapi.EventTrailFieldProvisioningAttempt, Value: "1"},
-				{Field: gatewayapi.EventTrailFieldState, Value: "provisioning"},
+				{
+					Field: gatewayapi.EventTrailFieldName,
+					Value: req.Name,
+				},
+				{
+					Field: gatewayapi.EventTrailFieldSlug,
+					Value: workspaceSlug,
+				},
+				{
+					Field: gatewayapi.EventTrailFieldProvisioningAttempt,
+					Value: "1",
+				},
+				{
+					Field: gatewayapi.EventTrailFieldState,
+					Value: "provisioning",
+				},
 			},
 		},
 	)
@@ -457,7 +483,10 @@ func (s *Service) CreateWorkspace(w http.ResponseWriter, r *http.Request) {
 
 	row, err := s.queries.GatewayGetWorkspace(
 		r.Context(),
-		gatewaydb.GatewayGetWorkspaceParams{ID: id, OrganizationID: claims.OrganizationID},
+		gatewaydb.GatewayGetWorkspaceParams{
+			ID:             id,
+			OrganizationID: claims.OrganizationID,
+		},
 	)
 	if err != nil {
 		apiutil.WriteInternalError(w, r, fmt.Errorf("read created workspace: %w", err))
@@ -658,7 +687,10 @@ func (s *Service) RetryWorkspace(w http.ResponseWriter, r *http.Request, workspa
 		return
 	}
 
-	updatedAt := pgtype.Timestamptz{Time: time.Now(), Valid: true}
+	updatedAt := pgtype.Timestamptz{
+		Time:  time.Now(),
+		Valid: true,
+	}
 	changed, err := q.GatewayRetryWorkspaceProvisioning(
 		r.Context(),
 		gatewaydb.GatewayRetryWorkspaceProvisioningParams{
@@ -699,14 +731,20 @@ func (s *Service) RetryWorkspace(w http.ResponseWriter, r *http.Request, workspa
 					Field: gatewayapi.EventTrailFieldProvisioningAttempt,
 					Value: strconv.FormatInt(current.ProvisioningAttempt, 10),
 				},
-				{Field: gatewayapi.EventTrailFieldState, Value: "failed"},
+				{
+					Field: gatewayapi.EventTrailFieldState,
+					Value: "failed",
+				},
 			},
 			after: []gatewayapi.EventTrailField{
 				{
 					Field: gatewayapi.EventTrailFieldProvisioningAttempt,
 					Value: strconv.FormatInt(current.ProvisioningAttempt+1, 10),
 				},
-				{Field: gatewayapi.EventTrailFieldState, Value: "provisioning"},
+				{
+					Field: gatewayapi.EventTrailFieldState,
+					Value: "provisioning",
+				},
 			},
 		},
 	)
@@ -816,7 +854,10 @@ func (s *Service) UpdateWorkspaceLifecycle(w http.ResponseWriter, r *http.Reques
 			return
 		}
 		state = gatewaydb.WorkspaceStateFailed
-		reason = pgtype.Text{String: strings.TrimSpace(*req.FailureReason), Valid: true}
+		reason = pgtype.Text{
+			String: strings.TrimSpace(*req.FailureReason),
+			Valid:  true,
+		}
 	}
 
 	tx, err := s.db.Begin(r.Context())
@@ -841,9 +882,12 @@ func (s *Service) UpdateWorkspaceLifecycle(w http.ResponseWriter, r *http.Reques
 	changed, err := q.GatewayTransitionWorkspaceProvisioning(
 		r.Context(),
 		gatewaydb.GatewayTransitionWorkspaceProvisioningParams{
-			State:               state,
-			FailureReason:       reason,
-			UpdatedAt:           pgtype.Timestamptz{Time: time.Now(), Valid: true},
+			State:         state,
+			FailureReason: reason,
+			UpdatedAt: pgtype.Timestamptz{
+				Time:  time.Now(),
+				Valid: true,
+			},
 			ID:                  workspaceID,
 			OrganizationID:      tenant.Spec.OrganizationID,
 			ProvisioningAttempt: req.ProvisioningAttempt,
@@ -884,14 +928,20 @@ func (s *Service) UpdateWorkspaceLifecycle(w http.ResponseWriter, r *http.Reques
 						Field: gatewayapi.EventTrailFieldProvisioningAttempt,
 						Value: strconv.FormatInt(req.ProvisioningAttempt, 10),
 					},
-					{Field: gatewayapi.EventTrailFieldState, Value: string(previous.State)},
+					{
+						Field: gatewayapi.EventTrailFieldState,
+						Value: string(previous.State),
+					},
 				},
 				after: []gatewayapi.EventTrailField{
 					{
 						Field: gatewayapi.EventTrailFieldProvisioningAttempt,
 						Value: strconv.FormatInt(req.ProvisioningAttempt, 10),
 					},
-					{Field: gatewayapi.EventTrailFieldState, Value: string(state)},
+					{
+						Field: gatewayapi.EventTrailFieldState,
+						Value: string(state),
+					},
 				},
 			},
 		)
@@ -933,14 +983,20 @@ func (s *Service) UpdateWorkspaceLifecycle(w http.ResponseWriter, r *http.Reques
 					Field: gatewayapi.EventTrailFieldProvisioningAttempt,
 					Value: strconv.FormatInt(req.ProvisioningAttempt, 10),
 				},
-				{Field: gatewayapi.EventTrailFieldState, Value: string(previous.State)},
+				{
+					Field: gatewayapi.EventTrailFieldState,
+					Value: string(previous.State),
+				},
 			},
 			after: []gatewayapi.EventTrailField{
 				{
 					Field: gatewayapi.EventTrailFieldProvisioningAttempt,
 					Value: strconv.FormatInt(req.ProvisioningAttempt, 10),
 				},
-				{Field: gatewayapi.EventTrailFieldState, Value: string(state)},
+				{
+					Field: gatewayapi.EventTrailFieldState,
+					Value: string(state),
+				},
 			},
 		},
 	)
@@ -981,7 +1037,10 @@ func (s *Service) workspaceAccess(ctx context.Context, claims gatewayClaims) ([]
 			return rows, nil
 		}
 		last := page[len(page)-1].Workspace
-		cursor = workspacePageCursor{Name: last.Name, ID: last.ID}
+		cursor = workspacePageCursor{
+			Name: last.Name,
+			ID:   last.ID,
+		}
 	}
 }
 
@@ -1007,8 +1066,10 @@ func workspaceView(row gatewaydb.Workspace, workspaceAdminCount int64, canAdmini
 	view := gatewayapi.Workspace{
 		Type: gatewayapi.WorkspaceType(row.Type),
 		Capabilities: gatewayapi.WorkspaceCapabilities{
-			Administer:         canAdminister,
-			Agents:             gatewayapi.AgentWorkspaceCapabilities{Author: capabilities.canAuthorAgents},
+			Administer: canAdminister,
+			Agents: gatewayapi.AgentWorkspaceCapabilities{
+				Author: capabilities.canAuthorAgents,
+			},
 			ApiKeys:            capabilities.apiKey,
 			InferencePools:     capabilities.inferencePool,
 			InferenceProviders: capabilities.inferenceProvider,
@@ -1058,7 +1119,10 @@ func (s *Service) requireWorkspaceFeatures(next http.Handler) http.Handler {
 		// A stale Kubernetes projection must not relax coding project privacy.
 		workspace, err := s.queries.GatewayGetWorkspace(
 			r.Context(),
-			gatewaydb.GatewayGetWorkspaceParams{ID: workspaceID, OrganizationID: organizationID},
+			gatewaydb.GatewayGetWorkspaceParams{
+				ID:             workspaceID,
+				OrganizationID: organizationID,
+			},
 		)
 		if err != nil {
 			apiutil.WriteError(w, r, mapGatewayStoreError("get workspace", err))
@@ -1089,11 +1153,15 @@ func (s *Service) ensureWorkspaceResource(ctx context.Context, row gatewaydb.Wor
 		agentzv1alpha1.ResourceScopeOrganisation,
 		row.OrganizationID,
 	)
-	err := s.k8sClient.Get(ctx, ctrlclient.ObjectKey{Name: tenantName}, tenant)
+	err := s.k8sClient.Get(ctx, ctrlclient.ObjectKey{
+		Name: tenantName,
+	}, tenant)
 	if err != nil {
 		return err
 	}
-	key := ctrlclient.ObjectKey{Name: row.Namespace}
+	key := ctrlclient.ObjectKey{
+		Name: row.Namespace,
+	}
 	var workspace agentzv1alpha1.Workspace
 	err = s.k8sClient.Get(ctx, key, &workspace)
 	if apierrors.IsNotFound(err) {
@@ -1186,9 +1254,15 @@ func (s *Service) failWorkspaceProvisioning(ctx context.Context, row gatewaydb.W
 	changed, err := q.GatewayTransitionWorkspaceProvisioning(
 		ctx,
 		gatewaydb.GatewayTransitionWorkspaceProvisioningParams{
-			State:               gatewaydb.WorkspaceStateFailed,
-			FailureReason:       pgtype.Text{String: reason, Valid: true},
-			UpdatedAt:           pgtype.Timestamptz{Time: time.Now(), Valid: true},
+			State: gatewaydb.WorkspaceStateFailed,
+			FailureReason: pgtype.Text{
+				String: reason,
+				Valid:  true,
+			},
+			UpdatedAt: pgtype.Timestamptz{
+				Time:  time.Now(),
+				Valid: true,
+			},
 			ID:                  row.ID,
 			OrganizationID:      row.OrganizationID,
 			ProvisioningAttempt: row.ProvisioningAttempt,
@@ -1212,14 +1286,20 @@ func (s *Service) failWorkspaceProvisioning(ctx context.Context, row gatewaydb.W
 						Field: gatewayapi.EventTrailFieldProvisioningAttempt,
 						Value: strconv.FormatInt(row.ProvisioningAttempt, 10),
 					},
-					{Field: gatewayapi.EventTrailFieldState, Value: "provisioning"},
+					{
+						Field: gatewayapi.EventTrailFieldState,
+						Value: "provisioning",
+					},
 				},
 				after: []gatewayapi.EventTrailField{
 					{
 						Field: gatewayapi.EventTrailFieldProvisioningAttempt,
 						Value: strconv.FormatInt(row.ProvisioningAttempt, 10),
 					},
-					{Field: gatewayapi.EventTrailFieldState, Value: "failed"},
+					{
+						Field: gatewayapi.EventTrailFieldState,
+						Value: "failed",
+					},
 				},
 			},
 		)
@@ -1265,10 +1345,16 @@ func createWorkspaceEventTrail(ctx context.Context, q gatewaydb.Querier, eventTr
 		After:          after,
 	}
 	if eventTrail.actorID != "" {
-		params.ActorID = pgtype.Text{String: eventTrail.actorID, Valid: true}
+		params.ActorID = pgtype.Text{
+			String: eventTrail.actorID,
+			Valid:  true,
+		}
 	}
 	if eventTrail.workspaceID != "" {
-		params.WorkspaceID = pgtype.Text{String: eventTrail.workspaceID, Valid: true}
+		params.WorkspaceID = pgtype.Text{
+			String: eventTrail.workspaceID,
+			Valid:  true,
+		}
 	}
 	_, err = q.GatewayCreateEventTrailEvent(ctx, params)
 	if err != nil {

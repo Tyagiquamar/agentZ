@@ -42,7 +42,9 @@ type dnsCache struct {
 }
 
 func newDNSCache() *dnsCache {
-	return &dnsCache{items: map[dnsCacheKey]dnsCacheEntry{}}
+	return &dnsCache{
+		items: map[dnsCacheKey]dnsCacheEntry{},
+	}
 }
 
 func (c *dnsCache) put(agentName, podName, ip, domain string, now time.Time, ttl uint32) {
@@ -60,7 +62,11 @@ func (c *dnsCache) put(agentName, podName, ip, domain string, now time.Time, ttl
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	key := dnsCacheKey{agentName: agentName, podName: podName, ip: ip}
+	key := dnsCacheKey{
+		agentName: agentName,
+		podName:   podName,
+		ip:        ip,
+	}
 	c.items[key] = dnsCacheEntry{
 		domain:   domain,
 		deadline: now.Add(d),
@@ -72,7 +78,11 @@ func (c *dnsCache) get(agentName, podName, ip string, now time.Time) string {
 		return ""
 	}
 
-	key := dnsCacheKey{agentName: agentName, podName: podName, ip: ip}
+	key := dnsCacheKey{
+		agentName: agentName,
+		podName:   podName,
+		ip:        ip,
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -123,19 +133,21 @@ func hubbleFlowEvent(ctx context.Context, item *flowpb.Flow, r *resolver, cache 
 		r.resolveDestinationDomain(ctx, dstIP),
 	)
 
-	return event{network: &networkEvent{
-		tenantNamespace:   src.namespace,
-		agentName:         src.agentName,
-		eventTime:         ts,
-		podNamespace:      src.namespace,
-		podName:           src.podName,
-		destinationDomain: domain,
-		destinationIP:     dstIP,
-		destinationPort:   port,
-		protocol:          protocol,
-		action:            action,
-		source:            sourceHubble,
-	}}, true
+	return event{
+		network: &networkEvent{
+			tenantNamespace:   src.namespace,
+			agentName:         src.agentName,
+			eventTime:         ts,
+			podNamespace:      src.namespace,
+			podName:           src.podName,
+			destinationDomain: domain,
+			destinationIP:     dstIP,
+			destinationPort:   port,
+			protocol:          protocol,
+			action:            action,
+			source:            sourceHubble,
+		},
+	}, true
 }
 
 func observeDNSFlow(item *flowpb.Flow, src managedSource, cache *dnsCache, now time.Time) {

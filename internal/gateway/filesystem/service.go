@@ -82,7 +82,9 @@ func Serve(ctx context.Context, cfg Config) error {
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	s := &service{root: root}
+	s := &service{
+		root: root,
+	}
 	srv := &http.Server{
 		Addr:              cfg.Addr,
 		Handler:           s.routes(),

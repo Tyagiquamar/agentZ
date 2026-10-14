@@ -101,7 +101,10 @@ func (s *Service) evaluateInference(ctx context.Context, checkAttrs *authv3.Attr
 		), attrs
 	}
 	provider := &agentzv1alpha1.InferenceProvider{}
-	key := ctrlclient.ObjectKey{Namespace: attrs.namespace, Name: attrs.provider}
+	key := ctrlclient.ObjectKey{
+		Namespace: attrs.namespace,
+		Name:      attrs.provider,
+	}
 	if err := s.kube.Get(ctx, key, provider); err != nil {
 		return denyDecision(
 			codes.Unavailable,
@@ -158,7 +161,10 @@ func (s *Service) authorizeInferenceTarget(ctx context.Context, providerNamespac
 	// so extAuth binds the backend context to the route-overwritten sandbox
 	// header instead of treating the observed peer IP as workload identity.
 	sandbox := &agentzv1alpha1.Sandbox{}
-	key := ctrlclient.ObjectKey{Namespace: sandboxNamespace, Name: sandboxName}
+	key := ctrlclient.ObjectKey{
+		Namespace: sandboxNamespace,
+		Name:      sandboxName,
+	}
 	if err := s.kube.Get(ctx, key, sandbox); err != nil {
 		return fmt.Errorf("get inference target sandbox: %w: %w", err, errCredentialUnavailable)
 	}
@@ -302,7 +308,10 @@ func (s *Service) resolveInferenceSubscription(ctx context.Context, provider *ag
 
 func overwriteHeader(name, value string) *corev3.HeaderValueOption {
 	return &corev3.HeaderValueOption{
-		Header:       &corev3.HeaderValue{Key: name, Value: value},
+		Header: &corev3.HeaderValue{
+			Key:   name,
+			Value: value,
+		},
 		AppendAction: corev3.HeaderValueOption_OVERWRITE_IF_EXISTS_OR_ADD,
 	}
 }

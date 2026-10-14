@@ -133,7 +133,9 @@ func Serve(ctx context.Context, cfg Config) error {
 		return fmt.Errorf("load kube config: %w", err)
 	}
 
-	kubeClient, err := ctrlclient.New(kubeCfg, ctrlclient.Options{Scheme: scheme})
+	kubeClient, err := ctrlclient.New(kubeCfg, ctrlclient.Options{
+		Scheme: scheme,
+	})
 	if err != nil {
 		return fmt.Errorf("create kube client: %w", err)
 	}
@@ -247,7 +249,9 @@ func Serve(ctx context.Context, cfg Config) error {
 		}
 		defer delegatedListener.Close()
 		delegatedServer = grpc.NewServer(grpc.MaxRecvMsgSize(34 << 20))
-		authv3.RegisterAuthorizationServer(delegatedServer, &delegationServer{Service: svc})
+		authv3.RegisterAuthorizationServer(delegatedServer, &delegationServer{
+			Service: svc,
+		})
 	}
 	srv := grpc.NewServer()
 	authv3.RegisterAuthorizationServer(srv, svc)
@@ -784,8 +788,11 @@ func injectionForLocation(location *agentzv1alpha1.MCPConnectionAuthLocation, to
 		return injectedRequest{
 			headers: []*corev3.HeaderValueOption{{
 				Header: &corev3.HeaderValue{
-					Key:   "Cookie",
-					Value: (&http.Cookie{Name: location.Cookie.Name, Value: token}).String(),
+					Key: "Cookie",
+					Value: (&http.Cookie{
+						Name:  location.Cookie.Name,
+						Value: token,
+					}).String(),
 				},
 			}},
 		}, nil
@@ -883,7 +890,10 @@ func (s *delegationServer) Check(ctx context.Context, request *authv3.CheckReque
 	// credentials. UIDs alone do not bind credentials to an upstream endpoint.
 	var injection *authv3.OkHttpResponse
 	var err error
-	key := ctrlclient.ObjectKey{Namespace: s.namespace, Name: extensions["agentz.name"]}
+	key := ctrlclient.ObjectKey{
+		Namespace: s.namespace,
+		Name:      extensions["agentz.name"],
+	}
 	switch operation {
 	case "inference":
 		provider := &agentzv1alpha1.InferenceProvider{}
@@ -921,7 +931,11 @@ func (s *delegationServer) Check(ctx context.Context, request *authv3.CheckReque
 		).response, nil
 	}
 	return &authv3.CheckResponse{
-		Status:       &statuspb.Status{Code: int32(codes.OK)},
-		HttpResponse: &authv3.CheckResponse_OkResponse{OkResponse: injection},
+		Status: &statuspb.Status{
+			Code: int32(codes.OK),
+		},
+		HttpResponse: &authv3.CheckResponse_OkResponse{
+			OkResponse: injection,
+		},
 	}, nil
 }

@@ -46,7 +46,10 @@ func ParseHost(raw string) (Host, error) {
 		if err != nil {
 			return Host{}, errors.New("must be a valid ipv4 or ipv6 cidr")
 		}
-		return Host{Kind: HostKindCIDR, Value: prefix.Masked().String()}, nil
+		return Host{
+			Kind:  HostKindCIDR,
+			Value: prefix.Masked().String(),
+		}, nil
 	}
 
 	if _, err := netip.ParseAddr(value); err == nil {
@@ -58,14 +61,20 @@ func ParseHost(raw string) (Host, error) {
 		if err := validateDomain(after); err != nil {
 			return Host{}, err
 		}
-		return Host{Kind: HostKindDeepWildcard, Value: "**." + after}, nil
+		return Host{
+			Kind:  HostKindDeepWildcard,
+			Value: "**." + after,
+		}, nil
 	}
 	if after, ok := strings.CutPrefix(value, "*."); ok {
 		domain := after
 		if err := validateDomain(domain); err != nil {
 			return Host{}, err
 		}
-		return Host{Kind: HostKindWildcard, Value: "*." + domain}, nil
+		return Host{
+			Kind:  HostKindWildcard,
+			Value: "*." + domain,
+		}, nil
 	}
 	if strings.Contains(value, "*") {
 		return Host{}, errors.New("wildcards must use leading *.|**. form")
@@ -73,7 +82,10 @@ func ParseHost(raw string) (Host, error) {
 	if err := validateDomain(value); err != nil {
 		return Host{}, err
 	}
-	return Host{Kind: HostKindDomain, Value: value}, nil
+	return Host{
+		Kind:  HostKindDomain,
+		Value: value,
+	}, nil
 }
 
 func validateDomain(value string) error {

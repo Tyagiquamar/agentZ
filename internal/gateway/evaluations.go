@@ -66,7 +66,10 @@ func (s *Service) CreateWorkflowEvaluation(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	for _, issue := range issues {
-		fields = append(fields, gatewayapi.FieldError{Field: issue.Field, Message: issue.Message})
+		fields = append(fields, gatewayapi.FieldError{
+			Field:   issue.Field,
+			Message: issue.Message,
+		})
 	}
 	seen := make(map[[3]string]bool)
 	for _, model := range input.Models {
@@ -185,7 +188,10 @@ func (s *Service) validateEvaluationModels(ctx context.Context, namespace, agent
 		return nil, err
 	}
 	var sandbox agentzv1alpha1.Sandbox
-	err = s.k8sClient.Get(ctx, client.ObjectKey{Namespace: ns, Name: ref.Name}, &sandbox)
+	err = s.k8sClient.Get(ctx, client.ObjectKey{
+		Namespace: ns,
+		Name:      ref.Name,
+	}, &sandbox)
 	if err != nil {
 		return nil, err
 	}
@@ -630,7 +636,11 @@ func (s *Service) advanceEvaluation(ctx context.Context, job workflowdb.Workflow
 				step, cancel := context.WithTimeout(ctx, 2*time.Minute)
 				defer cancel()
 				err := s.judgeEvaluation(step, job.TenantNamespace, &evaluation, &execution)
-				finished <- evaluationJudgeResult{index: i, execution: execution, err: err}
+				finished <- evaluationJudgeResult{
+					index:     i,
+					execution: execution,
+					err:       err,
+				}
 			})
 		}
 		select {
@@ -720,11 +730,15 @@ func (s *Service) advanceEvaluationRuns(ctx context.Context, job workflowdb.Work
 					Labels:    map[string]string{"agentz.accuknox.com/evaluation": result.Id.String()},
 				},
 				Spec: agentzv1alpha1.WorkflowRunSpec{
-					AgentName:      job.AgentName,
-					WorkflowName:   job.WorkflowName,
-					Model:          model,
-					Definition:     &apiextensionsv1.JSON{Raw: definition},
-					Inputs:         apiextensionsv1.JSON{Raw: inputs},
+					AgentName:    job.AgentName,
+					WorkflowName: job.WorkflowName,
+					Model:        model,
+					Definition: &apiextensionsv1.JSON{
+						Raw: definition,
+					},
+					Inputs: apiextensionsv1.JSON{
+						Raw: inputs,
+					},
 					TimeoutSeconds: result.Request.TimeoutSeconds,
 				},
 			}
@@ -1100,8 +1114,16 @@ func (s *Service) judgeEvaluation(ctx context.Context, namespace string, evaluat
 	}
 	judge := evaluation.Request.Judge
 	permissions := gatewayapi.OpencodePermissionRuleset{
-		{Permission: "*", Pattern: "*", Action: gatewayapi.OpencodePermissionActionDeny},
-		{Permission: "StructuredOutput", Pattern: "*", Action: gatewayapi.OpencodePermissionActionAllow},
+		{
+			Permission: "*",
+			Pattern:    "*",
+			Action:     gatewayapi.OpencodePermissionActionDeny,
+		},
+		{
+			Permission: "StructuredOutput",
+			Pattern:    "*",
+			Action:     gatewayapi.OpencodePermissionActionAllow,
+		},
 	}
 	session, err := upstream.SessionCreateWithResponse(ctx, evaluation.Workflow.AgentName, nil, gatewayapi.SessionCreateJSONRequestBody{
 		Title:    new("Judge workflow execution"),
@@ -1137,8 +1159,12 @@ func (s *Service) judgeEvaluation(ctx context.Context, namespace string, evaluat
 	output := *schema
 	output.Properties = maps.Clone(schema.Properties)
 	references := *schema.Properties["references"].Value
-	references.Items = &openapi3.SchemaRef{Value: references.Items.Value}
-	output.Properties["references"] = &openapi3.SchemaRef{Value: &references}
+	references.Items = &openapi3.SchemaRef{
+		Value: references.Items.Value,
+	}
+	output.Properties["references"] = &openapi3.SchemaRef{
+		Value: &references,
+	}
 	raw, err := json.Marshal(&output)
 	if err != nil {
 		return err
@@ -1165,7 +1191,9 @@ func (s *Service) judgeEvaluation(ctx context.Context, namespace string, evaluat
 		return err
 	}
 	var prompt bytes.Buffer
-	data := evaluationJudgePrompt{Evidence: string(raw)}
+	data := evaluationJudgePrompt{
+		Evidence: string(raw),
+	}
 	if evaluation.Request.JudgeInstructions != nil {
 		data.Instructions = strings.TrimSpace(*evaluation.Request.JudgeInstructions)
 	}
@@ -1192,7 +1220,10 @@ func (s *Service) judgeEvaluation(ctx context.Context, namespace string, evaluat
 			Format:    &format,
 			Parts:     []gatewayapi.OpencodePromptPartInput{part},
 			Variant:   judge.Variant,
-			Model:     &gatewayapi.OpencodePromptModel{ProviderID: judge.ProviderId, ModelID: judge.ModelId},
+			Model: &gatewayapi.OpencodePromptModel{
+				ProviderID: judge.ProviderId,
+				ModelID:    judge.ModelId,
+			},
 		})
 		if err != nil {
 			return err

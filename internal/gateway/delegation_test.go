@@ -124,22 +124,33 @@ func TestDelegatedAccessRequiresLiveGrantAndAccessToken(t *testing.T) {
 		t.Fatal(err)
 	}
 	issuer := "https://agentz.example"
-	queries := &delegationQueries{grant: gatewaydb.DelegationGrant{
-		ID:        "grant-1",
-		ClientID:  "client-1",
-		UserID:    testUserID,
-		Scopes:    []string{"inference:use", "mcp:use", "offline_access"},
-		Resources: []string{issuer + "/api/inference/v1", issuer + "/api/mcp"},
-		Selection: []byte(`{"models":[],"mcp":[]}`),
-	}}
+	queries := &delegationQueries{
+		grant: gatewaydb.DelegationGrant{
+			ID:        "grant-1",
+			ClientID:  "client-1",
+			UserID:    testUserID,
+			Scopes:    []string{"inference:use", "mcp:use", "offline_access"},
+			Resources: []string{issuer + "/api/inference/v1", issuer + "/api/mcp"},
+			Selection: []byte(`{"models":[],"mcp":[]}`),
+		},
+	}
 	service := sandboxTestService(t, queries)
 	service.cfg.ExternalJWTIssuer = issuer
 	service.delegationBodies = semaphore.NewWeighted(128 << 20)
 	service.delegationRequests = make(chan struct{}, 64)
 	service.externalJWTKeyfunc = func(*jwt.Token) (any, error) { return &key.PublicKey, nil }
 	cases := []delegationTokenCase{
-		{name: "access token", typ: "at+jwt", want: http.StatusOK},
-		{name: "client origin", origin: "https://app.example", typ: "at+jwt", want: http.StatusOK},
+		{
+			name: "access token",
+			typ:  "at+jwt",
+			want: http.StatusOK,
+		},
+		{
+			name:   "client origin",
+			origin: "https://app.example",
+			typ:    "at+jwt",
+			want:   http.StatusOK,
+		},
 		{
 			name:   "another registered client's origin",
 			origin: "https://other.example",
@@ -163,7 +174,11 @@ func TestDelegatedAccessRequiresLiveGrantAndAccessToken(t *testing.T) {
 			},
 			want: http.StatusOK,
 		},
-		{name: "ID token", typ: "JWT", want: http.StatusUnauthorized},
+		{
+			name: "ID token",
+			typ:  "JWT",
+			want: http.StatusUnauthorized,
+		},
 		{
 			name: "wrong issuer",
 			typ:  "at+jwt",
@@ -332,14 +347,19 @@ func TestDelegatedAccessRequiresLiveGrantAndAccessToken(t *testing.T) {
 func TestDelegationRechecksResourceIdentityAndPermissions(t *testing.T) {
 	ctx := context.Background()
 	namespace := agentzv1alpha1.ScopeNamespace(agentzv1alpha1.ResourceScopeWorkspace, testWorkspaceID)
-	queries := &delegationQueries{sandboxQueries: sandboxQueries{
-		workspace: gatewaydb.Workspace{
-			ID:             testWorkspaceID,
-			OrganizationID: testOrganizationID,
-			State:          gatewaydb.WorkspaceStateReady,
+	queries := &delegationQueries{
+		sandboxQueries: sandboxQueries{
+			workspace: gatewaydb.Workspace{
+				ID:             testWorkspaceID,
+				OrganizationID: testOrganizationID,
+				State:          gatewaydb.WorkspaceStateReady,
+			},
+			permissions: []gatewaydb.GatewayResolvePermissionsRow{{
+				Active:     true,
+				Superadmin: true,
+			}},
 		},
-		permissions: []gatewaydb.GatewayResolvePermissionsRow{{Active: true, Superadmin: true}},
-	}}
+	}
 	service := sandboxTestService(t, queries)
 	provider := &agentzv1alpha1.InferenceProvider{
 		ObjectMeta: metav1.ObjectMeta{
@@ -350,15 +370,21 @@ func TestDelegationRechecksResourceIdentityAndPermissions(t *testing.T) {
 		Spec: agentzv1alpha1.InferenceProviderSpec{
 			Kind:   agentzv1alpha1.InferenceProviderKindOpenAI,
 			OpenAI: &agentzv1alpha1.OpenAIProviderConfig{},
-			Models: []agentzv1alpha1.InferenceModel{{ID: "model"}},
+			Models: []agentzv1alpha1.InferenceModel{{
+				ID: "model",
+			}},
 		},
-		Status: agentzv1alpha1.InferenceProviderStatus{State: agentzv1alpha1.InferenceProviderStateReady},
+		Status: agentzv1alpha1.InferenceProviderStatus{
+			State: agentzv1alpha1.InferenceProviderStateReady,
+		},
 	}
 	objects := []ctrlclient.Object{
-		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
-			Name:   namespace,
-			Labels: map[string]string{agentzv1alpha1.WorkspaceNameLabel: namespace},
-		}},
+		&corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   namespace,
+				Labels: map[string]string{agentzv1alpha1.WorkspaceNameLabel: namespace},
+			},
+		},
 		provider,
 	}
 	for _, object := range objects {
@@ -377,10 +403,16 @@ func TestDelegationRechecksResourceIdentityAndPermissions(t *testing.T) {
 			UID:        "mcp-original",
 			Generation: 2,
 		},
-		Spec: agentzv1alpha1.MCPConnectionSpec{Endpoint: agentzv1alpha1.MCPConnectionEndpoint{URL: "https://mcp.example/mcp"}},
+		Spec: agentzv1alpha1.MCPConnectionSpec{
+			Endpoint: agentzv1alpha1.MCPConnectionEndpoint{
+				URL: "https://mcp.example/mcp",
+			},
+		},
 		Status: agentzv1alpha1.MCPConnectionStatus{
 			ToolCatalogReady: true,
-			Tools:            []agentzv1alpha1.MCPConnectionTool{{Name: "echo"}},
+			Tools: []agentzv1alpha1.MCPConnectionTool{{
+				Name: "echo",
+			}},
 			Conditions: []metav1.Condition{{
 				Type:               mcp.ConditionProbeHealthy,
 				Status:             metav1.ConditionTrue,
@@ -414,11 +446,14 @@ func TestDelegationRechecksResourceIdentityAndPermissions(t *testing.T) {
 		t.Fatal(err)
 	}
 	queries.grant = gatewaydb.DelegationGrant{
-		ID:             "grant-1",
-		ClientID:       "client-1",
-		UserID:         testUserID,
-		OrganizationID: pgtype.Text{String: testOrganizationID, Valid: true},
-		Selection:      selection,
+		ID:       "grant-1",
+		ClientID: "client-1",
+		UserID:   testUserID,
+		OrganizationID: pgtype.Text{
+			String: testOrganizationID,
+			Valid:  true,
+		},
+		Selection: selection,
 	}
 	if _, err := service.resolveDelegation(ctx, queries.grant, catalog); err != nil {
 		t.Fatal(err)
@@ -451,7 +486,10 @@ func TestDelegationReadinessRequiresCurrentAcceptedProjection(t *testing.T) {
 		}
 	}
 	service.cfg.DelegationNamespace = "private"
-	grant := gatewaydb.DelegationGrant{ID: "grant-1", Selection: []byte(`{"models":[],"mcp":[]}`)}
+	grant := gatewaydb.DelegationGrant{
+		ID:        "grant-1",
+		Selection: []byte(`{"models":[],"mcp":[]}`),
+	}
 	hash := sha256.Sum256(grant.Selection)
 	metadata := metav1.ObjectMeta{
 		Name:        "d-grant-1-model-0",
@@ -461,27 +499,35 @@ func TestDelegationReadinessRequiresCurrentAcceptedProjection(t *testing.T) {
 	}
 	route := &gwv1.HTTPRoute{
 		ObjectMeta: metadata,
-		Status: gwv1.HTTPRouteStatus{RouteStatus: gwv1.RouteStatus{Parents: []gwv1.RouteParentStatus{{
-			ParentRef:      gwv1.ParentReference{Name: "delegations"},
-			ControllerName: "agentgateway.dev/agentgateway",
-			Conditions: []metav1.Condition{{
-				Type:               "Accepted",
-				Status:             metav1.ConditionTrue,
-				ObservedGeneration: 2,
-			}, {
-				Type:               "ResolvedRefs",
-				Status:             metav1.ConditionTrue,
-				ObservedGeneration: 2,
-			}},
-		}}}},
+		Status: gwv1.HTTPRouteStatus{
+			RouteStatus: gwv1.RouteStatus{
+				Parents: []gwv1.RouteParentStatus{{
+					ParentRef: gwv1.ParentReference{
+						Name: "delegations",
+					},
+					ControllerName: "agentgateway.dev/agentgateway",
+					Conditions: []metav1.Condition{{
+						Type:               "Accepted",
+						Status:             metav1.ConditionTrue,
+						ObservedGeneration: 2,
+					}, {
+						Type:               "ResolvedRefs",
+						Status:             metav1.ConditionTrue,
+						ObservedGeneration: 2,
+					}},
+				}},
+			},
+		},
 	}
 	backend := &agw.AgentgatewayBackend{
 		ObjectMeta: metadata,
-		Status: agw.AgentgatewayBackendStatus{Conditions: []metav1.Condition{{
-			Type:               "Accepted",
-			Status:             metav1.ConditionTrue,
-			ObservedGeneration: 1,
-		}}},
+		Status: agw.AgentgatewayBackendStatus{
+			Conditions: []metav1.Condition{{
+				Type:               "Accepted",
+				Status:             metav1.ConditionTrue,
+				ObservedGeneration: 1,
+			}},
+		},
 	}
 	objects := []ctrlclient.Object{route, backend}
 	for _, object := range objects {
@@ -511,14 +557,19 @@ func TestDelegatedInferenceUsesPrivateGateway(t *testing.T) {
 		t.Fatal(err)
 	}
 	issuer := "https://agentz.example"
-	queries := &delegationQueries{sandboxQueries: sandboxQueries{
-		workspace: gatewaydb.Workspace{
-			ID:             testWorkspaceID,
-			OrganizationID: testOrganizationID,
-			State:          gatewaydb.WorkspaceStateReady,
+	queries := &delegationQueries{
+		sandboxQueries: sandboxQueries{
+			workspace: gatewaydb.Workspace{
+				ID:             testWorkspaceID,
+				OrganizationID: testOrganizationID,
+				State:          gatewaydb.WorkspaceStateReady,
+			},
+			permissions: []gatewaydb.GatewayResolvePermissionsRow{{
+				Active:     true,
+				Superadmin: true,
+			}},
 		},
-		permissions: []gatewaydb.GatewayResolvePermissionsRow{{Active: true, Superadmin: true}},
-	}}
+	}
 	service := sandboxTestService(t, queries)
 	registrations := []func(*runtime.Scheme) error{gwv1.Install, agw.Install}
 	for _, add := range registrations {
@@ -528,19 +579,29 @@ func TestDelegatedInferenceUsesPrivateGateway(t *testing.T) {
 	}
 	namespace := agentzv1alpha1.ScopeNamespace(agentzv1alpha1.ResourceScopeWorkspace, testWorkspaceID)
 	provider := &agentzv1alpha1.InferenceProvider{
-		ObjectMeta: metav1.ObjectMeta{Name: "selected", Namespace: namespace, UID: "original"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "selected",
+			Namespace: namespace,
+			UID:       "original",
+		},
 		Spec: agentzv1alpha1.InferenceProviderSpec{
 			Kind:   agentzv1alpha1.InferenceProviderKindOpenAI,
 			OpenAI: &agentzv1alpha1.OpenAIProviderConfig{},
-			Models: []agentzv1alpha1.InferenceModel{{ID: "model"}},
+			Models: []agentzv1alpha1.InferenceModel{{
+				ID: "model",
+			}},
 		},
-		Status: agentzv1alpha1.InferenceProviderStatus{State: agentzv1alpha1.InferenceProviderStateReady},
+		Status: agentzv1alpha1.InferenceProviderStatus{
+			State: agentzv1alpha1.InferenceProviderStateReady,
+		},
 	}
 	objects := []ctrlclient.Object{
-		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
-			Name:   namespace,
-			Labels: map[string]string{agentzv1alpha1.WorkspaceNameLabel: namespace},
-		}},
+		&corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   namespace,
+				Labels: map[string]string{agentzv1alpha1.WorkspaceNameLabel: namespace},
+			},
+		},
 		provider,
 	}
 	for _, object := range objects {
@@ -557,17 +618,23 @@ func TestDelegatedInferenceUsesPrivateGateway(t *testing.T) {
 		t.Fatal(err)
 	}
 	queries.grant = gatewaydb.DelegationGrant{
-		ID:             "grant-1",
-		ClientID:       "client-1",
-		UserID:         testUserID,
-		OrganizationID: pgtype.Text{String: testOrganizationID, Valid: true},
-		Scopes:         []string{"inference:use"},
-		Resources:      []string{issuer + "/api/inference/v1"},
-		Selection:      encoded,
+		ID:       "grant-1",
+		ClientID: "client-1",
+		UserID:   testUserID,
+		OrganizationID: pgtype.Text{
+			String: testOrganizationID,
+			Valid:  true,
+		},
+		Scopes:    []string{"inference:use"},
+		Resources: []string{issuer + "/api/inference/v1"},
+		Selection: encoded,
 	}
 	service.cfg.ExternalJWTIssuer = issuer
 	service.cfg.DelegationNamespace = "private"
-	service.delegationTarget = &url.URL{Scheme: "http", Host: "private.example:8080"}
+	service.delegationTarget = &url.URL{
+		Scheme: "http",
+		Host:   "private.example:8080",
+	}
 	service.delegationBodies = semaphore.NewWeighted(128 << 20)
 	service.externalJWTKeyfunc = func(*jwt.Token) (any, error) { return &key.PublicKey, nil }
 	claims := authorization.DelegationClaims{
@@ -601,21 +668,37 @@ func TestDelegatedInferenceUsesPrivateGateway(t *testing.T) {
 			Annotations: map[string]string{"agentz.accuknox.com/selection": fmt.Sprintf("%x", sha256.Sum256(encoded))},
 		}
 		conditions := []metav1.Condition{
-			{Type: "Accepted", Status: metav1.ConditionTrue, ObservedGeneration: 1},
-			{Type: "ResolvedRefs", Status: metav1.ConditionTrue, ObservedGeneration: 1},
+			{
+				Type:               "Accepted",
+				Status:             metav1.ConditionTrue,
+				ObservedGeneration: 1,
+			},
+			{
+				Type:               "ResolvedRefs",
+				Status:             metav1.ConditionTrue,
+				ObservedGeneration: 1,
+			},
 		}
 		objects := []ctrlclient.Object{
 			&gwv1.HTTPRoute{
 				ObjectMeta: metadata,
-				Status: gwv1.HTTPRouteStatus{RouteStatus: gwv1.RouteStatus{Parents: []gwv1.RouteParentStatus{{
-					ParentRef:      gwv1.ParentReference{Name: gwv1.ObjectName(gateway)},
-					ControllerName: "agentgateway.dev/agentgateway",
-					Conditions:     conditions,
-				}}}},
+				Status: gwv1.HTTPRouteStatus{
+					RouteStatus: gwv1.RouteStatus{
+						Parents: []gwv1.RouteParentStatus{{
+							ParentRef: gwv1.ParentReference{
+								Name: gwv1.ObjectName(gateway),
+							},
+							ControllerName: "agentgateway.dev/agentgateway",
+							Conditions:     conditions,
+						}},
+					},
+				},
 			},
 			&agw.AgentgatewayBackend{
 				ObjectMeta: metadata,
-				Status:     agw.AgentgatewayBackendStatus{Conditions: conditions},
+				Status: agw.AgentgatewayBackendStatus{
+					Conditions: conditions,
+				},
 			},
 		}
 		for _, object := range objects {
@@ -624,15 +707,17 @@ func TestDelegatedInferenceUsesPrivateGateway(t *testing.T) {
 			}
 		}
 	}
-	upstream := &delegationUpstream{response: &http.Response{
-		StatusCode: http.StatusOK,
-		Header: http.Header{
-			"Access-Control-Allow-Origin":      {"*"},
-			"Access-Control-Allow-Credentials": {"true"},
-			"Access-Control-Expose-Headers":    {"X-Private-Header"},
+	upstream := &delegationUpstream{
+		response: &http.Response{
+			StatusCode: http.StatusOK,
+			Header: http.Header{
+				"Access-Control-Allow-Origin":      {"*"},
+				"Access-Control-Allow-Credentials": {"true"},
+				"Access-Control-Expose-Headers":    {"X-Private-Header"},
+			},
+			Body: io.NopCloser(strings.NewReader(`{"choices":[]}`)),
 		},
-		Body: io.NopCloser(strings.NewReader(`{"choices":[]}`)),
-	}}
+	}
 	service.delegationTransport = upstream
 	body := fmt.Sprintf(`{"model":%q,"messages":[{"role":"user","content":"Hello!"}]}`, selection.Models[0].Id)
 	request := httptest.NewRequest(http.MethodPost, "/api/inference/v1/chat/completions", strings.NewReader(body))
@@ -656,10 +741,12 @@ func TestDelegatedInferenceUsesPrivateGateway(t *testing.T) {
 	if upstream.request.URL.Host != "private.example:8080" || upstream.request.URL.Path != "/delegations/grant-1/models/0/chat/completions" {
 		t.Fatalf("inference bypassed the configured private gateway: %s", upstream.request.URL)
 	}
-	route := &gwv1.HTTPRoute{ObjectMeta: metav1.ObjectMeta{
-		Name:      "d-grant-1-model-0",
-		Namespace: "private",
-	}}
+	route := &gwv1.HTTPRoute{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "d-grant-1-model-0",
+			Namespace: "private",
+		},
+	}
 	if err := service.k8sClient.Delete(t.Context(), route); err != nil {
 		t.Fatal(err)
 	}
@@ -682,8 +769,17 @@ func TestDelegationCORSMethodsHeadersAndMissingOrigins(t *testing.T) {
 		w.WriteHeader(http.StatusUnauthorized)
 	}))
 	cases := []delegationCORSCase{
-		{name: "native request", path: "/api/mcp", want: http.StatusUnauthorized},
-		{name: "empty origin", path: "/api/mcp", origins: []string{""}, want: http.StatusForbidden},
+		{
+			name: "native request",
+			path: "/api/mcp",
+			want: http.StatusUnauthorized,
+		},
+		{
+			name:    "empty origin",
+			path:    "/api/mcp",
+			origins: []string{""},
+			want:    http.StatusForbidden,
+		},
 		{
 			name:    "prefix spoof",
 			path:    "/api/inference/v1/models",
@@ -872,14 +968,16 @@ func TestEmptyDelegatedMCPDiscoveryAndRevocation(t *testing.T) {
 		t.Fatal(err)
 	}
 	issuer := "https://agentz.example"
-	queries := &delegationQueries{grant: gatewaydb.DelegationGrant{
-		ID:        "empty-grant",
-		ClientID:  "client",
-		UserID:    testUserID,
-		Scopes:    []string{"mcp:use"},
-		Resources: []string{issuer + "/api/mcp"},
-		Selection: []byte(`{"models":[],"mcp":[]}`),
-	}}
+	queries := &delegationQueries{
+		grant: gatewaydb.DelegationGrant{
+			ID:        "empty-grant",
+			ClientID:  "client",
+			UserID:    testUserID,
+			Scopes:    []string{"mcp:use"},
+			Resources: []string{issuer + "/api/mcp"},
+			Selection: []byte(`{"models":[],"mcp":[]}`),
+		},
+	}
 	service := sandboxTestService(t, queries)
 	service.cfg.ExternalJWTIssuer = issuer
 	service.delegationBodies = semaphore.NewWeighted(128 << 20)
@@ -908,8 +1006,13 @@ func TestEmptyDelegatedMCPDiscoveryAndRevocation(t *testing.T) {
 	defer server.Close()
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
-	client := mcpsdk.NewClient(&mcpsdk.Implementation{Name: "empty-grant-test", Version: "test"}, nil)
-	session, err := client.Connect(ctx, &mcpsdk.StreamableClientTransport{Endpoint: server.URL + "/api/mcp"}, nil)
+	client := mcpsdk.NewClient(&mcpsdk.Implementation{
+		Name:    "empty-grant-test",
+		Version: "test",
+	}, nil)
+	session, err := client.Connect(ctx, &mcpsdk.StreamableClientTransport{
+		Endpoint: server.URL + "/api/mcp",
+	}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -953,32 +1056,50 @@ func TestDelegatedMCPTransportBoundary(t *testing.T) {
 		t.Fatal(err)
 	}
 	issuer := "https://agentz.example"
-	queries := &delegationQueries{grant: gatewaydb.DelegationGrant{
-		ID:        "grant-1",
-		ClientID:  "client-1",
-		UserID:    testUserID,
-		Scopes:    []string{"mcp:use"},
-		Resources: []string{issuer + "/api/mcp"},
-		Selection: []byte(`{"models":[],"mcp":[]}`),
-	}}
+	queries := &delegationQueries{
+		grant: gatewaydb.DelegationGrant{
+			ID:        "grant-1",
+			ClientID:  "client-1",
+			UserID:    testUserID,
+			Scopes:    []string{"mcp:use"},
+			Resources: []string{issuer + "/api/mcp"},
+			Selection: []byte(`{"models":[],"mcp":[]}`),
+		},
+	}
 	queries.workspace = gatewaydb.Workspace{
 		ID:             testWorkspaceID,
 		OrganizationID: testOrganizationID,
 		State:          gatewaydb.WorkspaceStateReady,
 	}
-	queries.permissions = []gatewaydb.GatewayResolvePermissionsRow{{Active: true, Superadmin: true}}
-	queries.grant.OrganizationID = pgtype.Text{String: testOrganizationID, Valid: true}
+	queries.permissions = []gatewaydb.GatewayResolvePermissionsRow{{
+		Active:     true,
+		Superadmin: true,
+	}}
+	queries.grant.OrganizationID = pgtype.Text{
+		String: testOrganizationID,
+		Valid:  true,
+	}
 	service := sandboxTestService(t, queries)
 	namespace := agentzv1alpha1.ScopeNamespace(agentzv1alpha1.ResourceScopeWorkspace, testWorkspaceID)
 	connection := &agentzv1alpha1.MCPConnection{
-		ObjectMeta: metav1.ObjectMeta{Name: "selected", Namespace: namespace, UID: "mcp-original"},
-		Spec:       agentzv1alpha1.MCPConnectionSpec{Endpoint: agentzv1alpha1.MCPConnectionEndpoint{URL: "https://mcp.example/mcp"}},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "selected",
+			Namespace: namespace,
+			UID:       "mcp-original",
+		},
+		Spec: agentzv1alpha1.MCPConnectionSpec{
+			Endpoint: agentzv1alpha1.MCPConnectionEndpoint{
+				URL: "https://mcp.example/mcp",
+			},
+		},
 	}
 	objects := []ctrlclient.Object{
-		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
-			Name:   namespace,
-			Labels: map[string]string{agentzv1alpha1.WorkspaceNameLabel: namespace},
-		}},
+		&corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   namespace,
+				Labels: map[string]string{agentzv1alpha1.WorkspaceNameLabel: namespace},
+			},
+		},
 		connection,
 	}
 	for _, object := range objects {
@@ -1078,7 +1199,10 @@ func TestDelegatedMCPTransportBoundary(t *testing.T) {
 		}
 	}
 	service.cfg.DelegationNamespace = "private"
-	service.delegationTarget = &url.URL{Scheme: "http", Host: "private.example"}
+	service.delegationTarget = &url.URL{
+		Scheme: "http",
+		Host:   "private.example",
+	}
 	hash := sha256.Sum256(queries.grant.Selection)
 	metadata := metav1.ObjectMeta{
 		Name:        "d-grant-1-mcp",
@@ -1087,22 +1211,42 @@ func TestDelegatedMCPTransportBoundary(t *testing.T) {
 		Annotations: map[string]string{"agentz.accuknox.com/selection": fmt.Sprintf("%x", hash)},
 	}
 	conditions := []metav1.Condition{
-		{Type: "Accepted", Status: metav1.ConditionTrue, ObservedGeneration: 1},
-		{Type: "ResolvedRefs", Status: metav1.ConditionTrue, ObservedGeneration: 1},
-		{Type: "Attached", Status: metav1.ConditionTrue, ObservedGeneration: 1},
+		{
+			Type:               "Accepted",
+			Status:             metav1.ConditionTrue,
+			ObservedGeneration: 1,
+		},
+		{
+			Type:               "ResolvedRefs",
+			Status:             metav1.ConditionTrue,
+			ObservedGeneration: 1,
+		},
+		{
+			Type:               "Attached",
+			Status:             metav1.ConditionTrue,
+			ObservedGeneration: 1,
+		},
 	}
 	projections := []ctrlclient.Object{
 		&gwv1.HTTPRoute{
 			ObjectMeta: metadata,
-			Status: gwv1.HTTPRouteStatus{RouteStatus: gwv1.RouteStatus{Parents: []gwv1.RouteParentStatus{{
-				ParentRef:      gwv1.ParentReference{Name: "delegations"},
-				ControllerName: "agentgateway.dev/agentgateway",
-				Conditions:     conditions,
-			}}}},
+			Status: gwv1.HTTPRouteStatus{
+				RouteStatus: gwv1.RouteStatus{
+					Parents: []gwv1.RouteParentStatus{{
+						ParentRef: gwv1.ParentReference{
+							Name: "delegations",
+						},
+						ControllerName: "agentgateway.dev/agentgateway",
+						Conditions:     conditions,
+					}},
+				},
+			},
 		},
 		&agw.AgentgatewayBackend{
 			ObjectMeta: metadata,
-			Status:     agw.AgentgatewayBackendStatus{Conditions: conditions},
+			Status: agw.AgentgatewayBackendStatus{
+				Conditions: conditions,
+			},
 		},
 		&gwv1.HTTPRoute{
 			ObjectMeta: metav1.ObjectMeta{
@@ -1111,11 +1255,17 @@ func TestDelegatedMCPTransportBoundary(t *testing.T) {
 				Generation:  1,
 				Annotations: metadata.Annotations,
 			},
-			Status: gwv1.HTTPRouteStatus{RouteStatus: gwv1.RouteStatus{Parents: []gwv1.RouteParentStatus{{
-				ParentRef:      gwv1.ParentReference{Name: gwv1.ObjectName(mcp.GatewayName)},
-				ControllerName: "agentgateway.dev/agentgateway",
-				Conditions:     conditions,
-			}}}},
+			Status: gwv1.HTTPRouteStatus{
+				RouteStatus: gwv1.RouteStatus{
+					Parents: []gwv1.RouteParentStatus{{
+						ParentRef: gwv1.ParentReference{
+							Name: gwv1.ObjectName(mcp.GatewayName),
+						},
+						ControllerName: "agentgateway.dev/agentgateway",
+						Conditions:     conditions,
+					}},
+				},
+			},
 		},
 		&agw.AgentgatewayBackend{
 			ObjectMeta: metav1.ObjectMeta{
@@ -1124,7 +1274,9 @@ func TestDelegatedMCPTransportBoundary(t *testing.T) {
 				Generation:  1,
 				Annotations: metadata.Annotations,
 			},
-			Status: agw.AgentgatewayBackendStatus{Conditions: conditions},
+			Status: agw.AgentgatewayBackendStatus{
+				Conditions: conditions,
+			},
 		},
 		&agw.AgentgatewayPolicy{
 			ObjectMeta: metav1.ObjectMeta{
@@ -1133,11 +1285,15 @@ func TestDelegatedMCPTransportBoundary(t *testing.T) {
 				Generation:  1,
 				Annotations: metadata.Annotations,
 			},
-			Status: gwv1.PolicyStatus{Ancestors: []gwv1.PolicyAncestorStatus{{
-				AncestorRef:    gwv1.ParentReference{Name: gwv1.ObjectName(mcp.GatewayName)},
-				ControllerName: "agentgateway.dev/agentgateway",
-				Conditions:     conditions,
-			}}},
+			Status: gwv1.PolicyStatus{
+				Ancestors: []gwv1.PolicyAncestorStatus{{
+					AncestorRef: gwv1.ParentReference{
+						Name: gwv1.ObjectName(mcp.GatewayName),
+					},
+					ControllerName: "agentgateway.dev/agentgateway",
+					Conditions:     conditions,
+				}},
+			},
 		},
 	}
 	for _, object := range projections {
@@ -1148,15 +1304,17 @@ func TestDelegatedMCPTransportBoundary(t *testing.T) {
 	statuses := []int{http.StatusUnauthorized, http.StatusTooManyRequests, http.StatusFound}
 	for _, status := range statuses {
 		t.Run(fmt.Sprintf("upstream status %d keeps credentials private", status), func(t *testing.T) {
-			upstream := &delegationUpstream{response: &http.Response{
-				StatusCode: status,
-				Body:       io.NopCloser(strings.NewReader("private-credential")),
-				Header: http.Header{
-					"X-Diagnostic": {"private-credential"},
-					"Location":     {"https://other.example"},
+			upstream := &delegationUpstream{
+				response: &http.Response{
+					StatusCode: status,
+					Body:       io.NopCloser(strings.NewReader("private-credential")),
+					Header: http.Header{
+						"X-Diagnostic": {"private-credential"},
+						"Location":     {"https://other.example"},
+					},
+					Trailer: http.Header{"X-Diagnostic": {"private-credential"}},
 				},
-				Trailer: http.Header{"X-Diagnostic": {"private-credential"}},
-			}}
+			}
 			service.delegationTransport = upstream
 			request := httptest.NewRequest(http.MethodPost, "/api/mcp?api_key=private-credential", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"ping"}`))
 			request.Header.Set("Authorization", "Bearer "+signed)
@@ -1190,17 +1348,43 @@ func TestDelegatedMCPTransportBoundary(t *testing.T) {
 	}
 	t.Run("deleted session cannot be revived by upstream headers", func(t *testing.T) {
 		steps := []delegationMCPSessionStep{
-			{http.MethodPost, `{"jsonrpc":"2.0","id":1,"method":"initialize"}`, "", http.StatusOK, http.StatusOK},
-			{http.MethodDelete, "", "session", http.StatusAccepted, http.StatusAccepted},
-			{http.MethodPost, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`, "", http.StatusOK, http.StatusOK},
-			{http.MethodPost, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`, "session", http.StatusOK, http.StatusNotFound},
+			{
+				http.MethodPost,
+				`{"jsonrpc":"2.0","id":1,"method":"initialize"}`,
+				"",
+				http.StatusOK,
+				http.StatusOK,
+			},
+			{
+				http.MethodDelete,
+				"",
+				"session",
+				http.StatusAccepted,
+				http.StatusAccepted,
+			},
+			{
+				http.MethodPost,
+				`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`,
+				"",
+				http.StatusOK,
+				http.StatusOK,
+			},
+			{
+				http.MethodPost,
+				`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`,
+				"session",
+				http.StatusOK,
+				http.StatusNotFound,
+			},
 		}
 		for _, step := range steps {
-			service.delegationTransport = &delegationUpstream{response: &http.Response{
-				StatusCode: step.upstreamStatus,
-				Body:       io.NopCloser(strings.NewReader(`{}`)),
-				Header:     http.Header{"Mcp-Session-Id": {"session"}},
-			}}
+			service.delegationTransport = &delegationUpstream{
+				response: &http.Response{
+					StatusCode: step.upstreamStatus,
+					Body:       io.NopCloser(strings.NewReader(`{}`)),
+					Header:     http.Header{"Mcp-Session-Id": {"session"}},
+				},
+			}
 			request := httptest.NewRequest(step.method, "/api/mcp", strings.NewReader(step.body))
 			request.Header.Set("Authorization", "Bearer "+signed)
 			request.Header.Set("Mcp-Session-Id", step.session)

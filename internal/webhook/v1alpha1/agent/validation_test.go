@@ -27,17 +27,36 @@ func TestValidatorNixStoreResize(t *testing.T) {
 	t.Parallel()
 
 	tests := []nixStoreResizeCase{
-		{name: "increase", size: "20Gi"},
-		{name: "unchanged", size: "5Gi"},
-		{name: "equivalent units", size: "5120Mi"},
-		{name: "decrease", size: "4Gi", reject: true},
-		{name: "clear", size: "0", reject: true},
+		{
+			name: "increase",
+			size: "20Gi",
+		},
+		{
+			name: "unchanged",
+			size: "5Gi",
+		},
+		{
+			name: "equivalent units",
+			size: "5120Mi",
+		},
+		{
+			name:   "decrease",
+			size:   "4Gi",
+			reject: true,
+		},
+		{
+			name:   "clear",
+			size:   "0",
+			reject: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			oldAgt := &agentzv1alpha1.Agent{
-				ObjectMeta: metav1.ObjectMeta{Name: "agent"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "agent",
+				},
 				Spec: agentzv1alpha1.AgentSpec{
 					SandboxRef: agentzv1alpha1.ResourceReference{
 						Scope: agentzv1alpha1.ResourceScopeOrganisation,
@@ -82,10 +101,14 @@ func TestMetadataUpdatePreservesStoredDefaults(t *testing.T) {
 	ctx := admission.NewContextWithRequest(t.Context(), admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
 			Operation: admissionv1.Update,
-			OldObject: runtime.RawExtension{Raw: raw},
+			OldObject: runtime.RawExtension{
+				Raw: raw,
+			},
 		},
 	})
-	defaulter := NewDefaulter(nil, WebhookConfig{AgentDefaultImage: "agent:latest"})
+	defaulter := NewDefaulter(nil, WebhookConfig{
+		AgentDefaultImage: "agent:latest",
+	})
 	if err := defaulter.Default(ctx, updated); err != nil {
 		t.Fatal(err)
 	}

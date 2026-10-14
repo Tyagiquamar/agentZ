@@ -54,7 +54,9 @@ func newResolver() (*resolver, error) {
 	if err != nil {
 		return nil, fmt.Errorf("get kube config: %w", err)
 	}
-	c, err := ctrlclient.New(cfg, ctrlclient.Options{Scheme: scheme})
+	c, err := ctrlclient.New(cfg, ctrlclient.Options{
+		Scheme: scheme,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("create kube client: %w", err)
 	}

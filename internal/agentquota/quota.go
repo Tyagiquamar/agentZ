@@ -59,7 +59,10 @@ func Resources(defaults agentzv1alpha1.AgentDefaults) corev1.ResourceRequirement
 	case corev1.PodQOSBestEffort:
 	}
 
-	return corev1.ResourceRequirements{Limits: limits, Requests: requests}
+	return corev1.ResourceRequirements{
+		Limits:   limits,
+		Requests: requests,
+	}
 }
 
 // Measure calculates quota usage from live Agent resources. Kubernetes treats a
@@ -134,7 +137,10 @@ func Agents(ctx context.Context, reader client.Reader, tenantName string) ([]age
 // namespace.
 func TenantForNamespace(ctx context.Context, reader client.Reader, namespace string) (*agentzv1alpha1.Tenant, error) {
 	var ns corev1.Namespace
-	if err := reader.Get(ctx, client.ObjectKey{Name: namespace}, &ns); err != nil {
+	err := reader.Get(ctx, client.ObjectKey{
+		Name: namespace,
+	}, &ns)
+	if err != nil {
 		return nil, fmt.Errorf("get Agent namespace: %w", err)
 	}
 	tenantName := ns.Labels[agentzv1alpha1.TenantOrganizationIDLabel]
@@ -143,7 +149,10 @@ func TenantForNamespace(ctx context.Context, reader client.Reader, namespace str
 	}
 
 	var tenant agentzv1alpha1.Tenant
-	if err := reader.Get(ctx, client.ObjectKey{Name: tenantName}, &tenant); err != nil {
+	err = reader.Get(ctx, client.ObjectKey{
+		Name: tenantName,
+	}, &tenant)
+	if err != nil {
 		return nil, fmt.Errorf("get Tenant %q: %w", tenantName, err)
 	}
 	return &tenant, nil

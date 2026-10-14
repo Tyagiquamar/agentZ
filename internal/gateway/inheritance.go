@@ -128,7 +128,10 @@ func (s *Service) ReplaceWorkspaceInheritedResources(w http.ResponseWriter, r *h
 				"invalid_request",
 				"selected Organisation resource was not found",
 				errBadRequest,
-				gatewayapi.FieldError{Field: "names", Message: name + " was not found"},
+				gatewayapi.FieldError{
+					Field:   "names",
+					Message: name + " was not found",
+				},
 			),
 		)
 		return
@@ -333,7 +336,9 @@ func databaseOrganizationResourceKind(resource gatewaydb.PermissionResource) (ag
 
 func (s *Service) updateWorkspaceResourceSelection(ctx context.Context, row gatewaydb.Workspace, selected agentzv1alpha1.SelectedOrganizationResources) error {
 	workspace := &agentzv1alpha1.Workspace{}
-	err := s.k8sClient.Get(ctx, ctrlclient.ObjectKey{Name: row.Namespace}, workspace)
+	err := s.k8sClient.Get(ctx, ctrlclient.ObjectKey{
+		Name: row.Namespace,
+	}, workspace)
 	if err != nil {
 		return fmt.Errorf("get Workspace resource selection: %w", err)
 	}
@@ -441,8 +446,14 @@ func (s *Service) validateOrganizationResourceSelection(ctx context.Context, org
 	)
 	fields := []gatewayapi.FieldError{}
 	kinds := []organizationResourceSelectionKind{
-		{agentzv1alpha1.OrganizationResourceKindSkill, "selected_organization_resources.skills"},
-		{agentzv1alpha1.OrganizationResourceKindSandbox, "selected_organization_resources.sandboxes"},
+		{
+			agentzv1alpha1.OrganizationResourceKindSkill,
+			"selected_organization_resources.skills",
+		},
+		{
+			agentzv1alpha1.OrganizationResourceKindSandbox,
+			"selected_organization_resources.sandboxes",
+		},
 		{
 			agentzv1alpha1.OrganizationResourceKindMCPConnection,
 			"selected_organization_resources.mcp_connections",
@@ -476,7 +487,10 @@ func (s *Service) validateOrganizationResourceSelection(ctx context.Context, org
 				continue
 			}
 			seen[name] = struct{}{}
-			key := ctrlclient.ObjectKey{Namespace: namespace, Name: name}
+			key := ctrlclient.ObjectKey{
+				Namespace: namespace,
+				Name:      name,
+			}
 			var err error
 			switch item.kind {
 			case agentzv1alpha1.OrganizationResourceKindSkill:
@@ -507,9 +521,18 @@ func (s *Service) validateOrganizationResourceSelection(ctx context.Context, org
 
 func insertWorkspaceResourceSelection(ctx context.Context, q gatewaydb.Querier, workspaceID, organizationID string, selected agentzv1alpha1.SelectedOrganizationResources) error {
 	kinds := []workspaceInheritedResourceKind{
-		{agentzv1alpha1.OrganizationResourceKindSkill, gatewaydb.PermissionResourceSkill},
-		{agentzv1alpha1.OrganizationResourceKindSandbox, gatewaydb.PermissionResourceSandbox},
-		{agentzv1alpha1.OrganizationResourceKindMCPConnection, gatewaydb.PermissionResourceMcpConnection},
+		{
+			agentzv1alpha1.OrganizationResourceKindSkill,
+			gatewaydb.PermissionResourceSkill,
+		},
+		{
+			agentzv1alpha1.OrganizationResourceKindSandbox,
+			gatewaydb.PermissionResourceSandbox,
+		},
+		{
+			agentzv1alpha1.OrganizationResourceKindMCPConnection,
+			gatewaydb.PermissionResourceMcpConnection,
+		},
 		{
 			agentzv1alpha1.OrganizationResourceKindInferenceProvider,
 			gatewaydb.PermissionResourceInferenceProvider,

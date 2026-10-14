@@ -34,7 +34,10 @@ func TestValidatorValidateDeleteRejectsReferencedSandbox(t *testing.T) {
 				},
 			},
 			&agentzv1alpha1.Agent{
-				ObjectMeta: metav1.ObjectMeta{Name: "agent", Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "agent",
+					Namespace: "default",
+				},
 				Spec: agentzv1alpha1.AgentSpec{
 					SandboxRef: agentzv1alpha1.ResourceReference{
 						Scope: agentzv1alpha1.ResourceScopeOrganisation,
@@ -46,7 +49,10 @@ func TestValidatorValidateDeleteRejectsReferencedSandbox(t *testing.T) {
 		Build()
 
 	sandbox := &agentzv1alpha1.Sandbox{
-		ObjectMeta: metav1.ObjectMeta{Name: "sandbox", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "sandbox",
+			Namespace: "default",
+		},
 	}
 
 	_, err := NewValidator(client).ValidateDelete(context.Background(), sandbox)
@@ -72,7 +78,9 @@ func TestValidatorValidateCreateAllowsWorkspaceResources(t *testing.T) {
 		"organization-id",
 	)
 	workspace := &agentzv1alpha1.Workspace{
-		ObjectMeta: metav1.ObjectMeta{Name: workspaceName},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: workspaceName,
+		},
 		Spec: agentzv1alpha1.WorkspaceSpec{
 			WorkspaceID:    "workspace-id",
 			OrganizationID: "organization-id",
@@ -82,27 +90,42 @@ func TestValidatorValidateCreateAllowsWorkspaceResources(t *testing.T) {
 			},
 		},
 	}
-	workspaceNamespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
-		Name: workspaceName,
-		Labels: map[string]string{
-			agentzv1alpha1.WorkspaceNameLabel:        workspaceName,
-			agentzv1alpha1.TenantOrganizationIDLabel: organizationNamespace,
+	workspaceNamespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: workspaceName,
+			Labels: map[string]string{
+				agentzv1alpha1.WorkspaceNameLabel:        workspaceName,
+				agentzv1alpha1.TenantOrganizationIDLabel: organizationNamespace,
+			},
 		},
-	}}
+	}
 	skill := &agentzv1alpha1.Skill{
-		ObjectMeta: metav1.ObjectMeta{Name: "local-skill", Namespace: workspaceName},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "local-skill",
+			Namespace: workspaceName,
+		},
 	}
 	conn := &agentzv1alpha1.MCPConnection{
-		ObjectMeta: metav1.ObjectMeta{Name: "shared-mcp", Namespace: organizationNamespace},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "shared-mcp",
+			Namespace: organizationNamespace,
+		},
 		Status: agentzv1alpha1.MCPConnectionStatus{
 			ToolCatalogReady: true,
-			Tools:            []agentzv1alpha1.MCPConnectionTool{{Name: "search"}},
+			Tools: []agentzv1alpha1.MCPConnectionTool{{
+				Name: "search",
+			}},
 		},
 	}
 	provider := &agentzv1alpha1.InferenceProvider{
-		ObjectMeta: metav1.ObjectMeta{Name: "shared-provider", Namespace: organizationNamespace},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "shared-provider",
+			Namespace: organizationNamespace,
+		},
 		Spec: agentzv1alpha1.InferenceProviderSpec{
-			Models: []agentzv1alpha1.InferenceModel{{ID: "model"}},
+			Models: []agentzv1alpha1.InferenceModel{{
+				ID: "model",
+			}},
 		},
 	}
 	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(
@@ -118,7 +141,10 @@ func TestValidatorValidateCreateAllowsWorkspaceResources(t *testing.T) {
 		Model:    "model",
 	}
 	sandbox := &agentzv1alpha1.Sandbox{
-		ObjectMeta: metav1.ObjectMeta{Name: "sandbox", Namespace: workspaceName},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "sandbox",
+			Namespace: workspaceName,
+		},
 		Spec: agentzv1alpha1.SandboxSpec{
 			Skills: []agentzv1alpha1.ResourceReference{{
 				Scope: agentzv1alpha1.ResourceScopeWorkspace,
@@ -129,7 +155,9 @@ func TestValidatorValidateCreateAllowsWorkspaceResources(t *testing.T) {
 					Scope: agentzv1alpha1.ResourceScopeOrganisation,
 					Name:  "shared-mcp",
 				},
-				Tools: []agentzv1alpha1.SandboxMCPTool{{Name: "search"}},
+				Tools: []agentzv1alpha1.SandboxMCPTool{{
+					Name: "search",
+				}},
 			}},
 			Inference: agentzv1alpha1.SandboxInference{
 				Models:       []agentzv1alpha1.InferenceModelRef{model},

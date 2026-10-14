@@ -189,10 +189,15 @@ func RenderRuntime(provider *agentzv1alpha1.InferenceProvider, storeName string,
 	hasTransportPolicy := target.Policies.TLS != nil || target.Policies.Auth != nil
 	hasTransportPolicy = hasTransportPolicy || target.Policies.Transformation != nil
 	if !hasTransportPolicy {
-		backend.Spec.Policies = &agentgatewayv1alpha1.BackendFull{AI: target.Policies.AI}
+		backend.Spec.Policies = &agentgatewayv1alpha1.BackendFull{
+			AI: target.Policies.AI,
+		}
 	}
 	if len(target.secretKeys) == 0 {
-		runtime := Runtime{Backend: backend, SecretKeys: []string{}}
+		runtime := Runtime{
+			Backend:    backend,
+			SecretKeys: []string{},
+		}
 		if provider.Spec.Kind == agentzv1alpha1.InferenceProviderKindOpenAICodex {
 			runtime.AuthPolicy = RenderInferenceAuthPolicy(
 				provider.Namespace,
@@ -258,17 +263,25 @@ func RenderRuntime(provider *agentzv1alpha1.InferenceProvider, storeName string,
 					},
 				},
 			},
-			RefreshPolicy:   externalsecretsv1.RefreshPolicyPeriodic,
-			RefreshInterval: &metav1.Duration{Duration: refresh},
-			Data:            data,
+			RefreshPolicy: externalsecretsv1.RefreshPolicyPeriodic,
+			RefreshInterval: &metav1.Duration{
+				Duration: refresh,
+			},
+			Data: data,
 		},
 	}
 	if target.extractCredentials {
 		externalSecret.Spec.DataFrom = []externalsecretsv1.ExternalSecretDataFromRemoteRef{{
-			Extract: &externalsecretsv1.ExternalSecretDataRemoteRef{Key: path},
+			Extract: &externalsecretsv1.ExternalSecretDataRemoteRef{
+				Key: path,
+			},
 		}}
 	}
-	return Runtime{ExternalSecret: externalSecret, Backend: backend, SecretKeys: expected}, nil
+	return Runtime{
+		ExternalSecret: externalSecret,
+		Backend:        backend,
+		SecretKeys:     expected,
+	}, nil
 }
 
 // RenderInferenceAuthPolicy applies fail-closed target authorization and
@@ -293,7 +306,10 @@ func RenderInferenceAuthPolicy(namespace, backend string, section *gwv1.SectionN
 			APIVersion: agentgatewayv1alpha1.GroupVersion.String(),
 			Kind:       "AgentgatewayPolicy",
 		},
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
 		Spec: agentgatewayv1alpha1.AgentgatewayPolicySpec{
 			TargetRefs: []agentgatewayv1alpha1.LocalPolicyTargetReferenceWithSectionName{{
 				LocalPolicyTargetReference: agentgatewayv1alpha1.LocalPolicyTargetReference{
@@ -357,7 +373,9 @@ func RenderProviderTarget(provider *agentzv1alpha1.InferenceProvider, model stri
 			return ProviderTarget{}, err
 		}
 	case agentzv1alpha1.InferenceProviderKindOpenAI:
-		target.LLM.OpenAI = &agentgatewayv1alpha1.OpenAIConfig{Model: modelRef}
+		target.LLM.OpenAI = &agentgatewayv1alpha1.OpenAIConfig{
+			Model: modelRef,
+		}
 		target.secretKeys[secretAuthorization] = credentialAPIKey
 		auth.SecretRef = secretRef
 		target.LLM.Host = "api.openai.com"
@@ -373,7 +391,9 @@ func RenderProviderTarget(provider *agentzv1alpha1.InferenceProvider, model stri
 			target.LLM.PathPrefix = "/v1"
 		}
 	case agentzv1alpha1.InferenceProviderKindAnthropic:
-		target.LLM.Anthropic = &agentgatewayv1alpha1.AnthropicConfig{Model: modelRef}
+		target.LLM.Anthropic = &agentgatewayv1alpha1.AnthropicConfig{
+			Model: modelRef,
+		}
 		target.secretKeys[secretAuthorization] = credentialAPIKey
 		auth.SecretRef = secretRef
 		auth.Location = headerLocation("x-api-key", "")
@@ -390,7 +410,9 @@ func RenderProviderTarget(provider *agentzv1alpha1.InferenceProvider, model stri
 			target.LLM.PathPrefix = "/v1"
 		}
 	case agentzv1alpha1.InferenceProviderKindGemini:
-		target.LLM.Gemini = &agentgatewayv1alpha1.GeminiConfig{Model: modelRef}
+		target.LLM.Gemini = &agentgatewayv1alpha1.GeminiConfig{
+			Model: modelRef,
+		}
 		target.secretKeys[secretAuthorization] = credentialAPIKey
 		auth.SecretRef = secretRef
 		auth.Location = headerLocation("x-goog-api-key", "")
@@ -446,7 +468,10 @@ func RenderProviderTarget(provider *agentzv1alpha1.InferenceProvider, model stri
 		}
 		target.secretKeys[secretCredentials] = credentialServiceAccountJSON
 		kind := agentgatewayv1alpha1.GcpAuthTypeAccessToken
-		auth.GCP = &agentgatewayv1alpha1.GcpAuth{Type: &kind, SecretRef: secretRef}
+		auth.GCP = &agentgatewayv1alpha1.GcpAuth{
+			Type:      &kind,
+			SecretRef: secretRef,
+		}
 	case agentzv1alpha1.InferenceProviderKindBedrock:
 		target.LLM.Bedrock = &agentgatewayv1alpha1.BedrockConfig{
 			BedrockSettings: agentgatewayv1alpha1.BedrockSettings{
@@ -472,7 +497,9 @@ func RenderProviderTarget(provider *agentzv1alpha1.InferenceProvider, model stri
 		target.secretKeys[credentialSecretKey] = credentialSecretKey
 		target.extractCredentials = true
 		secretObjRef := secretRef.ObjectRef()
-		auth.AWS = &agentgatewayv1alpha1.AwsAuth{SecretRef: &secretObjRef}
+		auth.AWS = &agentgatewayv1alpha1.AwsAuth{
+			SecretRef: &secretObjRef,
+		}
 	case agentzv1alpha1.InferenceProviderKindAzure:
 		azure := provider.Spec.Azure
 		target.LLM.Azure = &agentgatewayv1alpha1.AzureConfig{
@@ -508,7 +535,9 @@ func RenderProviderTarget(provider *agentzv1alpha1.InferenceProvider, model stri
 			target.secretKeys[credentialTenantID] = credentialTenantID
 			target.secretKeys[credentialClientSecret] = credentialClientSecret
 			secretObjRef := secretRef.ObjectRef()
-			auth.Azure = &agentgatewayv1alpha1.AzureAuth{SecretRef: &secretObjRef}
+			auth.Azure = &agentgatewayv1alpha1.AzureAuth{
+				SecretRef: &secretObjRef,
+			}
 		}
 	case agentzv1alpha1.InferenceProviderKindOpenAICompatible,
 		agentzv1alpha1.InferenceProviderKindAnthropicCompatible:
@@ -519,8 +548,12 @@ func RenderProviderTarget(provider *agentzv1alpha1.InferenceProvider, model stri
 		if provider.Spec.Kind == agentzv1alpha1.InferenceProviderKindAnthropicCompatible {
 			custom = provider.Spec.AnthropicCompatible
 			formats = []agentgatewayv1alpha1.ProviderFormatConfig{
-				{Type: agentgatewayv1alpha1.ProviderFormatMessages},
-				{Type: agentgatewayv1alpha1.ProviderFormatAnthropicTokenCount},
+				{
+					Type: agentgatewayv1alpha1.ProviderFormatMessages,
+				},
+				{
+					Type: agentgatewayv1alpha1.ProviderFormatAnthropicTokenCount,
+				},
 			}
 		}
 		target.LLM.Custom = &agentgatewayv1alpha1.CustomProvider{
@@ -557,7 +590,9 @@ func RenderProviderTarget(provider *agentzv1alpha1.InferenceProvider, model stri
 				)
 			}
 			target.Policies.Transformation = &agentgatewayv1alpha1.Transformation{
-				Request: &agentgatewayv1alpha1.Transform{Set: set},
+				Request: &agentgatewayv1alpha1.Transform{
+					Set: set,
+				},
 			}
 		}
 		compatible := provider.Spec.Kind == agentzv1alpha1.InferenceProviderKindOpenAICompatible

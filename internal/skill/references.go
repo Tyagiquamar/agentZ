@@ -73,7 +73,10 @@ func ValidateReferences(ctx context.Context, reader client.Reader, namespace str
 			continue
 		}
 		var skill agentzv1alpha1.Skill
-		err = reader.Get(ctx, client.ObjectKey{Namespace: ns, Name: ref.Name}, &skill)
+		err = reader.Get(ctx, client.ObjectKey{
+			Namespace: ns,
+			Name:      ref.Name,
+		}, &skill)
 		switch {
 		case apierrors.IsNotFound(err):
 			fields = append(fields, field.NotFound(path.Child("name"), ref.Name))

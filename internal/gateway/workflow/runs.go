@@ -23,6 +23,7 @@ import (
 	"k8s.io/client-go/util/retry"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 
+	gatewaydb "github.com/accuknox/agentz/internal/gateway/db"
 	gatewayapi "github.com/accuknox/agentz/internal/gateway/openapi"
 	agentzv1alpha1 "github.com/accuknox/agentz/pkg/apis/agentz/v1alpha1"
 )
@@ -250,7 +251,10 @@ func ValidateRunWatchNames(runNames *[]gatewayapi.WorkflowRunName) []gatewayapi.
 
 // PatchRunStatus updates one running workflow run with a terminal phase.
 func PatchRunStatus(ctx context.Context, k8sClient ctrlclient.Client, ns string, agtName string, wfName string, runName string, req gatewayapi.PatchWorkflowRunStatusRequest, msg string) error {
-	key := types.NamespacedName{Namespace: ns, Name: strings.TrimSpace(runName)}
+	key := types.NamespacedName{
+		Namespace: ns,
+		Name:      strings.TrimSpace(runName),
+	}
 	phase := agentzv1alpha1.WorkflowRunPhase(req.Phase)
 	var resultErr error
 
@@ -312,7 +316,10 @@ func PatchRunStatus(ctx context.Context, k8sClient ctrlclient.Client, ns string,
 
 // PatchRunNodeStatus updates one workflow run node phase.
 func PatchRunNodeStatus(ctx context.Context, pool *pgxpool.Pool, k8sClient ctrlclient.Client, ns string, agtName string, wfName string, runName string, nodeName string, req gatewayapi.PatchWorkflowRunNodeStatusRequest, msg string) error {
-	key := types.NamespacedName{Namespace: ns, Name: strings.TrimSpace(runName)}
+	key := types.NamespacedName{
+		Namespace: ns,
+		Name:      strings.TrimSpace(runName),
+	}
 	phase := agentzv1alpha1.WorkflowRunNodePhase(req.Phase)
 	var resultErr error
 
@@ -341,18 +348,13 @@ func PatchRunNodeStatus(ctx context.Context, pool *pgxpool.Pool, k8sClient ctrlc
 				return nil
 			}
 
+			definition, err := gatewaydb.New(pool).GatewayChatExecutionDefinition(ctx, string(current.UID))
+			if err != nil {
+				return fmt.Errorf("read executing workflow definition: %w", err)
+			}
 			var workflow gatewayapi.Workflow
-			switch {
-			case current.Spec.Definition != nil:
-				if err := json.Unmarshal(current.Spec.Definition.Raw, &workflow); err != nil {
-					return fmt.Errorf("decode frozen workflow: %w", err)
-				}
-			default:
-				var err error
-				workflow, err = Get(ctx, pool, ns, agtName, wfName)
-				if err != nil {
-					return err
-				}
+			if err := json.Unmarshal(definition, &workflow); err != nil {
+				return fmt.Errorf("decode executing workflow definition: %w", err)
 			}
 
 			nodes := make([]agentzv1alpha1.WorkflowRunNodeStatus, 0, len(workflow.Nodes))
@@ -528,9 +530,11 @@ func CreateScheduledRun(ctx context.Context, k8sClient ctrlclient.Client, ns str
 			},
 		},
 		Spec: agentzv1alpha1.WorkflowRunSpec{
-			AgentName:      schedule.Spec.AgentName,
-			WorkflowName:   schedule.Spec.WorkflowName,
-			Inputs:         apiextensionsv1.JSON{Raw: schedule.Spec.Inputs.Raw},
+			AgentName:    schedule.Spec.AgentName,
+			WorkflowName: schedule.Spec.WorkflowName,
+			Inputs: apiextensionsv1.JSON{
+				Raw: schedule.Spec.Inputs.Raw,
+			},
 			TimeoutSeconds: schedule.Spec.TimeoutSeconds,
 			ScheduleRef: &corev1.LocalObjectReference{
 				Name: schedule.Name,
@@ -544,7 +548,10 @@ func CreateScheduledRun(ctx context.Context, k8sClient ctrlclient.Client, ns str
 // CreateWebhookRun creates one direct workflow run from a webhook request.
 func CreateWebhookRun(ctx context.Context, k8sClient ctrlclient.Client, ns string, agtName string, wfName string, inputs []byte, timeoutSeconds int32, apiKeyID string) (gatewayapi.WorkflowRunSummary, error) {
 	agent := &agentzv1alpha1.Agent{}
-	agentKey := ctrlclient.ObjectKey{Name: agtName, Namespace: ns}
+	agentKey := ctrlclient.ObjectKey{
+		Name:      agtName,
+		Namespace: ns,
+	}
 	if err := k8sClient.Get(ctx, agentKey, agent); err != nil {
 		return gatewayapi.WorkflowRunSummary{}, fmt.Errorf(
 			"get agent %q: %w",
@@ -577,9 +584,11 @@ func CreateWebhookRun(ctx context.Context, k8sClient ctrlclient.Client, ns strin
 			},
 		},
 		Spec: agentzv1alpha1.WorkflowRunSpec{
-			AgentName:      agtName,
-			WorkflowName:   wfName,
-			Inputs:         apiextensionsv1.JSON{Raw: inputs},
+			AgentName:    agtName,
+			WorkflowName: wfName,
+			Inputs: apiextensionsv1.JSON{
+				Raw: inputs,
+			},
 			TimeoutSeconds: timeoutSeconds,
 		},
 	}
@@ -723,7 +732,10 @@ func ListRuns(ctx context.Context, k8sClient ctrlclient.Client, ns string, agtNa
 // GetRun returns one workflow run detail.
 func GetRun(ctx context.Context, k8sClient ctrlclient.Client, ns string, agtName string, wfName string, runName string) (gatewayapi.WorkflowRunDetail, error) {
 	run := &agentzv1alpha1.WorkflowRun{}
-	key := types.NamespacedName{Namespace: ns, Name: strings.TrimSpace(runName)}
+	key := types.NamespacedName{
+		Namespace: ns,
+		Name:      strings.TrimSpace(runName),
+	}
 	if err := k8sClient.Get(ctx, key, run); err != nil {
 		return gatewayapi.WorkflowRunDetail{}, err
 	}
@@ -739,7 +751,10 @@ func GetRun(ctx context.Context, k8sClient ctrlclient.Client, ns string, agtName
 // DeleteRun deletes one workflow run.
 func DeleteRun(ctx context.Context, k8sClient ctrlclient.Client, ns string, agtName string, wfName string, runName string) error {
 	run := &agentzv1alpha1.WorkflowRun{}
-	key := types.NamespacedName{Namespace: ns, Name: strings.TrimSpace(runName)}
+	key := types.NamespacedName{
+		Namespace: ns,
+		Name:      strings.TrimSpace(runName),
+	}
 	if err := k8sClient.Get(ctx, key, run); err != nil {
 		return err
 	}
@@ -949,7 +964,10 @@ func workflowRunWebhookAPIKeyID(run *agentzv1alpha1.WorkflowRun) string {
 
 func getSchedule(ctx context.Context, k8sClient ctrlclient.Client, ns string, agtName string, wfName string, schName string) (*agentzv1alpha1.WorkflowSchedule, error) {
 	schedule := &agentzv1alpha1.WorkflowSchedule{}
-	key := types.NamespacedName{Namespace: ns, Name: strings.TrimSpace(schName)}
+	key := types.NamespacedName{
+		Namespace: ns,
+		Name:      strings.TrimSpace(schName),
+	}
 	if err := k8sClient.Get(ctx, key, schedule); err != nil {
 		return nil, err
 	}

@@ -99,7 +99,10 @@ func (s *Service) resolveInferenceProviderAccess(ctx context.Context, workspaceI
 		req.creatorFallback = authorization.OperationCreateInferenceProvider
 		req.isCreator = func(ctx context.Context, namespace, userID string) (bool, error) {
 			item := &agentzv1alpha1.InferenceProvider{}
-			err := s.k8sClient.Get(ctx, ctrlclient.ObjectKey{Name: name, Namespace: namespace}, item)
+			err := s.k8sClient.Get(ctx, ctrlclient.ObjectKey{
+				Name:      name,
+				Namespace: namespace,
+			}, item)
 			return item.Spec.CreatedByUserID == userID, err
 		}
 	}
@@ -295,7 +298,9 @@ func (s *Service) WatchInferenceProviders(w http.ResponseWriter, r *http.Request
 			return true
 		}
 		previous = items
-		raw, err := json.Marshal(gatewayapi.WatchInferenceProvidersEvent{Providers: items})
+		raw, err := json.Marshal(gatewayapi.WatchInferenceProvidersEvent{
+			Providers: items,
+		})
 		if err != nil {
 			apiutil.RecordRequestError(w, "internal_error", err)
 			return false
@@ -1143,7 +1148,10 @@ func (s *Service) UpdateInferenceProvider(w http.ResponseWriter, r *http.Request
 		return
 	}
 	current := &agentzv1alpha1.InferenceProvider{}
-	key := ctrlclient.ObjectKey{Namespace: ns, Name: providerName}
+	key := ctrlclient.ObjectKey{
+		Namespace: ns,
+		Name:      providerName,
+	}
 	if err := s.k8sClient.Get(r.Context(), key, current); err != nil {
 		apiutil.WriteError(w, r, mapKubeHTTPError("get inference provider", err))
 		return
@@ -1592,7 +1600,10 @@ func (s *Service) providerAndUsage(w http.ResponseWriter, r *http.Request, names
 		sandboxes: []string{},
 	}
 	provider := &agentzv1alpha1.InferenceProvider{}
-	key := ctrlclient.ObjectKey{Namespace: namespace, Name: strings.TrimSpace(providerName)}
+	key := ctrlclient.ObjectKey{
+		Namespace: namespace,
+		Name:      strings.TrimSpace(providerName),
+	}
 	if err := s.k8sClient.Get(r.Context(), key, provider); err != nil {
 		apiutil.WriteError(w, r, mapKubeHTTPError("get inference provider", err))
 		return nil, usage, false
@@ -1643,7 +1654,10 @@ func providerInputFromWrite(req gatewayapi.InferenceProviderWriteDiscriminator) 
 	input := providerInput{}
 	providerKind, err := req.Discriminator()
 	if err != nil {
-		return input, &inference.InputError{Field: "kind", Message: "provider kind is required"}
+		return input, &inference.InputError{
+			Field:   "kind",
+			Message: "provider kind is required",
+		}
 	}
 	switch providerKind {
 	case "OpenAI":
@@ -1797,7 +1811,10 @@ func providerInputFromWrite(req gatewayapi.InferenceProviderWriteDiscriminator) 
 			input.Credentials.APIKey = *value.Credentials.ApiKey
 		}
 	default:
-		return input, &inference.InputError{Field: "kind", Message: "unsupported provider kind"}
+		return input, &inference.InputError{
+			Field:   "kind",
+			Message: "unsupported provider kind",
+		}
 	}
 	return input, nil
 }
@@ -1896,7 +1913,10 @@ func providerFromInput(namespace, name string, input providerInput) *agentzv1alp
 			for _, header := range *value.Headers {
 				cfg.Headers = append(
 					cfg.Headers,
-					agentzv1alpha1.InferenceProviderHeader{Name: header.Name, Value: header.Value},
+					agentzv1alpha1.InferenceProviderHeader{
+						Name:  header.Name,
+						Value: header.Value,
+					},
 				)
 			}
 		}
@@ -2215,7 +2235,9 @@ func (s *Service) consumeInferenceOAuthTicket(ctx context.Context, namespace, ra
 			}
 		}
 	}
-	claimPayload, err := json.Marshal(inferenceOAuthTicketClaim{ConsumedAt: time.Now().UTC()})
+	claimPayload, err := json.Marshal(inferenceOAuthTicketClaim{
+		ConsumedAt: time.Now().UTC(),
+	})
 	if err != nil {
 		return inference.SubscriptionRecord{}, "", fmt.Errorf("marshal inference oauth ticket claim: %w", err)
 	}
@@ -2309,7 +2331,9 @@ func modelsFromAPI(models []gatewayapi.InferenceModel) []agentzv1alpha1.Inferenc
 			value.Modalities.Output[i] = agentzv1alpha1.InferenceModelModality(modality)
 		}
 		if model.CatalogProvider != nil {
-			value.Catalog = &agentzv1alpha1.InferenceModelCatalog{Provider: *model.CatalogProvider}
+			value.Catalog = &agentzv1alpha1.InferenceModelCatalog{
+				Provider: *model.CatalogProvider,
+			}
 		}
 		if model.Api != nil {
 			api := agentzv1alpha1.InferenceModelAPI(*model.Api)
@@ -2387,7 +2411,10 @@ func modelsToAPI(models []agentzv1alpha1.InferenceModel) []gatewayapi.InferenceM
 func writeInferenceIssues(w http.ResponseWriter, r *http.Request, issues []inference.Issue) {
 	fields := make([]gatewayapi.FieldError, 0, len(issues))
 	for _, issue := range issues {
-		fields = append(fields, gatewayapi.FieldError{Field: issue.Field, Message: issue.Message})
+		fields = append(fields, gatewayapi.FieldError{
+			Field:   issue.Field,
+			Message: issue.Message,
+		})
 	}
 	apiutil.WriteError(
 		w,

@@ -98,23 +98,32 @@ func TestValidatorChecksOnlyQuotaReductionsAgainstUsage(t *testing.T) {
 	}
 	tenantName := "tenant"
 	reader := fake.NewClientBuilder().WithScheme(scheme).WithObjects(
-		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
-			Name: "workspace",
-			Labels: map[string]string{
-				agentzv1alpha1.TenantOrganizationIDLabel: tenantName,
-			},
-		}},
-		&agentzv1alpha1.Agent{
-			ObjectMeta: metav1.ObjectMeta{Name: "agent", Namespace: "workspace"},
-			Spec: agentzv1alpha1.AgentSpec{Resources: corev1.ResourceRequirements{
-				Requests: corev1.ResourceList{
-					corev1.ResourceCPU:    resource.MustParse("750m"),
-					corev1.ResourceMemory: resource.MustParse("800Mi"),
+		&corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "workspace",
+				Labels: map[string]string{
+					agentzv1alpha1.TenantOrganizationIDLabel: tenantName,
 				},
-			}},
+			},
+		},
+		&agentzv1alpha1.Agent{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "agent",
+				Namespace: "workspace",
+			},
+			Spec: agentzv1alpha1.AgentSpec{
+				Resources: corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("750m"),
+						corev1.ResourceMemory: resource.MustParse("800Mi"),
+					},
+				},
+			},
 		},
 	).Build()
-	validator := &Validator{reader: reader}
+	validator := &Validator{
+		reader: reader,
+	}
 
 	oldTenant := tenantWithQuota(tenantName, "1")
 	reduced := oldTenant.DeepCopy()
@@ -139,7 +148,9 @@ func TestValidatorChecksOnlyQuotaReductionsAgainstUsage(t *testing.T) {
 
 func tenantWithQuota(name, cpu string) *agentzv1alpha1.Tenant {
 	return &agentzv1alpha1.Tenant{
-		ObjectMeta: metav1.ObjectMeta{Name: name},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
 		Spec: agentzv1alpha1.TenantSpec{
 			OrganizationID: "organization",
 			AgentQuota: &agentzv1alpha1.AgentQuota{
@@ -175,7 +186,9 @@ func tenantWithQuota(name, cpu string) *agentzv1alpha1.Tenant {
 					CellsPerRequest:          50_000,
 					ResponseBytes:            resource.MustParse("2Mi"),
 					PointsPerSeries:          500,
-					Timeout:                  metav1.Duration{Duration: 5 * time.Second},
+					Timeout: metav1.Duration{
+						Duration: 5 * time.Second,
+					},
 				},
 			},
 		},

@@ -141,7 +141,9 @@ func (s *Service) EnsureTenant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if apierrors.IsAlreadyExists(err) {
-		createdKey := ctrlclient.ObjectKey{Name: tenantName}
+		createdKey := ctrlclient.ObjectKey{
+			Name: tenantName,
+		}
 		err = s.k8sClient.Get(
 			r.Context(),
 			createdKey,
@@ -307,7 +309,9 @@ func loadTenant(s *Service) func(http.Handler) http.Handler {
 				ctx := context.WithValue(
 					r.Context(),
 					tenantContextKey{},
-					tenantRequest{tenant: tenant},
+					tenantRequest{
+						tenant: tenant,
+					},
 				)
 				next.ServeHTTP(w, r.WithContext(ctx))
 			case apierrors.IsNotFound(err):
@@ -998,7 +1002,9 @@ func (s *Service) findTenant(ctx context.Context, auth requestAuth) (*agentzv1al
 
 	if auth.tenantName != "" {
 		tenant := &agentzv1alpha1.Tenant{}
-		err := s.k8sClient.Get(ctx, ctrlclient.ObjectKey{Name: auth.tenantName}, tenant)
+		err := s.k8sClient.Get(ctx, ctrlclient.ObjectKey{
+			Name: auth.tenantName,
+		}, tenant)
 		if err != nil {
 			return nil, err
 		}
@@ -1011,7 +1017,9 @@ func (s *Service) findTenant(ctx context.Context, auth requestAuth) (*agentzv1al
 
 func (s *Service) tenantScopeForNamespace(ctx context.Context, namespace string) (*agentzv1alpha1.Tenant, string, error) {
 	tenant := &agentzv1alpha1.Tenant{}
-	err := s.k8sClient.Get(ctx, ctrlclient.ObjectKey{Name: namespace}, tenant)
+	err := s.k8sClient.Get(ctx, ctrlclient.ObjectKey{
+		Name: namespace,
+	}, tenant)
 	if err == nil {
 		if tenant.Status.Namespace != namespace {
 			return nil, "", apierrors.NewNotFound(
@@ -1026,7 +1034,9 @@ func (s *Service) tenantScopeForNamespace(ctx context.Context, namespace string)
 	}
 
 	workspace := &agentzv1alpha1.Workspace{}
-	err = s.k8sClient.Get(ctx, ctrlclient.ObjectKey{Name: namespace}, workspace)
+	err = s.k8sClient.Get(ctx, ctrlclient.ObjectKey{
+		Name: namespace,
+	}, workspace)
 	if err != nil {
 		return nil, "", err
 	}
@@ -1045,7 +1055,9 @@ func (s *Service) tenantScopeForNamespace(ctx context.Context, namespace string)
 		agentzv1alpha1.ResourceScopeOrganisation,
 		workspace.Spec.OrganizationID,
 	)
-	err = s.k8sClient.Get(ctx, ctrlclient.ObjectKey{Name: tenantName}, tenant)
+	err = s.k8sClient.Get(ctx, ctrlclient.ObjectKey{
+		Name: tenantName,
+	}, tenant)
 	if err != nil {
 		return nil, "", err
 	}

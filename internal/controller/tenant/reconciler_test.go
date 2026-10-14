@@ -39,17 +39,22 @@ func TestTenantIsolationExcludesPrivateRuntimes(t *testing.T) {
 		Scheme:                         scheme,
 		ManagerServiceAccountNamespace: "custom-system",
 	}
-	tenant := &agentzv1alpha1.Tenant{ObjectMeta: metav1.ObjectMeta{
-		Name: "org-05d3f392d8021c42b0434f9f5f20eac6",
-		UID:  "tenant-uid",
-	}}
+	tenant := &agentzv1alpha1.Tenant{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "org-05d3f392d8021c42b0434f9f5f20eac6",
+			UID:  "tenant-uid",
+		},
+	}
 	err := r.reconcileIsolationPolicy(context.Background(), tenant, tenant.Name)
 	if err != nil {
 		t.Fatalf("reconcileIsolationPolicy() error = %v", err)
 	}
 
 	policy := &ciliumv2.CiliumNetworkPolicy{}
-	key := client.ObjectKey{Name: agentzv1alpha1.TenantIsolationPolicyName, Namespace: tenant.Name}
+	key := client.ObjectKey{
+		Name:      agentzv1alpha1.TenantIsolationPolicyName,
+		Namespace: tenant.Name,
+	}
 	if err := c.Get(context.Background(), key, policy); err != nil {
 		t.Fatalf("get CiliumNetworkPolicy: %v", err)
 	}
@@ -71,7 +76,10 @@ func TestTenantIsolationExcludesPrivateRuntimes(t *testing.T) {
 		})
 	}
 	baseline := &ciliumv2.CiliumNetworkPolicy{}
-	key = client.ObjectKey{Name: "runtime-isolation", Namespace: tenant.Name}
+	key = client.ObjectKey{
+		Name:      "runtime-isolation",
+		Namespace: tenant.Name,
+	}
 	if err := c.Get(t.Context(), key, baseline); err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +151,10 @@ func TestTenantChangePredicate(t *testing.T) {
 			tt.name,
 			func(t *testing.T) {
 				t.Parallel()
-				e := event.UpdateEvent{ObjectOld: tt.oldTenant, ObjectNew: tt.newTenant}
+				e := event.UpdateEvent{
+					ObjectOld: tt.oldTenant,
+					ObjectNew: tt.newTenant,
+				}
 				if got := p.Update(e); got != tt.want {
 					t.Fatalf("Update() = %v, want %v", got, tt.want)
 				}
@@ -157,8 +168,10 @@ func tenantForPredicate(generation int64, identity, unrelated string) *agentzv1a
 	if identity != "" {
 		labels[agentzv1alpha1.TenantOrganizationIDLabel] = identity
 	}
-	return &agentzv1alpha1.Tenant{ObjectMeta: metav1.ObjectMeta{
-		Generation: generation,
-		Labels:     labels,
-	}}
+	return &agentzv1alpha1.Tenant{
+		ObjectMeta: metav1.ObjectMeta{
+			Generation: generation,
+			Labels:     labels,
+		},
+	}
 }

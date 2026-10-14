@@ -55,7 +55,9 @@ var _ admission.Validator[*agentzv1alpha1.MCPConnection] = &Validator{}
 
 // NewValidator builds an MCPConnection validator.
 func NewValidator(kubeClient client.Client) *Validator {
-	return &Validator{kubeClient: kubeClient}
+	return &Validator{
+		kubeClient: kubeClient,
+	}
 }
 
 // Validate checks one MCPConnection resource against the admission rules.
