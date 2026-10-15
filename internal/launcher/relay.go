@@ -336,8 +336,8 @@ func (installed *installation) forwardOAuth(w http.ResponseWriter, r *http.Reque
 	switch r.URL.Path {
 	case "/oauth/device_authorization":
 		path = "/api/auth/device/code"
-		form.Set("scope", "openid profile email offline_access inference:use mcp:use")
-		form["resource"] = []string{installed.upstream.String() + "/api/inference/v1", installed.upstream.String() + "/api/mcp"}
+		form.Set("scope", "openid profile email offline_access inference:use")
+		form.Set("resource", installed.upstream.String()+"/api/inference/v1")
 		form.Del("surface")
 	case "/oauth/revoke":
 		path = "/api/auth/oauth2/revoke"
