@@ -28,7 +28,11 @@ KUBECTL ?= kubectl
 KUSTOMIZE ?= kustomize
 CONTROLLER_GEN ?= controller-gen
 
-GO_PKGS := ./cmd ./hack/... ./internal/... ./pkg/...
+# Codex 0.162.1 protocol schemas, including experimental gateway OAuth.
+CODEX_SOURCE_URL := https://raw.githubusercontent.com/openai/codex/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs
+CODEX_SCHEMA_URL := $(CODEX_SOURCE_URL)/app-server-protocol/schema/json
+
+GO_PKGS := ./cmd/... ./hack/... ./internal/... ./pkg/...
 
 .PHONY: all
 all: generate lint build
@@ -39,6 +43,7 @@ generate:
 	sqlc generate
 	go run ./hack/inference/generate_providers.go
 	go run ./hack/openapi/generate_opencode_gateway.go
+	$(MAKE) generate-codex
 	oapi-codegen \
 		--include-tags coding,agents,tenants,workspaces,event-trail,lens,secrets,sandboxes,inference,skills,mcp-connections,workflows,workflow-schedules,workflow-runs,workflow-webhooks,chat-sessions,session,sessions,event,global,config,project,permission,question,pty,dashboards \
 		-config oapi-codegen.gateway.yaml openapi/gateway.yaml
@@ -51,6 +56,18 @@ generate:
 	cp deploy/kustomize/crd/bases/*.yaml deploy/helm/charts/manager/crds/
 	cd web && bun run gen:openapi-client
 	cd opencode/config && bun run gen:openapi-client
+
+.PHONY: generate-codex
+generate-codex:
+	curl --fail --silent --show-error --location \
+		$(CODEX_SOURCE_URL)/models-manager/prompt.md \
+		-o internal/launcher/codex_prompt.gen.md
+	go run github.com/atombender/go-jsonschema@981317255fca \
+		--only-models --struct-name-from-title --tags json \
+		-p launcher -o internal/launcher/codex_protocol.gen.go \
+		$(CODEX_SCHEMA_URL)/v1/InitializeParams.json \
+		$(CODEX_SCHEMA_URL)/v2/GatewayOAuthReadResponse.json \
+		$(CODEX_SCHEMA_URL)/v2/GatewayOAuthChangedNotification.json
 
 .PHONY: fmt
 fmt:

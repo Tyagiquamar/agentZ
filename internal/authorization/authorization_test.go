@@ -313,7 +313,11 @@ func TestDelegationRequiresWorkspaceAuthority(t *testing.T) {
 			}
 			cases := []delegationPermissionCase{
 				{name: "no grants", scope: scope},
-				{name: "read alone", rows: []gatewaydb.GatewayResolvePermissionsRow{read}, scope: scope},
+				{
+					name:  "read alone",
+					rows:  []gatewaydb.GatewayResolvePermissionsRow{read},
+					scope: scope,
+				},
 				{
 					name:  "delegate alone",
 					want:  true,
@@ -337,14 +341,22 @@ func TestDelegationRequiresWorkspaceAuthority(t *testing.T) {
 					scope: scope,
 				},
 				{name: "workspace admin", rows: workspaceAdmin, scope: scope, want: true},
-				{name: "workspace admin cannot cross workspace", rows: workspaceAdmin, scope: foreignWorkspace},
+				{
+					name:  "workspace admin cannot cross workspace",
+					rows:  workspaceAdmin,
+					scope: foreignWorkspace,
+				},
 				{name: "superadmin", rows: superadmin, scope: scope, want: true},
 				{
 					name:  "organization delegation is unavailable",
 					rows:  superadmin,
 					scope: authorization.Scope{OrganizationID: "organization-a"},
 				},
-				{name: "superadmin cannot cross organization", rows: superadmin, scope: foreignOrganization},
+				{
+					name:  "superadmin cannot cross organization",
+					rows:  superadmin,
+					scope: foreignOrganization,
+				},
 				{
 					name:  "inactive superadmin",
 					rows:  []gatewaydb.GatewayResolvePermissionsRow{{Superadmin: true}},
@@ -487,8 +499,12 @@ func TestAgentCapabilities(t *testing.T) {
 				if got != tt.want {
 					t.Errorf("AgentCapabilities() = %#v, want %#v", got, tt.want)
 				}
-				if len(tt.shares) > 0 && got.CoversShare(tt.shares) != tt.wantCoversShare {
-					t.Errorf("CoversShare() = %t, want %t", got.CoversShare(tt.shares), tt.wantCoversShare)
+				if len(tt.shares) == 0 {
+					return
+				}
+				covered := got.CoversShare(tt.shares)
+				if covered != tt.wantCoversShare {
+					t.Errorf("CoversShare() = %t, want %t", covered, tt.wantCoversShare)
 				}
 			},
 		)

@@ -211,13 +211,13 @@ func (s *service) runGit(ctx context.Context, req GitRequest) (gatewayapi.Coding
 		if err != nil {
 			return result, err
 		}
-		for _, record := range strings.Split(raw, "\x00\x00") {
+		for record := range strings.SplitSeq(raw, "\x00\x00") {
 			if record == "" {
 				continue
 			}
 			tree := gatewayapi.CodingDiscoveredWorktree{Available: true}
 			var directory string
-			for _, field := range strings.Split(record, "\x00") {
+			for field := range strings.SplitSeq(record, "\x00") {
 				key, value, _ := strings.Cut(field, " ")
 				switch key {
 				case "worktree":
@@ -275,7 +275,7 @@ func (s *service) runGit(ctx context.Context, req GitRequest) (gatewayapi.Coding
 		if err != nil {
 			return result, err
 		}
-		for _, line := range strings.Split(strings.TrimSuffix(raw, "\n"), "\n") {
+		for line := range strings.SplitSeq(strings.TrimSuffix(raw, "\n"), "\n") {
 			fields := strings.Split(line, "\x00")
 			if len(fields) != 4 || fields[3] != "" {
 				continue
@@ -364,7 +364,7 @@ func (s *service) runGit(ctx context.Context, req GitRequest) (gatewayapi.Coding
 		if err != nil {
 			return result, err
 		}
-		for _, entry := range strings.Split(files, "\x00") {
+		for entry := range strings.SplitSeq(files, "\x00") {
 			if strings.HasPrefix(entry, "160000 ") {
 				return result, errors.New("submodules are not supported yet")
 			}

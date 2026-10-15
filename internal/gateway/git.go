@@ -257,7 +257,9 @@ func (s *Service) ListCodingRepositories(w http.ResponseWriter, r *http.Request,
 	if params.Query != nil {
 		query = strings.ToLower(strings.TrimSpace(*params.Query))
 	}
-	result := gatewayapi.CodingRepositoryPage{Repositories: []gatewayapi.CodingRepositoryItem{}}
+	result := gatewayapi.CodingRepositoryPage{
+		Repositories: []gatewayapi.CodingRepositoryItem{},
+	}
 	seen := make(map[int64]bool)
 	for repo, err := range identity.repositories(r.Context()) {
 		if err != nil {

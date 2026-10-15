@@ -37,17 +37,6 @@ export const zAppTraceChartResponse = z.object({
   points: z.array(zAppTraceChartPoint),
 })
 
-export const zDelegationModel = z.object({
-  id: z.string().min(1),
-  workspace_id: z.string().min(1),
-  namespace: z.string().min(1),
-  provider: z.string().min(1),
-  provider_display_name: z.string(),
-  uid: z.string().min(1),
-  model: z.string().min(1),
-  model_display_name: z.string(),
-})
-
 export const zDelegationMcp = z.object({
   id: z.string().min(1),
   workspace_id: z.string().min(1),
@@ -57,11 +46,6 @@ export const zDelegationMcp = z.object({
   tools: z.array(z.string().min(1)),
   prompts: z.array(z.string().min(1)),
   resources: z.array(z.string().min(1)),
-})
-
-export const zDelegationCatalog = z.object({
-  models: z.array(zDelegationModel),
-  mcp: z.array(zDelegationMcp),
 })
 
 export const zChatSessionKind = z.enum(["chat", "workflow_run"])
@@ -118,6 +102,10 @@ export const zChatInputUpdate = z.object({
     error: "Invalid value: Expected int64 to be <= 9223372036854775807",
   }),
   action: z.enum(["remove", "retry"]),
+})
+
+export const zWatchExternalAgentsEvent = z.object({
+  revision: z.string(),
 })
 
 export const zWatchChatSessionsEvent = z.object({
@@ -474,6 +462,7 @@ export const zWorkspaceCapabilities = z.object({
   inference_providers: zResourceCapabilities,
   inference_pools: zResourceCapabilities,
   api_keys: zResourceCapabilities,
+  external_agents: zResourceCapabilities,
   observability: zResourceCapabilities,
 })
 
@@ -1835,6 +1824,12 @@ export const zInferenceProviderKind = z.enum([
 
 export const zInferenceModelApi = z.enum(["ChatCompletions", "Responses", "Messages"])
 
+export const zDelegationApiCompatibility = z.object({
+  api: zInferenceModelApi,
+  support: z.enum(["native", "translated", "unsupported"]),
+  warning: z.string(),
+})
+
 export const zInferenceModelModality = z.enum(["text", "audio", "image", "video", "pdf"])
 
 export const zInferenceModelCapabilities = z.object({
@@ -1863,6 +1858,24 @@ export const zInferenceModel = z.object({
   limits: zInferenceModelLimits,
   api: zInferenceModelApi.optional(),
   catalog_provider: z.string().min(1).max(128).optional(),
+})
+
+export const zDelegationModel = z.object({
+  model_info: zInferenceModel.optional(),
+  api_compatibility: z.array(zDelegationApiCompatibility).optional(),
+  id: z.string().min(1),
+  workspace_id: z.string().min(1),
+  namespace: z.string().min(1),
+  provider: z.string().min(1),
+  provider_display_name: z.string(),
+  uid: z.string().min(1),
+  model: z.string().min(1),
+  model_display_name: z.string(),
+})
+
+export const zDelegationCatalog = z.object({
+  models: z.array(zDelegationModel),
+  mcp: z.array(zDelegationMcp),
 })
 
 export const zInferenceProviderHeader = z.object({
@@ -4090,6 +4103,15 @@ export const zGetAppMcpGraphQuery = z.object({
  */
 export const zGetAppMcpGraphResponse = zAppMcpGraphResponse
 
+export const zWatchExternalAgentsHeaders = z.object({
+  "X-AgentZ-Workspace-ID": z.string().min(1).max(128).optional(),
+})
+
+/**
+ * Workspace external agent change notifications.
+ */
+export const zWatchExternalAgentsResponse = zWatchExternalAgentsEvent
+
 export const zGetDelegationCatalogHeaders = z.object({
   "X-AgentZ-Workspace-ID": z.string().min(1).max(128).optional(),
 })
@@ -5388,6 +5410,11 @@ export const zListInferenceModelSuggestionsQuery = z.object({
  * Model suggestions with cache provenance.
  */
 export const zListInferenceModelSuggestionsResponse = zInferenceModelSuggestions
+
+/**
+ * Approved models in the immutable grant's order, with current API compatibility.
+ */
+export const zGetDelegatedCatalogResponse = zDelegationCatalog
 
 export const zListInferencePoolsHeaders = z.object({
   "X-AgentZ-Workspace-ID": z.string(),

@@ -72,8 +72,16 @@ func TestResolvePoolContract(t *testing.T) {
 	pool := &agentzv1alpha1.InferencePool{
 		ObjectMeta: metav1.ObjectMeta{Name: "pool", Namespace: "default"},
 		Spec: agentzv1alpha1.InferencePoolSpec{Members: []agentzv1alpha1.InferencePoolMember{
-			{Scope: agentzv1alpha1.ResourceScopeOrganisation, Provider: primary.Name, Model: "model"},
-			{Scope: agentzv1alpha1.ResourceScopeOrganisation, Provider: secondary.Name, Model: "model"},
+			{
+				Scope:    agentzv1alpha1.ResourceScopeOrganisation,
+				Provider: primary.Name,
+				Model:    "model",
+			},
+			{
+				Scope:    agentzv1alpha1.ResourceScopeOrganisation,
+				Provider: secondary.Name,
+				Model:    "model",
+			},
 		}},
 	}
 	definition, issues, err := ResolvePool(context.Background(), reader, pool)
@@ -133,8 +141,16 @@ func TestResolvePoolRejectsUnsupportedAPIConversion(t *testing.T) {
 	pool := &agentzv1alpha1.InferencePool{
 		ObjectMeta: metav1.ObjectMeta{Name: "pool", Namespace: "default"},
 		Spec: agentzv1alpha1.InferencePoolSpec{Members: []agentzv1alpha1.InferencePoolMember{
-			{Scope: agentzv1alpha1.ResourceScopeOrganisation, Provider: primary.Name, Model: "model"},
-			{Scope: agentzv1alpha1.ResourceScopeOrganisation, Provider: secondary.Name, Model: "model"},
+			{
+				Scope:    agentzv1alpha1.ResourceScopeOrganisation,
+				Provider: primary.Name,
+				Model:    "model",
+			},
+			{
+				Scope:    agentzv1alpha1.ResourceScopeOrganisation,
+				Provider: secondary.Name,
+				Model:    "model",
+			},
 		}},
 	}
 	_, issues, err := ResolvePool(context.Background(), reader, pool)
@@ -171,23 +187,67 @@ func TestResolvePoolRejectsInvalidMembership(t *testing.T) {
 		{
 			name: "too many",
 			members: []agentzv1alpha1.InferencePoolMember{
-				{Scope: agentzv1alpha1.ResourceScopeOrganisation, Provider: "provider", Model: "1"},
-				{Scope: agentzv1alpha1.ResourceScopeOrganisation, Provider: "provider", Model: "2"},
-				{Scope: agentzv1alpha1.ResourceScopeOrganisation, Provider: "provider", Model: "3"},
-				{Scope: agentzv1alpha1.ResourceScopeOrganisation, Provider: "provider", Model: "4"},
-				{Scope: agentzv1alpha1.ResourceScopeOrganisation, Provider: "provider", Model: "5"},
-				{Scope: agentzv1alpha1.ResourceScopeOrganisation, Provider: "provider", Model: "6"},
-				{Scope: agentzv1alpha1.ResourceScopeOrganisation, Provider: "provider", Model: "7"},
-				{Scope: agentzv1alpha1.ResourceScopeOrganisation, Provider: "provider", Model: "8"},
-				{Scope: agentzv1alpha1.ResourceScopeOrganisation, Provider: "provider", Model: "9"},
+				{
+					Scope:    agentzv1alpha1.ResourceScopeOrganisation,
+					Provider: "provider",
+					Model:    "1",
+				},
+				{
+					Scope:    agentzv1alpha1.ResourceScopeOrganisation,
+					Provider: "provider",
+					Model:    "2",
+				},
+				{
+					Scope:    agentzv1alpha1.ResourceScopeOrganisation,
+					Provider: "provider",
+					Model:    "3",
+				},
+				{
+					Scope:    agentzv1alpha1.ResourceScopeOrganisation,
+					Provider: "provider",
+					Model:    "4",
+				},
+				{
+					Scope:    agentzv1alpha1.ResourceScopeOrganisation,
+					Provider: "provider",
+					Model:    "5",
+				},
+				{
+					Scope:    agentzv1alpha1.ResourceScopeOrganisation,
+					Provider: "provider",
+					Model:    "6",
+				},
+				{
+					Scope:    agentzv1alpha1.ResourceScopeOrganisation,
+					Provider: "provider",
+					Model:    "7",
+				},
+				{
+					Scope:    agentzv1alpha1.ResourceScopeOrganisation,
+					Provider: "provider",
+					Model:    "8",
+				},
+				{
+					Scope:    agentzv1alpha1.ResourceScopeOrganisation,
+					Provider: "provider",
+					Model:    "9",
+				},
 			},
 			field: "members",
 		},
 		{
 			name: "duplicate",
 			members: []agentzv1alpha1.InferencePoolMember{
-				{Scope: agentzv1alpha1.ResourceScopeOrganisation, Provider: "provider", Model: "model"},
-				{Scope: agentzv1alpha1.ResourceScopeOrganisation, Provider: "provider", Model: "model"},
+				{
+					Scope:    agentzv1alpha1.ResourceScopeOrganisation,
+					Provider: "provider",
+					Model:    "model",
+				},
+				{
+					Scope:    agentzv1alpha1.ResourceScopeOrganisation,
+					Provider: "provider",
+					Model:    "model",
+				},
 			},
 			field: "members.1",
 		},

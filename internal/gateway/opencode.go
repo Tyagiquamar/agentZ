@@ -1168,7 +1168,7 @@ func (s *Service) ptyWebsocketAuth(next http.Handler) http.Handler {
 				apiutil.WriteError(w, r, resourceForbidden(errors.New("WebSocket origin is not allowed")))
 				return
 			}
-			for _, protocol := range strings.Split(r.Header.Get("Sec-WebSocket-Protocol"), ",") {
+			for protocol := range strings.SplitSeq(r.Header.Get("Sec-WebSocket-Protocol"), ",") {
 				token, ok := strings.CutPrefix(strings.TrimSpace(protocol), "agentz.bearer.")
 				if ok {
 					r.Header.Set("Authorization", "Bearer "+token)

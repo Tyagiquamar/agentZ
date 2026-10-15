@@ -29,6 +29,8 @@ inference:
       app.kubernetes.io/managed-by: agentz
 
 delegation:
+  # Standalone delegation namespace. Umbrella installs derive the gateway's
+  # default namespace; set this to match when overriding the gateway name.
   namespace: ""
 
 replicaCount: 1

@@ -3,8 +3,6 @@
 import {
   Fragment,
   useId,
-  useLayoutEffect,
-  useRef,
   useState,
   type ComponentType,
   type ComponentProps,
@@ -26,7 +24,7 @@ import {
   CommandList,
 } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { TruncatedText } from "@/components/ui/tooltip"
 
 type MultiSelectDropdownOptionIdentity =
   | {
@@ -130,7 +128,7 @@ function MultiSelectDropdown({
             return (
               <span className="flex min-w-0 items-center gap-1" key={item}>
                 {index > 0 ? ", " : null}
-                <TruncatedOptionText className="min-w-0 flex-1" value={option.label} />
+                <TruncatedText className="min-w-0 flex-1" value={option.label} />
                 {option.badge ? (
                   <span className="inline-flex max-w-40 min-w-0 shrink-[10] items-center gap-1 truncate text-muted-foreground">
                     <span aria-hidden="true">·</span>
@@ -233,7 +231,7 @@ function MultiSelectDropdown({
                         <Icon aria-hidden="true" />
                       ) : null}
                       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                        <TruncatedOptionText value={option.label} />
+                        <TruncatedText value={option.label} />
                         {option.description ? (
                           <span className="text-xs wrap-anywhere whitespace-normal text-muted-foreground">
                             {option.description}
@@ -261,35 +259,6 @@ function MultiSelectDropdown({
         {footer}
       </PopoverContent>
     </Popover>
-  )
-}
-
-function TruncatedOptionText({ className, value }: { className?: string; value: string }) {
-  const ref = useRef<HTMLSpanElement>(null)
-  const [truncated, setTruncated] = useState(false)
-
-  useLayoutEffect(() => {
-    const element = ref.current
-    if (!element) return
-    const measure = () => setTruncated(element.scrollWidth > element.clientWidth + 1)
-    const observer = new ResizeObserver(measure)
-    observer.observe(element)
-    measure()
-    return () => observer.disconnect()
-  }, [value])
-
-  const label = (
-    <span className={cn("truncate", className)} ref={ref} tabIndex={truncated ? 0 : undefined}>
-      {value}
-    </span>
-  )
-  if (!truncated) return label
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>{label}</TooltipTrigger>
-      <TooltipContent>{value}</TooltipContent>
-    </Tooltip>
   )
 }
 

@@ -15,6 +15,7 @@ import {
   ShieldCheck,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import {
   Field,
   FieldDescription,
@@ -36,7 +37,8 @@ import {
   SelectGroup,
 } from "@/components/ui/select"
 import type { DelegationCatalog } from "@/lib/gateway/client"
-import { approveConsentAction, delegationWorkspaceAction } from "./actions"
+import type { DelegationRequest } from "@/lib/delegation"
+import { approveConsentAction, delegationWorkspaceAction, denyDeviceConsentAction } from "./actions"
 import { AuthorizationState } from "./authorization-state"
 
 // Only the current continuation may navigate. Automatic redirects would also
@@ -56,29 +58,47 @@ const identityScopes = [
 const mcpKinds = ["tools", "prompts", "resources"] as const
 
 type ConsentProps = {
-  oauthQuery: string
-  client: { name: string; owner: string | null; callback: string }
+  request: DelegationRequest
+  client: { name: string; owner: string | null; callback: string; agent?: "claude" | "codex" }
   user: { name: string; email: string; image?: string | null }
   scopes: string[]
   organizations: { id: string; name: string }[]
   workspaces: { id: string; name: string; organizationId: string }[]
+  initialWorkspace?: { id: string; catalog: DelegationCatalog }
 }
 
 export function Consent({
-  oauthQuery,
+  request,
   client,
   user,
   scopes,
   organizations,
   workspaces,
+  initialWorkspace,
 }: ConsentProps) {
+  const [inferenceAPI, setInferenceAPI] = useState(
+    client.agent === "claude" || request.type === "device_code" ? "Messages" : "Responses"
+  )
   const inference = scopes.includes("inference:use")
   const mcp = scopes.includes("mcp:use")
   const resourceAccess = inference || mcp
-  const [organizationId, setOrganizationId] = useState("")
-  const [workspaceId, setWorkspaceId] = useState("")
-  const [catalogs, setCatalogs] = useState<Record<string, DelegationCatalog>>({})
-  const [selection, setSelection] = useState<DelegationCatalog>({ models: [], mcp: [] })
+  const requestedIdentityScopes = identityScopes.filter((scope) => scopes.includes(scope.value))
+  const [organizationId, setOrganizationId] = useState(
+    organizations.length === 1 ? (organizations[0]?.id ?? "") : ""
+  )
+  const [workspaceId, setWorkspaceId] = useState(initialWorkspace?.id ?? "")
+  const [catalogs, setCatalogs] = useState<Record<string, DelegationCatalog>>(
+    initialWorkspace ? { [initialWorkspace.id]: initialWorkspace.catalog } : {}
+  )
+  const [selection, setSelection] = useState<DelegationCatalog>(() => ({
+    models: [],
+    mcp:
+      mcp && initialWorkspace
+        ? initialWorkspace.catalog.mcp.filter((connection) =>
+            mcpKinds.some((kind) => connection[kind].length)
+          )
+        : [],
+  }))
   const [error, setError] = useState<string>()
   const [pending, startTransition] = useTransition()
   const [loadError, setLoadError] = useState<string>()
@@ -111,8 +131,18 @@ export function Consent({
     if (catalogs[id]) return
     startLoading(async () => {
       try {
-        const catalog = await delegationWorkspaceAction(oauthQuery, organizationId, id)
+        const catalog = await delegationWorkspaceAction(request, organizationId, id)
         setCatalogs((current) => ({ ...current, [id]: catalog }))
+        if (mcp)
+          setSelection((current) => ({
+            ...current,
+            mcp: [
+              ...current.mcp,
+              ...catalog.mcp.filter((connection) =>
+                mcpKinds.some((kind) => connection[kind].length)
+              ),
+            ],
+          }))
       } catch (error) {
         setLoadError(
           error instanceof Error ? error.message : "Could not load resources from this workspace."
@@ -151,10 +181,19 @@ export function Consent({
           </p>
         </div>
       </header>
+      {request.type === "device_code" ? (
+        <Alert>
+          <AlertDescription>
+            Confirm this code matches your terminal:{" "}
+            <strong className="font-mono">{request.userCode}</strong>. Only authorize a connection
+            you started.
+          </AlertDescription>
+        </Alert>
+      ) : null}
       <div className="rounded-xl border-2 border-dashed border-border/70 bg-card/40 p-5 text-sm">
         <UserIdentity name={user.name} email={user.email} image={user.image} size="default" />
       </div>
-      {identityScopes.some((scope) => scopes.includes(scope.value)) ? (
+      {requestedIdentityScopes.length ? (
         <section aria-labelledby="account-access-heading" className="flex flex-col gap-4">
           <h2 id="account-access-heading" className="text-sm font-semibold wrap-anywhere">
             {client.name} is requesting access to:
@@ -170,11 +209,9 @@ export function Consent({
                 />
               </summary>
               <ul className="mt-3 flex list-disc flex-col gap-2 pl-8 text-sm leading-relaxed text-muted-foreground">
-                {identityScopes
-                  .filter((scope) => scopes.includes(scope.value))
-                  .map((scope) => (
-                    <li key={scope.value}>{scope.label}</li>
-                  ))}
+                {requestedIdentityScopes.map((scope) => (
+                  <li key={scope.value}>{scope.label}</li>
+                ))}
               </ul>
             </details>
           </div>
@@ -189,6 +226,41 @@ export function Consent({
             <Layers3 aria-hidden="true" className="size-4 text-primary" />
             Choose resource access
           </h2>
+          {inference && !client.agent ? (
+            <Field>
+              <FieldLabel htmlFor="consent-inference-api">Inference API</FieldLabel>
+              <Select
+                value={inferenceAPI}
+                onValueChange={(value) => {
+                  setInferenceAPI(value)
+                  setSelection((current) => ({
+                    ...current,
+                    models: current.models.filter((model) =>
+                      model.api_compatibility?.some(
+                        (item) => item.api === value && item.support !== "unsupported"
+                      )
+                    ),
+                  }))
+                }}
+                disabled={pending || loading}
+              >
+                <SelectTrigger id="consent-inference-api" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="Messages">Messages, used by Claude</SelectItem>
+                    <SelectItem value="Responses">Responses, used by Codex</SelectItem>
+                    <SelectItem value="ChatCompletions">Chat Completions</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <FieldDescription>
+                Choose your client&apos;s API to see conversion warnings. Unsupported models cannot
+                be selected for this API.
+              </FieldDescription>
+            </Field>
+          ) : null}
           {organizations.length === 0 ? (
             <Alert>
               <AlertDescription>
@@ -198,65 +270,71 @@ export function Consent({
             </Alert>
           ) : (
             <>
-              <FieldGroup className="sm:grid sm:grid-cols-2 sm:items-end">
-                <Field>
-                  <FieldLabel htmlFor="consent-organization">Organization</FieldLabel>
-                  <Select
-                    value={organizationId}
-                    disabled={pending || loading}
-                    onValueChange={(value) => {
-                      setOrganizationId(value)
-                      setWorkspaceId("")
-                      setCatalogs({})
-                      setSelection({ models: [], mcp: [] })
-                      setError(undefined)
-                      setLoadError(undefined)
-                    }}
-                  >
-                    <SelectTrigger id="consent-organization" className="w-full">
-                      <SelectValue placeholder="Select an organization" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        {organizations.map((organization) => (
-                          <SelectItem key={organization.id} value={organization.id}>
-                            {organization.name}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="consent-workspace">Workspace</FieldLabel>
-                  <Select
-                    value={workspaceId}
-                    disabled={pending || loading || !organizationId}
-                    onValueChange={loadWorkspace}
-                  >
-                    <SelectTrigger id="consent-workspace" className="w-full">
-                      <SelectValue placeholder="Select a workspace" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        {workspaces
-                          .filter((workspace) => workspace.organizationId === organizationId)
-                          .map((workspace) => (
-                            <SelectItem key={workspace.id} value={workspace.id}>
-                              {workspace.name}
+              {client.agent ? (
+                <Badge variant="secondary">
+                  {workspaces.find((workspace) => workspace.id === workspaceId)?.name}
+                </Badge>
+              ) : (
+                <FieldGroup className="sm:grid sm:grid-cols-2 sm:items-end">
+                  <Field>
+                    <FieldLabel htmlFor="consent-organization">Organization</FieldLabel>
+                    <Select
+                      value={organizationId}
+                      disabled={pending || loading}
+                      onValueChange={(value) => {
+                        setOrganizationId(value)
+                        setWorkspaceId("")
+                        setCatalogs({})
+                        setSelection({ models: [], mcp: [] })
+                        setError(undefined)
+                        setLoadError(undefined)
+                      }}
+                    >
+                      <SelectTrigger id="consent-organization" className="w-full">
+                        <SelectValue placeholder="Select an organization" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {organizations.map((organization) => (
+                            <SelectItem key={organization.id} value={organization.id}>
+                              {organization.name}
                             </SelectItem>
                           ))}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                  {organizationId &&
-                  !workspaces.some((workspace) => workspace.organizationId === organizationId) ? (
-                    <FieldDescription>
-                      No workspaces are available in this organization.
-                    </FieldDescription>
-                  ) : null}
-                </Field>
-              </FieldGroup>
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="consent-workspace">Workspace</FieldLabel>
+                    <Select
+                      value={workspaceId}
+                      disabled={pending || loading || !organizationId}
+                      onValueChange={loadWorkspace}
+                    >
+                      <SelectTrigger id="consent-workspace" className="w-full">
+                        <SelectValue placeholder="Select a workspace" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {workspaces
+                            .filter((workspace) => workspace.organizationId === organizationId)
+                            .map((workspace) => (
+                              <SelectItem key={workspace.id} value={workspace.id}>
+                                {workspace.name}
+                              </SelectItem>
+                            ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                    {organizationId &&
+                    !workspaces.some((workspace) => workspace.organizationId === organizationId) ? (
+                      <FieldDescription>
+                        No workspaces are available in this organization.
+                      </FieldDescription>
+                    ) : null}
+                  </Field>
+                </FieldGroup>
+              )}
               {loading ? (
                 <div role="status" className="flex flex-col gap-4">
                   <span className="sr-only">Loading workspace resources…</span>
@@ -311,13 +389,29 @@ export function Consent({
                           }
                           searchPlaceholder="Search models or providers…"
                           emptyMessage="No matching models."
-                          options={catalog.models.map((model) => ({
-                            value: model.id,
-                            label: model.model_display_name || model.model,
-                            description: `${model.model} · Provider ID: ${model.provider}`,
-                            badge: model.provider_display_name || model.provider,
-                            icon: Cpu,
-                          }))}
+                          options={catalog.models.map((model) => {
+                            const compatibility = model.api_compatibility?.find(
+                              (item) => item.api === inferenceAPI
+                            )
+                            const codexUnsupported =
+                              client.agent === "codex" &&
+                              (compatibility?.support !== "native" ||
+                                !model.model_info?.capabilities.tool_call)
+                            let badge = model.provider_display_name || model.provider
+                            if (compatibility?.support === "native") badge = "Native"
+                            if (compatibility?.support === "unsupported") badge = "Unsupported"
+                            if (compatibility?.support === "translated") badge = "Supported"
+                            if (codexUnsupported) badge = "Unsupported"
+                            return {
+                              value: model.id,
+                              label: model.model_display_name || model.model,
+                              description: `${model.provider_display_name || model.provider} / ${model.model}`,
+                              badge,
+                              disabled:
+                                compatibility?.support === "unsupported" || codexUnsupported,
+                              icon: Cpu,
+                            }
+                          })}
                           value={selection.models
                             .filter((model) => modelIds.has(model.id))
                             .map((model) => model.id)}
@@ -421,10 +515,12 @@ export function Consent({
       <div className="flex items-start gap-2.5 text-sm leading-relaxed text-muted-foreground">
         <ShieldCheck aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
         <p>
-          You can disconnect this application at any time in{" "}
+          You can disconnect {client.agent ? "this agent" : "this application"} at any time in{" "}
           <span className="inline-flex items-center gap-1 align-middle">
-            Settings <ArrowRight aria-hidden="true" className="size-3" />
-            <span className="sr-only">then</span> Connected applications.
+            {client.agent ? "Workspace settings" : "Settings"}{" "}
+            <ArrowRight aria-hidden="true" className="size-3" />
+            <span className="sr-only">then</span>{" "}
+            {client.agent ? "External agents." : "Connected applications."}
           </span>
         </p>
       </div>
@@ -441,8 +537,17 @@ export function Consent({
           onClick={() =>
             startTransition(async () => {
               try {
+                if (request.type === "device_code") {
+                  const result = await denyDeviceConsentAction(request)
+                  if ("error" in result) {
+                    setError(result.error)
+                    return
+                  }
+                  window.location.assign("/oauth/authorize?result=denied")
+                  return
+                }
                 const result = await authClient.oauth2.consent({
-                  oauth_query: oauthQuery,
+                  oauth_query: request.oauthQuery,
                   accept: false,
                 })
                 if (result.error) {
@@ -468,7 +573,7 @@ export function Consent({
               setError(undefined)
               try {
                 const result = await approveConsentAction(
-                  oauthQuery,
+                  request,
                   resourceAccess ? organizationId || null : null,
                   selection
                 )
@@ -476,8 +581,12 @@ export function Consent({
                   setError(result.error)
                   return
                 }
+                if (request.type === "device_code") {
+                  window.location.assign("/oauth/authorize?result=approved")
+                  return
+                }
                 const continued = await authClient.oauth2.continue({
-                  oauth_query: oauthQuery,
+                  oauth_query: request.oauthQuery,
                   postLogin: true,
                 })
                 if (continued.error) {
@@ -498,10 +607,14 @@ export function Consent({
         </Button>
       </div>
       <p className="text-center text-sm leading-relaxed text-muted-foreground">
-        You will be redirected to
-        <strong className="block font-bold wrap-anywhere text-foreground">
-          {client.callback || "your application"}
-        </strong>
+        {request.type === "device_code"
+          ? "Return to your terminal after authorization."
+          : "You will be redirected to"}
+        {request.type === "authorization_code" ? (
+          <strong className="block font-bold wrap-anywhere text-foreground">
+            {client.callback || "your application"}
+          </strong>
+        ) : null}
       </p>
     </div>
   )

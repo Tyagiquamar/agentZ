@@ -1,8 +1,4 @@
-import {
-  oauthProviderAuthServerMetadata,
-  metadataResponse,
-  type ResourceServerMetadata,
-} from "@better-auth/oauth-provider"
+import { metadataResponse, type ResourceServerMetadata } from "@better-auth/oauth-provider"
 import { getAuth } from "@/lib/auth"
 import { getEnv } from "@/lib/env"
 
@@ -10,7 +6,10 @@ export async function GET(request: Request) {
   let response: Response
   const path = new URL(request.url).pathname
   if (path === "/.well-known/oauth-authorization-server")
-    response = await oauthProviderAuthServerMetadata(getAuth())(request)
+    response = metadataResponse({
+      ...(await getAuth().api.getOAuthServerConfig()),
+      claims_parameter_supported: false,
+    })
   else if (path === "/.well-known/openid-configuration")
     response = metadataResponse({
       ...(await getAuth().api.getOpenIdConfig()),
@@ -20,9 +19,12 @@ export async function GET(request: Request) {
     const resources = new Map([
       [
         "/.well-known/oauth-protected-resource/api/inference/v1",
-        { path: "/api/inference/v1", scopes: ["inference:use"] },
+        { path: "/api/inference/v1", scopes: ["inference:use", "offline_access"] },
       ],
-      ["/.well-known/oauth-protected-resource/api/mcp", { path: "/api/mcp", scopes: ["mcp:use"] }],
+      [
+        "/.well-known/oauth-protected-resource/api/mcp",
+        { path: "/api/mcp", scopes: ["mcp:use", "offline_access"] },
+      ],
     ])
     const resource = resources.get(path)
     if (!resource) return new Response(null, { status: 404 })

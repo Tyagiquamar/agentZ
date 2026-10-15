@@ -79,8 +79,11 @@ func (v *Validator) ValidateUpdate(_ context.Context, oldSecret, newSecret *agen
 	if oldSecret.Spec.Type != newSecret.Spec.Type {
 		fields = append(fields, field.Forbidden(specPath.Child("type"), "type is immutable"))
 	}
-	isOAuth := oldSecret.Spec.Type == agentzv1alpha1.SecretTypeOAuth
-	if isOAuth && !apiequality.Semantic.DeepEqual(oldSecret.Spec, newSecret.Spec) {
+	var oauthChanged bool
+	if oldSecret.Spec.Type == agentzv1alpha1.SecretTypeOAuth {
+		oauthChanged = !apiequality.Semantic.DeepEqual(oldSecret.Spec, newSecret.Spec)
+	}
+	if oauthChanged {
 		fields = append(fields, field.Forbidden(specPath, "oauth secret spec is immutable after creation"))
 	}
 	if len(fields) == 0 {
@@ -116,7 +119,11 @@ func validateSpec(spec agentzv1alpha1.SecretSpec, path *field.Path) field.ErrorL
 	if err != nil {
 		fields = append(fields, field.Invalid(path.Child("hosts"), spec.Hosts, err.Error()))
 	}
-	if err == nil && !apiequality.Semantic.DeepEqual(hosts, spec.Hosts) {
+	var noncanonicalHosts bool
+	if err == nil {
+		noncanonicalHosts = !apiequality.Semantic.DeepEqual(hosts, spec.Hosts)
+	}
+	if noncanonicalHosts {
 		fields = append(fields, field.Invalid(path.Child("hosts"), spec.Hosts, "hosts must be canonical"))
 	}
 

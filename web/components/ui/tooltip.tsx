@@ -77,4 +77,30 @@ function DisabledReason({ reason, children }: DisabledReasonProps) {
   )
 }
 
-export { DisabledReason, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger }
+function TruncatedText({ className, value }: { className?: string; value: string }) {
+  const ref = React.useRef<HTMLSpanElement>(null)
+  const [truncated, setTruncated] = React.useState(false)
+
+  React.useLayoutEffect(() => {
+    const element = ref.current
+    if (!element) return
+    const measure = () => setTruncated(element.scrollWidth > element.clientWidth + 1)
+    const observer = new ResizeObserver(measure)
+    observer.observe(element)
+    measure()
+    return () => observer.disconnect()
+  }, [value])
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className={cn("truncate", className)} ref={ref} tabIndex={truncated ? 0 : undefined}>
+          {value}
+        </span>
+      </TooltipTrigger>
+      {truncated ? <TooltipContent>{value}</TooltipContent> : null}
+    </Tooltip>
+  )
+}
+
+export { DisabledReason, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, TruncatedText }

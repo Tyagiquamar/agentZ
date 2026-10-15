@@ -27,6 +27,7 @@ import (
 	"github.com/accuknox/agentz/internal/inference"
 	"github.com/accuknox/agentz/internal/mcp"
 	"github.com/accuknox/agentz/internal/networkpolicy"
+	agentzv1alpha1 "github.com/accuknox/agentz/pkg/apis/agentz/v1alpha1"
 )
 
 func (s *Service) delegationReady(ctx context.Context, grant gatewaydb.DelegationGrant, namespace, gateway, name string, policyNames ...string) error {
@@ -59,10 +60,8 @@ func (s *Service) delegationReady(ctx context.Context, grant gatewaydb.Delegatio
 		if foreignParent {
 			continue
 		}
-		ready = conditionsReady(
-			parent.Conditions, route.Generation,
-			string(gwv1.RouteConditionAccepted), string(gwv1.RouteConditionResolvedRefs),
-		)
+		ready = conditionsReady(parent.Conditions, route.Generation,
+			string(gwv1.RouteConditionAccepted), string(gwv1.RouteConditionResolvedRefs))
 		if ready {
 			break
 		}
@@ -75,9 +74,10 @@ func (s *Service) delegationReady(ctx context.Context, grant gatewaydb.Delegatio
 		return err
 	}
 	currentSelection := backend.Annotations["agentz.accuknox.com/selection"] == selection
-	unreadyBackend := !currentSelection ||
-		!conditionsReady(backend.Status.Conditions, backend.Generation, "Accepted")
-	if unreadyBackend {
+	if !currentSelection {
+		return errors.New("backend selection is not current")
+	}
+	if !conditionsReady(backend.Status.Conditions, backend.Generation, "Accepted") {
 		return errors.New("backend is not accepted")
 	}
 	tracingPolicy := gateway + "-delegation-tracing"
@@ -205,6 +205,14 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 		}
 		// Plaintext HTTP/2 must not dictate the external provider's protocol.
 		target.Policies.HTTP = &agw.BackendHTTP{Version: new(agw.HTTPVersion1)}
+		// Set this after AgentGateway conversion so Messages input cannot create
+		// stored Responses in the provider owner's account.
+		stateless := provider.Spec.Kind == agentzv1alpha1.InferenceProviderKindOpenAI ||
+			provider.Spec.Kind == agentzv1alpha1.InferenceProviderKindAzure ||
+			provider.Spec.Kind == agentzv1alpha1.InferenceProviderKindOpenAICodex
+		if stateless {
+			target.Policies.AI.FinalTransformations = []agw.FieldTransformation{{Field: "store", Expression: "false"}}
+		}
 		name := fmt.Sprintf("d-%s-model-%d", grant.ID, index)
 		ownerEgress[selected.Namespace] = append(ownerEgress[selected.Namespace], networkpolicy.Target{
 			Host: target.LLM.Host,
@@ -256,7 +264,9 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 					Host: "inference." + selected.Namespace + ".svc.cluster.local",
 					Port: 8080,
 				},
-				Policies: &agw.BackendFull{BackendSimple: agw.BackendSimple{HTTP: &agw.BackendHTTP{Version: new(agw.HTTPVersion2)}}},
+				Policies: &agw.BackendFull{
+					BackendSimple: agw.BackendSimple{HTTP: &agw.BackendHTTP{Version: new(agw.HTTPVersion2)}},
+				},
 			},
 		}
 		entry := delegationRoute(

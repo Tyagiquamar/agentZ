@@ -2536,6 +2536,9 @@ SELECT pg_notify('agentz_coding', @workspace_id::text || '/' || @owner_id::text)
 -- name: GatewayListenCoding :exec
 LISTEN agentz_coding;
 
+-- name: GatewayListenExternalAgents :exec
+LISTEN agentz_external_agents;
+
 -- name: GatewayPruneCodingSnapshots :exec
 DELETE FROM coding_snapshots s WHERE
 (worktree_id <> '' AND NOT EXISTS (
@@ -2685,6 +2688,9 @@ WHERE g.id = sqlc.arg(id) AND g.client_id = sqlc.arg(client_id)
         AND m.user_id = g.user_id AND m.disabled_at IS NULL
     )
   );
+
+-- name: GatewayGetExternalAgent :one
+SELECT * FROM external_agents WHERE client_id = sqlc.arg(client_id);
 
 -- name: GatewayListDelegationGrants :many
 SELECT sqlc.embed(g), COALESCE(c.name, c.client_id)::text AS app_name

@@ -40,9 +40,21 @@ func TestAgentModelCatalog(t *testing.T) {
 	pool := &agentzv1alpha1.InferencePool{
 		ObjectMeta: metav1.ObjectMeta{Name: "mixed", Namespace: testWorkspaceNS},
 		Spec: agentzv1alpha1.InferencePoolSpec{Members: []agentzv1alpha1.InferencePoolMember{
-			{Scope: agentzv1alpha1.ResourceScopeOrganisation, Provider: "provider", Model: "first"},
-			{Scope: agentzv1alpha1.ResourceScopeWorkspace, Provider: "provider", Model: "second"},
-			{Scope: agentzv1alpha1.ResourceScopeOrganisation, Provider: "provider", Model: "third"},
+			{
+				Scope:    agentzv1alpha1.ResourceScopeOrganisation,
+				Provider: "provider",
+				Model:    "first",
+			},
+			{
+				Scope:    agentzv1alpha1.ResourceScopeWorkspace,
+				Provider: "provider",
+				Model:    "second",
+			},
+			{
+				Scope:    agentzv1alpha1.ResourceScopeOrganisation,
+				Provider: "provider",
+				Model:    "third",
+			},
 		}},
 	}
 	if err := s.k8sClient.Create(t.Context(), pool); err != nil {
@@ -51,7 +63,11 @@ func TestAgentModelCatalog(t *testing.T) {
 	inheritedPool := &agentzv1alpha1.InferencePool{
 		ObjectMeta: metav1.ObjectMeta{Name: "inherited", Namespace: org},
 		Spec: agentzv1alpha1.InferencePoolSpec{Members: []agentzv1alpha1.InferencePoolMember{
-			{Scope: agentzv1alpha1.ResourceScopeOrganisation, Provider: "provider", Model: "first"},
+			{
+				Scope:    agentzv1alpha1.ResourceScopeOrganisation,
+				Provider: "provider",
+				Model:    "first",
+			},
 		}},
 	}
 	if err := s.k8sClient.Create(t.Context(), inheritedPool); err != nil {

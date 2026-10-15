@@ -7,6 +7,8 @@ import {
   getOAuthProviderState,
   getOAuthProviderApi,
   oauthProvider,
+  oauthDeviceAuthorization,
+  DEVICE_CODE_GRANT_TYPE,
   verifyOAuthQueryParams,
   type OAuthClaimExtensionInput,
   type OAuthAuthorizationQuery,
@@ -16,7 +18,7 @@ import { z } from "zod"
 import { delegationScopes } from "@/data/schema"
 import { getDB, schema } from "@/db"
 import { getEnv } from "@/lib/env"
-import { getDelegationCatalog, type DelegationCatalog } from "@/lib/gateway/client"
+import { getDelegationCatalog, getWorkspace, type DelegationCatalog } from "@/lib/gateway/client"
 import { createClient } from "@/lib/gateway/client/client"
 import { GatewayUnauthorizedError } from "@/lib/gateway/errors"
 
@@ -82,6 +84,50 @@ export async function delegationCatalog(
   return result.data
 }
 
+/** externalAgentAccess enforces the registration's owner and live workspace permission. */
+export async function externalAgentAccess(
+  clientId: string,
+  user: Pick<typeof schema.users.$inferSelect, "id" | "name">
+) {
+  const [agent] = await getDB()
+    .select()
+    .from(schema.externalAgents)
+    .where(eq(schema.externalAgents.clientId, clientId))
+  if (!agent) return undefined
+  if (agent.userId !== user.id)
+    throw new APIError("FORBIDDEN", {
+      error: "access_denied",
+      message: "Sign in as this agent's owner.",
+    })
+  const { getGatewayAuthToken } = await import("@/lib/gateway/auth")
+  const { serverGatewayBaseURL } = await import("@/lib/gateway/server-base-url")
+  const token = await getGatewayAuthToken(
+    agent.organizationId,
+    user.id,
+    user.name,
+    agent.workspaceId
+  ).catch((error: unknown) => {
+    if (error instanceof GatewayUnauthorizedError)
+      throw new APIError("FORBIDDEN", {
+        error: "access_denied",
+        message: "This workspace is no longer available.",
+      })
+    throw error
+  })
+  const result = await getWorkspace({
+    client: createClient({ baseUrl: serverGatewayBaseURL(), auth: token }),
+    path: { workspaceId: agent.workspaceId },
+  })
+  if (!result.response || result.response.status >= 500)
+    throw new Error("Agent access could not be verified. Try again.")
+  if (!result.data?.capabilities.external_agents.read || result.data.state !== "ready")
+    throw new APIError("FORBIDDEN", {
+      error: "access_denied",
+      message: "Use externally permission is no longer available in this workspace.",
+    })
+  return agent
+}
+
 /** checkDelegationSelection rechecks ownership and permissions, including capability availability for new consent. */
 export async function checkDelegationSelection(
   organizationId: string,
@@ -89,6 +135,7 @@ export async function checkDelegationSelection(
   user: Pick<typeof schema.users.$inferSelect, "id" | "name">,
   mode: "consent" | "access"
 ) {
+  const approved: DelegationCatalog = { models: [], mcp: [] }
   if (selection.models.length > 256 || selection.mcp.length > 32) {
     throw new Error("Select at most 256 models and 32 MCP connections.")
   }
@@ -141,7 +188,8 @@ export async function checkDelegationSelection(
   )
   for (const workspaceId of workspaceIds) {
     const catalog = await delegationCatalog(organizationId, workspaceId, user, mode === "access")
-    for (const model of selection.models.filter((item) => item.workspace_id === workspaceId)) {
+    for (const [index, model] of selection.models.entries()) {
+      if (model.workspace_id !== workspaceId) continue
       const current = catalog.models.find((item) => item.id === model.id)
       if (
         !current ||
@@ -155,8 +203,10 @@ export async function checkDelegationSelection(
           message: "A selected model is no longer available for delegation.",
         })
       }
+      approved.models[index] = current
     }
-    for (const connection of selection.mcp.filter((item) => item.workspace_id === workspaceId)) {
+    for (const [index, connection] of selection.mcp.entries()) {
+      if (connection.workspace_id !== workspaceId) continue
       const current = catalog.mcp.find((item) => item.id === connection.id)
       if (
         !current ||
@@ -173,8 +223,15 @@ export async function checkDelegationSelection(
           message: "A selected MCP capability is no longer available for delegation.",
         })
       }
+      approved.mcp[index] = {
+        ...current,
+        tools: connection.tools,
+        prompts: connection.prompts,
+        resources: connection.resources,
+      }
     }
   }
+  return approved
 }
 
 /** delegationTransaction verifies the provider's signed query before loading its server-owned transaction. */
@@ -220,6 +277,56 @@ export async function delegationTransaction(oauthQuery: string, userId: string, 
   return transaction
 }
 
+const consentRequest = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("authorization_code"), oauthQuery: z.string().min(1) }),
+  z.object({ type: z.literal("device_code"), userCode: z.string().min(1).max(191) }),
+])
+
+/** DelegationRequest identifies a server-owned consent request by its native protocol. */
+export type DelegationRequest = z.infer<typeof consentRequest>
+
+/** delegationRequest checks consent ownership before reading either OAuth flow. */
+export async function delegationRequest(
+  request: DelegationRequest,
+  userId: string,
+  sessionId: string
+) {
+  request = consentRequest.parse(request)
+  if (request.type === "authorization_code") {
+    const transaction = await delegationTransaction(request.oauthQuery, userId, sessionId)
+    if (!transaction)
+      throw new Error("This authorization request expired. Start again from the application.")
+    return { ...transaction, type: request.type }
+  }
+  const { getAuth } = await import("@/lib/auth")
+  const { headers } = await import("next/headers")
+  const verified = await getAuth().api.deviceVerify({
+    query: { user_code: request.userCode },
+    headers: await headers(),
+  })
+  const [device] = await getDB()
+    .select()
+    .from(schema.deviceCodes)
+    .where(
+      and(
+        eq(schema.deviceCodes.userCode, verified.user_code),
+        eq(schema.deviceCodes.userId, userId),
+        eq(schema.deviceCodes.status, "pending"),
+        gt(schema.deviceCodes.expiresAt, new Date())
+      )
+    )
+  if (!device?.oauthClientId)
+    throw new Error("This device request expired or belongs to another account.")
+  return {
+    ...device,
+    type: request.type,
+    clientId: device.oauthClientId,
+    scopes: device.scope?.split(/\s+/).filter(Boolean) ?? [],
+    resources: device.resources ?? [],
+    grantId: device.referenceId,
+  }
+}
+
 /** approvedDelegation loads a live snapshot bound to its user and enabled application's scope ceiling. */
 async function approvedDelegation(clientId: string, userId: string, grantId?: string) {
   const [current] = await getDB()
@@ -249,6 +356,7 @@ async function approvedDelegation(clientId: string, userId: string, grantId?: st
 /** agentZOAuthProvider uses native OAuth flows with immutable AgentZ resource grants. */
 export function agentZOAuthProvider(issuer: string) {
   const refreshTokenHash = defineRequestState(() => "")
+  const tokenSelection = defineRequestState<DelegationCatalog | undefined>(() => undefined)
   const inferenceResource = `${issuer}/api/inference/v1`
   const mcpResource = `${issuer}/api/mcp`
   const delegationTokenClaims = async ({
@@ -270,24 +378,36 @@ export function agentZOAuthProvider(issuer: string) {
     ) {
       throw new APIError("BAD_REQUEST", { error: "invalid_grant" })
     }
-    if (grant.organizationId) {
-      try {
-        await checkDelegationSelection(grant.organizationId, grant.selection, user, "access")
-      } catch (error) {
-        if (error instanceof APIError && error.body?.error === "access_denied")
-          throw new APIError("BAD_REQUEST", { error: "invalid_grant" })
-        throw error
+    let selection = grant.selection
+    try {
+      await externalAgentAccess(client.clientId, user)
+      if (grant.organizationId) {
+        selection = await checkDelegationSelection(
+          grant.organizationId,
+          grant.selection,
+          user,
+          "access"
+        )
       }
+    } catch (error) {
+      if (error instanceof APIError && error.body?.error === "access_denied")
+        throw new APIError("BAD_REQUEST", { error: "invalid_grant" })
+      throw error
     }
+    await tokenSelection.set({
+      models: scopes.includes("inference:use") ? selection.models : [],
+      mcp: [],
+    })
     return { agentz_grant_id: grant.id }
   }
   const provider = oauthProvider({
     loginPage: "/signin",
     consentPage: "/oauth/authorize",
     scopes: delegationScopes,
-    grantTypes: ["authorization_code", "refresh_token"],
+    grantTypes: ["authorization_code", "refresh_token", DEVICE_CODE_GRANT_TYPE],
     accessTokenExpiresIn: 300,
     refreshTokenExpiresIn: 30 * 24 * 60 * 60,
+    rateLimit: { token: { window: 60, max: 600 } },
     allowDynamicClientRegistration: false,
     allowPublicWebHttpLoopbackRedirects: process.env.NODE_ENV === "development",
     clientRegistrationAllowedScopes: delegationScopes,
@@ -300,7 +420,6 @@ export function agentZOAuthProvider(issuer: string) {
     resourcePrivileges: () => false,
     customTokenResponseFields: async ({ grantType, verificationValue, user, scopes }) => {
       // Opaque OAuth grants without openid do not run either JWT claim hook.
-      if (scopes.includes("openid")) return {}
       if (verificationValue && !verificationValue.resource?.length) {
         await delegationTokenClaims({
           user,
@@ -324,13 +443,27 @@ export function agentZOAuthProvider(issuer: string) {
             scopes,
           })
       }
-      return {}
+      const selection = await tokenSelection.get()
+      return selection ? { agentz_grant: selection } : {}
     },
     clientReference: ({ session }) =>
       z.string().nullish().parse(session?.activeOrganizationId) ?? undefined,
-    clientPrivileges: async ({ user, session, action }) => {
+    clientPrivileges: async ({ user, session, action, headers }) => {
       const { isActiveSuperadmin } = await import("@/data/organizations")
       const organizationId = z.string().nullish().parse(session?.activeOrganizationId)
+      const workspaceId = headers.get("X-AgentZ-Workspace-ID")
+      // Registration endpoints are server-only or disabled. The onboarding
+      // action supplies fixed native metadata; workspace authority is still live.
+      if (action === "create" && user && organizationId && workspaceId) {
+        const { getGatewayAuthToken } = await import("@/lib/gateway/auth")
+        const { serverGatewayBaseURL } = await import("@/lib/gateway/server-base-url")
+        const token = await getGatewayAuthToken(organizationId, user.id, user.name, workspaceId)
+        const result = await getWorkspace({
+          client: createClient({ baseUrl: serverGatewayBaseURL(), auth: token }),
+          path: { workspaceId },
+        })
+        return !!result.data?.capabilities.external_agents.create
+      }
       return (
         action !== "configure-client-credentials-scopes" &&
         !!user &&
@@ -617,6 +750,29 @@ export function agentZOAuthProvider(issuer: string) {
           }),
         },
       ],
+    },
+  } satisfies BetterAuthPlugin
+}
+
+/** agentZDeviceAuthorization adds server-owned grant bindings to native device authorization. */
+export function agentZDeviceAuthorization() {
+  const plugin = oauthDeviceAuthorization({
+    verificationUri: "/oauth/authorize",
+    expiresIn: "10m",
+    interval: "5s",
+  })
+  return {
+    ...plugin,
+    schema: {
+      ...plugin.schema,
+      deviceCode: {
+        ...plugin.schema.deviceCode,
+        fields: {
+          ...plugin.schema.deviceCode.fields,
+          referenceId: { type: "string", required: false, input: false, returned: false },
+          sessionId: { type: "string", required: false, input: false, returned: false },
+        },
+      },
     },
   } satisfies BetterAuthPlugin
 }

@@ -76,6 +76,7 @@ type Querier interface {
 	GatewayGetCodingThread(ctx context.Context, arg GatewayGetCodingThreadParams) (GatewayGetCodingThreadRow, error)
 	GatewayGetCodingWorktree(ctx context.Context, arg GatewayGetCodingWorktreeParams) (GatewayGetCodingWorktreeRow, error)
 	GatewayGetDelegationGrant(ctx context.Context, arg GatewayGetDelegationGrantParams) (DelegationGrant, error)
+	GatewayGetExternalAgent(ctx context.Context, clientID string) (ExternalAgent, error)
 	GatewayGetLensApp(ctx context.Context, arg GatewayGetLensAppParams) (GatewayGetLensAppRow, error)
 	GatewayGetMCPGraph(ctx context.Context, arg GatewayGetMCPGraphParams) ([]GatewayGetMCPGraphRow, error)
 	GatewayGetSpanDetail(ctx context.Context, arg GatewayGetSpanDetailParams) (GatewayGetSpanDetailRow, error)
@@ -131,6 +132,7 @@ type Querier interface {
 	GatewayListWorkspacesSelectingOrganizationResource(ctx context.Context, arg GatewayListWorkspacesSelectingOrganizationResourceParams) ([]Workspace, error)
 	GatewayListenChatSessions(ctx context.Context) error
 	GatewayListenCoding(ctx context.Context) error
+	GatewayListenExternalAgents(ctx context.Context) error
 	GatewayLockActiveOrganizationMember(ctx context.Context, arg GatewayLockActiveOrganizationMemberParams) (string, error)
 	GatewayLockActiveWorkspace(ctx context.Context, arg GatewayLockActiveWorkspaceParams) (string, error)
 	GatewayLockAgentOwner(ctx context.Context, arg GatewayLockAgentOwnerParams) (AgentOwner, error)

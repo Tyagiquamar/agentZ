@@ -246,6 +246,7 @@ type resourceCapabilitySet struct {
 	inferencePool     gatewayapi.ResourceCapabilities
 	apiKey            gatewayapi.ResourceCapabilities
 	observability     gatewayapi.ResourceCapabilities
+	externalAgent     gatewayapi.ResourceCapabilities
 	canAuthorAgents   bool
 }
 
@@ -297,6 +298,14 @@ func resourceCapabilities(effective authorization.Effective, organizationID, wor
 		Delete: effective.Allows(scope, authorization.OperationDeleteInferenceProvider),
 	}
 	if workspaceID != "" {
+		delegate := effective.CanDelegate(scope, gatewaydb.PermissionResourceInferenceProvider) ||
+			effective.CanDelegate(scope, gatewaydb.PermissionResourceMcpConnection)
+		capabilities.externalAgent = gatewayapi.ResourceCapabilities{
+			Read:   delegate,
+			Create: delegate,
+			Modify: delegate,
+			Delete: delegate,
+		}
 		capabilities.canAuthorAgents = effective.Allows(
 			scope,
 			authorization.OperationCreateAgent,

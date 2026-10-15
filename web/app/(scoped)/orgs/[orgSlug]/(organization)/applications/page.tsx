@@ -1,5 +1,5 @@
 import { Suspense } from "react"
-import { asc, eq } from "drizzle-orm"
+import { and, asc, eq, isNull } from "drizzle-orm"
 import { AdministrationLoadingState, AdministrationState } from "@/components/administration"
 import { resolveOrganizationSlug } from "@/data/organizations"
 import { getDB, schema } from "@/db"
@@ -29,10 +29,20 @@ async function ApplicationsContent({ params }: PageProps<"/orgs/[orgSlug]/applic
         scopes: schema.oauthClients.scopes,
         tokenEndpointAuthMethod: schema.oauthClients.tokenEndpointAuthMethod,
         applicationType: schema.oauthClients.applicationType,
+        grantTypes: schema.oauthClients.grantTypes,
         disabled: schema.oauthClients.disabled,
       })
       .from(schema.oauthClients)
-      .where(eq(schema.oauthClients.referenceId, result.organization.id))
+      .leftJoin(
+        schema.externalAgents,
+        eq(schema.externalAgents.clientId, schema.oauthClients.clientId)
+      )
+      .where(
+        and(
+          eq(schema.oauthClients.referenceId, result.organization.id),
+          isNull(schema.externalAgents.clientId)
+        )
+      )
       .orderBy(asc(schema.oauthClients.createdAt)),
     getDB()
       .select({ enabled: schema.organizationDelegation.enabled })

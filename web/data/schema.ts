@@ -21,6 +21,11 @@ export const delegationScopes = [
   "mcp:use",
 ]
 
+export const externalAgentInput = z.object({
+  name: z.string().trim().min(1, "Enter an agent name.").max(100, "Use 100 characters or fewer."),
+  kind: z.enum(["claude", "codex"]),
+})
+
 export const oauthApplicationInput = z
   .object({
     name: z
@@ -29,6 +34,10 @@ export const oauthApplicationInput = z
       .min(1, "Enter an application name.")
       .max(100, "Use 100 characters or fewer."),
     type: z.enum(["confidential", "browser", "native"]),
+    loginMethods: z
+      .array(z.enum(["authorization_code", "device_code"]))
+      .min(1, "Select at least one login method.")
+      .default(["authorization_code"]),
     redirectUris: z
       .array(
         z
@@ -39,7 +48,6 @@ export const oauthApplicationInput = z
           )
           .pipe(z.url({ error: "Enter a valid callback URL." }))
       )
-      .min(1, "Enter at least one callback URL.")
       .max(10, "Use at most 10 callback URLs."),
     authorizedOrigins: z
       .array(
@@ -75,6 +83,18 @@ export const oauthApplicationInput = z
       .min(1, "Select at least one scope."),
   })
   .superRefine((input, ctx) => {
+    if (input.type !== "native" && input.loginMethods.includes("device_code"))
+      ctx.addIssue({
+        code: "custom",
+        path: ["loginMethods"],
+        message: "Device authorization requires a native public client.",
+      })
+    if (input.loginMethods.includes("authorization_code") && !input.redirectUris.length)
+      ctx.addIssue({
+        code: "custom",
+        path: ["redirectUris"],
+        message: "Browser login requires at least one callback URL.",
+      })
     if (
       input.type === "browser" ? !input.authorizedOrigins.length : input.authorizedOrigins.length
     ) {

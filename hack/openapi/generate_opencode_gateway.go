@@ -41,6 +41,7 @@ type operationCapability struct {
 }
 
 var baseOperationCapabilities = map[string][]string{
+	"inference:use": {"getDelegatedCatalog"},
 	"agent.author": {
 		"createAgent",
 	},
@@ -209,6 +210,7 @@ var baseOperationCapabilities = map[string][]string{
 	},
 	"organization.member": {
 		"getDelegationCatalog",
+		"watchExternalAgents",
 		"ensureTenant",
 		"getTenant",
 		"getWorkspace",
@@ -397,15 +399,15 @@ func rewriteOpenCode(doc map[string]any) (map[string]any, routeManifest, error) 
 		"openapi": "3.0.3",
 		"paths":   filteredPaths,
 		"components": map[string]any{
-			"schemas":         namespaceBucket(componentBucket(components, "schemas")),
-			"parameters":      namespaceBucket(componentBucket(components, "parameters")),
-			"responses":       namespaceBucket(componentBucket(components, "responses")),
-			"requestBodies":   namespaceBucket(componentBucket(components, "requestBodies")),
-			"headers":         namespaceBucket(componentBucket(components, "headers")),
-			"examples":        namespaceBucket(componentBucket(components, "examples")),
-			"securitySchemes": namespaceBucket(componentBucket(components, "securitySchemes")),
-			"links":           namespaceBucket(componentBucket(components, "links")),
-			"callbacks":       namespaceBucket(componentBucket(components, "callbacks")),
+			"schemas":         namespaceBucket(components, "schemas"),
+			"parameters":      namespaceBucket(components, "parameters"),
+			"responses":       namespaceBucket(components, "responses"),
+			"requestBodies":   namespaceBucket(components, "requestBodies"),
+			"headers":         namespaceBucket(components, "headers"),
+			"examples":        namespaceBucket(components, "examples"),
+			"securitySchemes": namespaceBucket(components, "securitySchemes"),
+			"links":           namespaceBucket(components, "links"),
+			"callbacks":       namespaceBucket(components, "callbacks"),
 		},
 		"tags": filterTags(doc["tags"], filteredPaths),
 	}, manifest, nil
@@ -504,7 +506,7 @@ func buildRefMap(components map[string]any) map[string]string {
 		"callbacks",
 	}
 	for _, bucket := range buckets {
-		items := componentBucket(components, bucket)
+		items, _ := components[bucket].(map[string]any)
 		for name := range items {
 			oldRef := "#/components/" + bucket + "/" + name
 			newRef := "#/components/" + bucket + "/" + opencodeNS + name
@@ -645,15 +647,8 @@ func ensureMap(parent map[string]any, key string) map[string]any {
 	return out
 }
 
-func componentBucket(components map[string]any, key string) map[string]any {
+func namespaceBucket(components map[string]any, key string) map[string]any {
 	bucket, _ := components[key].(map[string]any)
-	if bucket == nil {
-		return map[string]any{}
-	}
-	return bucket
-}
-
-func namespaceBucket(bucket map[string]any) map[string]any {
 	out := make(map[string]any, len(bucket))
 	for key, value := range bucket {
 		out[opencodeNS+key] = value
@@ -1045,20 +1040,19 @@ func applyOAPICodegenFixups(doc map[string]any) error {
 		}
 	}
 
-	renameSchema(schemas, "EventTuiCommandExecute", "OpencodeTUICommandExecuteEvent")
-	renameSchema(schemas, "EventTuiPromptAppend", "OpencodeTUIPromptAppendEvent")
-	renameSchema(schemas, "EventTuiSessionSelect", "OpencodeTUISessionSelectEvent")
-	renameSchema(schemas, "EventTuiToastShow", "OpencodeTUIToastShowEvent")
-	renameSchema(schemas, "EventTuiToastShow1", "OpencodeTUIToastShowAltEvent")
-	return nil
-}
-
-func renameSchema(schemas map[string]any, name string, goName string) {
-	schema, ok := schemas[name].(map[string]any)
-	if !ok {
-		return
+	goNames := map[string]string{
+		"EventTuiCommandExecute": "OpencodeTUICommandExecuteEvent",
+		"EventTuiPromptAppend":   "OpencodeTUIPromptAppendEvent",
+		"EventTuiSessionSelect":  "OpencodeTUISessionSelectEvent",
+		"EventTuiToastShow":      "OpencodeTUIToastShowEvent",
+		"EventTuiToastShow1":     "OpencodeTUIToastShowAltEvent",
 	}
-	schema["x-go-name"] = goName
+	for name, goName := range goNames {
+		if schema, ok := schemas[name].(map[string]any); ok {
+			schema["x-go-name"] = goName
+		}
+	}
+	return nil
 }
 
 func writeYAML(path string, doc map[string]any) error {

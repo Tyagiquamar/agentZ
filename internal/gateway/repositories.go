@@ -607,7 +607,7 @@ func (s *Service) loadCodingSnapshot(ctx context.Context, access resourceAccess,
 				Refs:      []gatewayapi.CodingRef{},
 				Worktrees: []gatewayapi.CodingDiscoveredWorktree{},
 			}
-			for _, line := range strings.Split(remote, "\n") {
+			for line := range strings.SplitSeq(remote, "\n") {
 				head, ref, ok := strings.Cut(line, "\t")
 				if !ok {
 					continue
@@ -717,11 +717,19 @@ func (s *Service) listenCoding(ctx context.Context) {
 		if err == nil {
 			q := gatewaydb.New(conn.Conn())
 			err = q.GatewayListenCoding(ctx)
+			if err == nil {
+				err = q.GatewayListenExternalAgents(ctx)
+			}
 			for err == nil {
 				notification, waitErr := conn.Conn().WaitForNotification(ctx)
 				err = waitErr
 				if err == nil {
-					s.codingEvents.publish(notification.Payload)
+					switch notification.Channel {
+					case "agentz_coding":
+						s.codingEvents.publish(notification.Payload)
+					case "agentz_external_agents":
+						s.externalAgentEvents.publish(notification.Payload)
+					}
 				}
 			}
 			conn.Release()

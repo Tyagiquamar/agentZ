@@ -148,16 +148,20 @@ func (r *Reconciler) reconcileInference(ctx context.Context, sandbox *agentzv1al
 	if err := r.Get(ctx, key, gateway); err != nil {
 		return false, fmt.Errorf("get inference gateway status: %w", err)
 	}
-	ready = ready && meta.IsStatusConditionTrue(
-		gateway.Status.Conditions,
-		string(gwv1.GatewayConditionProgrammed),
-	)
+	if ready {
+		ready = meta.IsStatusConditionTrue(
+			gateway.Status.Conditions,
+			string(gwv1.GatewayConditionProgrammed),
+		)
+	}
 	tracePolicy := &agentgatewayv1alpha1.AgentgatewayPolicy{}
 	key.Name = inferenceTracePolicyName
 	if err := r.Get(ctx, key, tracePolicy); err != nil {
 		return false, fmt.Errorf("get inference trace policy status: %w", err)
 	}
-	ready = ready && inferencePolicyReady(tracePolicy)
+	if ready {
+		ready = inferencePolicyReady(tracePolicy)
+	}
 	desired := make(map[string]struct{}, len(targets))
 	desiredGrants := make(map[client.ObjectKey]struct{}, len(targets))
 	for _, target := range targets {
@@ -223,7 +227,9 @@ func (r *Reconciler) reconcileInference(ctx context.Context, sandbox *agentzv1al
 		if err != nil {
 			return false, fmt.Errorf("reconcile inference route: %w", err)
 		}
-		ready = ready && inferenceRouteReady(currentRoute)
+		if ready {
+			ready = inferenceRouteReady(currentRoute)
+		}
 		currentPolicy := &agentgatewayv1alpha1.AgentgatewayPolicy{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      runtime.Policy.Name,
@@ -246,7 +252,9 @@ func (r *Reconciler) reconcileInference(ctx context.Context, sandbox *agentzv1al
 		if err != nil {
 			return false, fmt.Errorf("reconcile inference authorization: %w", err)
 		}
-		ready = ready && inferencePolicyReady(currentPolicy)
+		if ready {
+			ready = inferencePolicyReady(currentPolicy)
+		}
 	}
 	grants := &gwv1.ReferenceGrantList{}
 	grantLabels := client.MatchingLabels{

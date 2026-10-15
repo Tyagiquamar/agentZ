@@ -873,9 +873,9 @@ func (s *delegationServer) Check(ctx context.Context, request *authv3.CheckReque
 	if operation == "inference" {
 		path := httpRequest.GetPath()
 		responses := strings.HasSuffix(path, "/responses")
+		messages := strings.HasSuffix(path, "/messages") || strings.HasSuffix(path, "/messages/count_tokens")
 		unsupportedEndpoint := httpRequest.GetMethod() != "POST" ||
-			(!responses &&
-				!strings.HasSuffix(path, "/chat/completions"))
+			(!responses && !messages && !strings.HasSuffix(path, "/chat/completions"))
 		if unsupportedEndpoint {
 			return denyDecision(
 				codes.PermissionDenied, typev3.StatusCode_Forbidden,
@@ -886,7 +886,14 @@ func (s *delegationServer) Check(ctx context.Context, request *authv3.CheckReque
 		if len(body) == 0 {
 			body = []byte(httpRequest.GetBody())
 		}
-		input, err := inference.ValidateDelegatedRequest(body, responses)
+		var input *inference.DelegatedRequest
+		var err error
+		switch {
+		case messages:
+			input, err = inference.ValidateDelegatedMessages(body, strings.HasSuffix(path, "/count_tokens"))
+		default:
+			input, err = inference.ValidateDelegatedRequest(body, responses)
+		}
 		if err != nil || input.Model != extensions["agentz.target"] {
 			return denyDecision(
 				codes.PermissionDenied, typev3.StatusCode_Forbidden,
