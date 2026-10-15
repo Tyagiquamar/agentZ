@@ -156,8 +156,8 @@ func Run(ctx context.Context, command *cli.Command) error {
 		if err := os.MkdirAll(profile, 0700); err != nil {
 			return err
 		}
-		// Keep native preferences and credentials. Only gateway selection belongs
-		// to the launcher; models arrive through authenticated managed settings.
+		// Keep native preferences and credentials while enforcing gateway selection
+		// and supported modes. Models arrive through authenticated managed settings.
 		settingsPath := filepath.Join(profile, "settings.json")
 		settings := make(map[string]json.RawMessage)
 		data, err := os.ReadFile(settingsPath)
@@ -178,6 +178,7 @@ func Run(ctx context.Context, command *cli.Command) error {
 		}
 		settings["forceLoginMethod"] = json.RawMessage(`"gateway"`)
 		settings["forceLoginGatewayUrl"] = gateway
+		settings["disableAutoMode"] = json.RawMessage(`"disable"`)
 		data, err = json.MarshalIndent(settings, "", "  ")
 		if err != nil {
 			return err

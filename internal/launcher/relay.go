@@ -39,6 +39,7 @@ type modelPicker struct {
 type managedSettings struct {
 	AvailableModels      []string          `json:"availableModels"`
 	AvailableModelsMatch string            `json:"availableModelsMatch"`
+	DisableAutoMode      string            `json:"disableAutoMode"`
 	EnforceAvailable     bool              `json:"enforceAvailableModels"`
 	Model                string            `json:"model"`
 	ModelOverrides       map[string]string `json:"modelOverrides"`
@@ -225,6 +226,7 @@ func (installed *installation) serve(ctx context.Context) error {
 			return
 		}
 		settings := managedSettings{
+			DisableAutoMode: "disable",
 			AvailableModels: []string{}, AvailableModelsMatch: "exact", EnforceAvailable: true,
 			ModelOverrides: map[string]string{}, ModelPicker: modelPicker{Options: []modelOption{}, ReplaceBuiltInOptions: true},
 		}

@@ -155,6 +155,8 @@ profile. `agentz --profile NAME relay status` and
 A healthy relay remains available after the coding agent exits. A failed or
 cancelled relay startup terminates and reaps the new child before returning.
 Listeners that cannot prove profile ownership are reported without being stopped.
+Auto mode is disabled in AgentZ Claude profiles because the gateway does not
+support server-side classifier checks.
 
 MCP uses a separate native OAuth login. Follow the agent's setup Sheet to add
 Claude's MCP server and sign in. Choose tools, prompts and resources during
