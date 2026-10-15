@@ -28,46 +28,6 @@ func (s *stats) values() stats {
 	}
 }
 
-type collector struct {
-	processes []processEvent
-	files     []fileEvent
-	networks  []networkEvent
-	traces    []traceSpanEvent
-}
-
-func (c *collector) add(ev event) {
-	if ev.process != nil {
-		c.processes = append(c.processes, *ev.process)
-	}
-	if ev.file != nil {
-		c.files = append(c.files, *ev.file)
-	}
-	if ev.network != nil {
-		c.networks = append(c.networks, *ev.network)
-	}
-	if ev.trace != nil {
-		c.traces = append(c.traces, *ev.trace)
-	}
-}
-
-func (c *collector) count() int {
-	return len(c.processes) + len(c.files) + len(c.networks) + len(c.traces)
-}
-
-func (c *collector) flush() batch {
-	b := batch{
-		processes: c.processes,
-		files:     c.files,
-		networks:  c.networks,
-		traces:    c.traces,
-	}
-	c.processes = nil
-	c.files = nil
-	c.networks = nil
-	c.traces = nil
-	return b
-}
-
 type sink struct {
 	store  store
 	stats  *stats
@@ -79,13 +39,17 @@ func (s *sink) run(ctx context.Context) {
 	ticker := time.NewTicker(s.cfg.FlushInterval)
 	defer ticker.Stop()
 
-	c := &collector{}
+	var b batch
 	flush := func() {
-		b := c.flush()
-		if b.empty() {
+		current := b
+		b = batch{}
+		if current.count() == 0 {
 			return
 		}
-		if err := s.store.insertBatch(ctx, b); err != nil {
+		// Finish accepted events when producer shutdown cancels the parent.
+		writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		defer cancel()
+		if err := s.store.insertBatch(writeCtx, current); err != nil {
 			atomic.AddUint64(&s.stats.failed, 1)
 			slog.ErrorContext(ctx, "flush observer batch", slog.Any("error", err))
 			return
@@ -99,15 +63,15 @@ func (s *sink) run(ctx context.Context) {
 			for {
 				select {
 				case ev := <-s.events:
-					c.add(ev)
+					b.add(ev)
 				default:
 					flush()
 					return
 				}
 			}
 		case ev := <-s.events:
-			c.add(ev)
-			if c.count() >= s.cfg.BatchSize {
+			b.add(ev)
+			if b.count() >= s.cfg.BatchSize {
 				flush()
 			}
 		case <-ticker.C:

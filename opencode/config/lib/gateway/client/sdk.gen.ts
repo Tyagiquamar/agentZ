@@ -146,6 +146,9 @@ import type {
   GetDashboardData,
   GetDashboardErrors,
   GetDashboardResponses,
+  GetDelegatedCatalogData,
+  GetDelegatedCatalogErrors,
+  GetDelegatedCatalogResponses,
   GetDelegationCatalogData,
   GetDelegationCatalogErrors,
   GetDelegationCatalogResponses,
@@ -449,6 +452,10 @@ import type {
   WatchCodingErrors,
   WatchCodingResponse,
   WatchCodingResponses,
+  WatchExternalAgentsData,
+  WatchExternalAgentsErrors,
+  WatchExternalAgentsResponse,
+  WatchExternalAgentsResponses,
   WatchInferencePoolsData,
   WatchInferencePoolsErrors,
   WatchInferencePoolsResponse,
@@ -494,6 +501,22 @@ export type Options<
    */
   meta?: Record<string, unknown>
 }
+
+/**
+ * Watch external agent registration and consent changes.
+ */
+export const watchExternalAgents = <ThrowOnError extends boolean = false>(
+  options?: Options<WatchExternalAgentsData, ThrowOnError, WatchExternalAgentsResponse>
+) =>
+  (options?.client ?? client).sse.post<
+    WatchExternalAgentsResponses,
+    WatchExternalAgentsErrors,
+    ThrowOnError
+  >({
+    security: [{ scheme: "bearer", type: "http" }],
+    url: "/api/external-agent/watch",
+    ...options,
+  })
 
 /**
  * Discover resources the user may delegate in the selected workspace.
@@ -2208,6 +2231,22 @@ export const listInferenceModelSuggestions = <ThrowOnError extends boolean = fal
   >({
     security: [{ scheme: "bearer", type: "http" }],
     url: "/api/inference/provider/catalog/{catalogProvider}/models",
+    ...options,
+  })
+
+/**
+ * Read the approved model catalog using a delegated inference credential.
+ */
+export const getDelegatedCatalog = <ThrowOnError extends boolean = false>(
+  options?: Options<GetDelegatedCatalogData, ThrowOnError>
+) =>
+  (options?.client ?? client).get<
+    GetDelegatedCatalogResponses,
+    GetDelegatedCatalogErrors,
+    ThrowOnError
+  >({
+    security: [{ scheme: "bearer", type: "http" }],
+    url: "/api/inference/v1/catalog",
     ...options,
   })
 

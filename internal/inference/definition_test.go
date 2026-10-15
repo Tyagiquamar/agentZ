@@ -391,12 +391,36 @@ func TestDelegatedAnthropicRequiresChatCompletions(t *testing.T) {
 
 func TestDelegatedCodexRequiresResponsesStreaming(t *testing.T) {
 	cases := []delegationInferenceCase{
-		{"chat completions", `{"model":"selected","store":false,"stream":true}`, false, false},
-		{"non-streaming responses", `{"model":"selected","store":false,"instructions":"Be helpful","stream":false}`, true, false},
-		{"missing instructions", `{"model":"selected","store":false,"stream":true}`, true, false},
-		{"valid responses", `{"model":"selected","store":false,"instructions":"Be helpful","stream":true}`, true, true},
-		{"case sensitive stream", `{"model":"selected","store":false,"instructions":"Be helpful","stream":false,"STREAM":true}`, true, false},
-		{"case sensitive instructions", `{"model":"selected","store":false,"INSTRUCTIONS":"Be helpful","stream":true}`, true, false},
+		{
+			"chat completions",
+			`{"model":"selected","store":false,"stream":true}`,
+			false,
+			false,
+		},
+		{
+			"non-streaming responses",
+			`{"model":"selected","store":false,"instructions":"Be helpful","stream":false}`,
+			true,
+			false,
+		},
+		{
+			"inline instructions from stock Codex",
+			`{"model":"selected","store":false,"stream":true,"input":[{"type":"message","role":"developer","content":[{"type":"input_text","text":"Be helpful"}]}]}`,
+			true,
+			true,
+		},
+		{
+			"valid responses",
+			`{"model":"selected","store":false,"instructions":"Be helpful","stream":true}`,
+			true,
+			true,
+		},
+		{
+			"case sensitive stream",
+			`{"model":"selected","store":false,"instructions":"Be helpful","stream":false,"STREAM":true}`,
+			true,
+			false,
+		},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -418,31 +442,151 @@ func TestDelegatedCodexRequiresResponsesStreaming(t *testing.T) {
 
 func TestDelegatedInferenceRejectsProviderResourceBypasses(t *testing.T) {
 	cases := []delegationInferenceCase{
-		{"chat", `{"model":"selected","messages":[{"role":"user","content":"hi"}]}`, false, true},
+		{
+			"chat",
+			`{"model":"selected","messages":[{"role":"user","content":"hi"}]}`,
+			false,
+			true,
+		},
 		{"responses", `{"model":"selected","store":false,"input":"hi"}`, true, true},
-		{"explicit previous message", `{"model":"selected","store":false,"input":[{"type":"message","id":"msg-inline","role":"assistant","content":[{"type":"output_text","text":"hi"}]}]}`, true, true},
-		{"implicit item reference", `{"model":"selected","store":false,"input":[{"id":"msg-private"}]}`, true, false},
-		{"case sensitive implicit reference", `{"model":"selected","store":false,"input":[{"id":"msg-private","ID":""}]}`, true, false},
-		{"inline audio", `{"model":"selected","messages":[{"role":"user","content":[{"type":"input_audio","input_audio":{"data":"YQ==","format":"wav"}}]}],"audio":{"voice":"alloy","format":"wav"}}`, false, true},
-		{"hosted chat search", `{"model":"selected","web_search_options":{}}`, false, false},
-		{"case sensitive hosted search", `{"model":"selected","web_search_options":{},"WEB_SEARCH_OPTIONS":null}`, false, false},
-		{"stored chat audio", `{"model":"selected","messages":[{"role":"assistant","audio":{"id":"audio-private"}}]}`, false, false},
-		{"case sensitive stored audio", `{"model":"selected","messages":[{"role":"assistant","audio":{"id":"audio-private"},"AUDIO":null}]}`, false, false},
-		{"inline function file", `{"model":"selected","store":false,"input":[{"type":"function_call_output","call_id":"call","output":[{"type":"input_file","file_data":"data:application/pdf;base64,YQ=="}]}]}`, true, true},
-		{"case sensitive store", `{"model":"selected","store":true,"STORE":false}`, false, false},
-		{"case sensitive background", `{"model":"selected","store":false,"background":true,"BACKGROUND":false}`, true, false},
-		{"duplicate store", `{"model":"selected","store":true,"store":false}`, false, false},
-		{"escaped duplicate store", `{"model":"selected","store":true,"\u0073tore":false}`, false, false},
-		{"case sensitive hosted tool", `{"model":"selected","tools":[{"type":"file_search","TYPE":"function"}]}`, false, false},
-		{"chat unrelated input", `{"model":"selected","messages":[{"content":[{"type":"file","file":{"file_id":"file-private"}}]}],"input":[]}`, false, false},
-		{"case sensitive message content", `{"model":"selected","messages":[{"content":[{"file":{"file_id":"file-private","FILE_ID":""}}],"CONTENT":"ignored"}]}`, false, false},
-		{"duplicate nested file", `{"model":"selected","messages":[{"content":[{"file":{"file_id":"file-private","file_id":""}}]}]}`, false, false},
-		{"duplicate response content", `{"model":"selected","store":false,"input":[{"content":[{"file_id":"file-private"}],"content":[]}]}`, true, false},
-		{"response function file", `{"model":"selected","store":false,"input":[{"type":"function_call_output","call_id":"call","output":[{"type":"input_file","file_id":"file-private"}]}]}`, true, false},
-		{"response function image", `{"model":"selected","store":false,"input":[{"type":"function_call_output","call_id":"call","output":[{"type":"input_image","file_id":"file-private"}]}]}`, true, false},
-		{"response screenshot", `{"model":"selected","store":false,"input":[{"type":"computer_call_output","output":{"type":"computer_screenshot","file_id":"file-private"}}]}`, true, false},
-		{"case sensitive reference", `{"model":"selected","store":false,"input":[{"type":"item_reference","TYPE":"message","id":"msg-private"}]}`, true, false},
-		{"duplicate response input", `{"model":"selected","store":false,"input":[{"type":"item_reference","id":"msg-private"}],"input":[]}`, true, false},
+		{
+			"explicit previous message",
+			`{"model":"selected","store":false,"input":[{"type":"message","id":"msg-inline","role":"assistant","content":[{"type":"output_text","text":"hi"}]}]}`,
+			true,
+			true,
+		},
+		{
+			"implicit item reference",
+			`{"model":"selected","store":false,"input":[{"id":"msg-private"}]}`,
+			true,
+			false,
+		},
+		{
+			"case sensitive implicit reference",
+			`{"model":"selected","store":false,"input":[{"id":"msg-private","ID":""}]}`,
+			true,
+			false,
+		},
+		{
+			"inline audio",
+			`{"model":"selected","messages":[{"role":"user","content":[{"type":"input_audio","input_audio":{"data":"YQ==","format":"wav"}}]}],"audio":{"voice":"alloy","format":"wav"}}`,
+			false,
+			true,
+		},
+		{
+			"hosted chat search",
+			`{"model":"selected","web_search_options":{}}`,
+			false,
+			false,
+		},
+		{
+			"case sensitive hosted search",
+			`{"model":"selected","web_search_options":{},"WEB_SEARCH_OPTIONS":null}`,
+			false,
+			false,
+		},
+		{
+			"stored chat audio",
+			`{"model":"selected","messages":[{"role":"assistant","audio":{"id":"audio-private"}}]}`,
+			false,
+			false,
+		},
+		{
+			"case sensitive stored audio",
+			`{"model":"selected","messages":[{"role":"assistant","audio":{"id":"audio-private"},"AUDIO":null}]}`,
+			false,
+			false,
+		},
+		{
+			"inline function file",
+			`{"model":"selected","store":false,"input":[{"type":"function_call_output","call_id":"call","output":[{"type":"input_file","file_data":"data:application/pdf;base64,YQ=="}]}]}`,
+			true,
+			true,
+		},
+		{
+			"case sensitive store",
+			`{"model":"selected","store":true,"STORE":false}`,
+			false,
+			false,
+		},
+		{
+			"case sensitive background",
+			`{"model":"selected","store":false,"background":true,"BACKGROUND":false}`,
+			true,
+			false,
+		},
+		{
+			"duplicate store",
+			`{"model":"selected","store":true,"store":false}`,
+			false,
+			false,
+		},
+		{
+			"escaped duplicate store",
+			`{"model":"selected","store":true,"\u0073tore":false}`,
+			false,
+			false,
+		},
+		{
+			"case sensitive hosted tool",
+			`{"model":"selected","tools":[{"type":"file_search","TYPE":"function"}]}`,
+			false,
+			false,
+		},
+		{
+			"chat unrelated input",
+			`{"model":"selected","messages":[{"content":[{"type":"file","file":{"file_id":"file-private"}}]}],"input":[]}`,
+			false,
+			false,
+		},
+		{
+			"case sensitive message content",
+			`{"model":"selected","messages":[{"content":[{"file":{"file_id":"file-private","FILE_ID":""}}],"CONTENT":"ignored"}]}`,
+			false,
+			false,
+		},
+		{
+			"duplicate nested file",
+			`{"model":"selected","messages":[{"content":[{"file":{"file_id":"file-private","file_id":""}}]}]}`,
+			false,
+			false,
+		},
+		{
+			"duplicate response content",
+			`{"model":"selected","store":false,"input":[{"content":[{"file_id":"file-private"}],"content":[]}]}`,
+			true,
+			false,
+		},
+		{
+			"response function file",
+			`{"model":"selected","store":false,"input":[{"type":"function_call_output","call_id":"call","output":[{"type":"input_file","file_id":"file-private"}]}]}`,
+			true,
+			false,
+		},
+		{
+			"response function image",
+			`{"model":"selected","store":false,"input":[{"type":"function_call_output","call_id":"call","output":[{"type":"input_image","file_id":"file-private"}]}]}`,
+			true,
+			false,
+		},
+		{
+			"response screenshot",
+			`{"model":"selected","store":false,"input":[{"type":"computer_call_output","output":{"type":"computer_screenshot","file_id":"file-private"}}]}`,
+			true,
+			false,
+		},
+		{
+			"case sensitive reference",
+			`{"model":"selected","store":false,"input":[{"type":"item_reference","TYPE":"message","id":"msg-private"}]}`,
+			true,
+			false,
+		},
+		{
+			"duplicate response input",
+			`{"model":"selected","store":false,"input":[{"type":"item_reference","id":"msg-private"}],"input":[]}`,
+			true,
+			false,
+		},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -454,5 +598,130 @@ func TestDelegatedInferenceRejectsProviderResourceBypasses(t *testing.T) {
 				t.Fatalf("model %q", input.Model)
 			}
 		})
+	}
+}
+
+func TestDelegatedMessagesRejectsProviderResourceBypasses(t *testing.T) {
+	t.Parallel()
+	cases := []delegationInferenceCase{
+		{
+			"text",
+			`{"model":"selected","messages":[{"role":"user","content":"hi"}]}`,
+			false,
+			true,
+		},
+		{
+			"inline image",
+			`{"model":"selected","messages":[{"content":[{"type":"image","source":{"type":"base64","data":"YQ==","media_type":"image/png"}}]}]}`,
+			false,
+			true,
+		},
+		{
+			"client tool",
+			`{"model":"selected","tools":[{"name":"read","input_schema":{"type":"object"}}]}`,
+			false,
+			true,
+		},
+		{"container", `{"model":"selected","container":"private"}`, false, false},
+		{
+			"hosted MCP",
+			`{"model":"selected","mcp_servers":[{"url":"https://example.com"}]}`,
+			false,
+			false,
+		},
+		{
+			"hosted tool",
+			`{"model":"selected","tools":[{"type":"web_search_20250305"}]}`,
+			false,
+			false,
+		},
+		{"duplicate model", `{"model":"private","model":"selected"}`, false, false},
+		{
+			"file source",
+			`{"model":"selected","messages":[{"content":[{"type":"image","source":{"type":"file","file_id":"file-private"}}]}]}`,
+			false,
+			false,
+		},
+		{
+			"container upload",
+			`{"model":"selected","messages":[{"content":[{"type":"container_upload","file_id":"file-private"}]}]}`,
+			false,
+			false,
+		},
+		{
+			"tool result file",
+			`{"model":"selected","messages":[{"content":[{"type":"tool_result","content":[{"type":"image","source":{"type":"file","file_id":"file-private"}}]}]}]}`,
+			false,
+			false,
+		},
+		{
+			"document source file",
+			`{"model":"selected","messages":[{"content":[{"type":"document","source":{"type":"content","content":[{"type":"image","source":{"type":"file","file_id":"file-private"}}]}}]}]}`,
+			false,
+			false,
+		},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			input, err := ValidateDelegatedMessages([]byte(test.body), false)
+			if (err == nil) != test.allowed {
+				t.Fatalf("allowed %v, want %v: %v", err == nil, test.allowed, err)
+			}
+			if test.allowed && input.Model != "selected" {
+				t.Fatalf("model %q", input.Model)
+			}
+		})
+	}
+}
+
+func TestDelegatedResponsesClientTools(t *testing.T) {
+	t.Parallel()
+	body := []byte(
+		`{"model":"selected","store":false,"stream":true,"instructions":"Code","tools":[{"type":"namespace","name":"local","tools":[{"type":"custom","name":"patch"},{"type":"function","name":"read"}]}]}`,
+	)
+	input, err := ValidateDelegatedRequest(body, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := input.ValidateProvider(agentzv1alpha1.InferenceProviderKindOpenAI); err != nil {
+		t.Fatal(err)
+	}
+	err = input.ValidateProvider(agentzv1alpha1.InferenceProviderKindOpenAICompatible)
+	if err == nil {
+		t.Fatal("accepted custom tools for Responses to Chat conversion")
+	}
+	if _, err := ValidateDelegatedRequest(body, false); err == nil {
+		t.Fatal("accepted Responses tools in Chat Completions")
+	}
+
+	search := []byte(
+		`{"model":"selected","store":false,"tools":[{"type":"tool_search","execution":"client"}],"input":[{"type":"tool_search_output","execution":"client","tools":[{"type":"function","name":"read"}]}]}`,
+	)
+	input, err = ValidateDelegatedRequest(search, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := input.ValidateProvider(agentzv1alpha1.InferenceProviderKindOpenAI); err != nil {
+		t.Fatal(err)
+	}
+	forbidden := []string{
+		`{"model":"selected","store":false,"tools":[{"type":"tool_search"}]}`,
+		`{"model":"selected","store":false,"tools":[{"type":"tool_search","execution":"server"}]}`,
+		`{"model":"selected","store":false,"input":[{"type":"tool_search_output","execution":"client","tools":[{"type":"file_search"}]}]}`,
+	}
+	for _, body := range forbidden {
+		if _, err := ValidateDelegatedRequest([]byte(body), true); err == nil {
+			t.Fatal("accepted provider-hosted tool discovery")
+		}
+	}
+	hosted := []byte(`{"model":"selected","store":false,"tools":[{"type":"namespace","name":"local","tools":[{"type":"file_search"}]}]}`)
+	if _, err := ValidateDelegatedRequest(hosted, true); err == nil {
+		t.Fatal("accepted hosted tools hidden inside a namespace")
+	}
+	file := []byte(
+		`{"model":"selected","store":false,"input":[{"type":"custom_tool_call_output","output":[{"type":"input_file","file_id":"private"}]}]}`,
+	)
+	if _, err := ValidateDelegatedRequest(file, true); err == nil {
+		t.Fatal("accepted a stored file in custom tool output")
 	}
 }

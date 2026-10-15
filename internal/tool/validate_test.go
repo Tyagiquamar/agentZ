@@ -39,11 +39,26 @@ func TestValidate(t *testing.T) {
 		{"blank source", func(t *agentzv1alpha1.AgentTool) { t.Script = "\n " }},
 		{"binary source", func(t *agentzv1alpha1.AgentTool) { t.Script = "\xff" }},
 		{"NUL", func(t *agentzv1alpha1.AgentTool) { t.Script = "print('ok')\x00" }},
-		{"source size", func(t *agentzv1alpha1.AgentTool) { t.Script = strings.Repeat("é", 32769) }},
-		{"input name", func(t *agentzv1alpha1.AgentTool) { t.Inputs[0].Name = "bad-name" }},
+		{
+			"source size",
+			func(t *agentzv1alpha1.AgentTool) {
+				t.Script = strings.Repeat("é", 32769)
+			},
+		},
+		{
+			"input name",
+			func(t *agentzv1alpha1.AgentTool) {
+				t.Inputs[0].Name = "bad-name"
+			},
+		},
 		{"input type", func(t *agentzv1alpha1.AgentTool) { t.Inputs[0].Type = "array" }},
 		{"missing inputs", func(t *agentzv1alpha1.AgentTool) { t.Inputs = nil }},
-		{"duplicate inputs", func(t *agentzv1alpha1.AgentTool) { t.Inputs = append(t.Inputs, t.Inputs[0]) }},
+		{
+			"duplicate inputs",
+			func(t *agentzv1alpha1.AgentTool) {
+				t.Inputs = append(t.Inputs, t.Inputs[0])
+			},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

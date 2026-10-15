@@ -46,6 +46,88 @@ type delegationQueries struct {
 	sessionErr     error
 	mcpSession     string
 	permissionsErr error
+	externalAgent  *gatewaydb.ExternalAgent
+}
+
+func (q *delegationQueries) GatewayGetExternalAgent(context.Context, string) (gatewaydb.ExternalAgent, error) {
+	if q.externalAgent == nil {
+		return gatewaydb.ExternalAgent{}, pgx.ErrNoRows
+	}
+	return *q.externalAgent, nil
+}
+
+func TestExternalAgentRechecksOwnerWorkspaceAndPermission(t *testing.T) {
+	queries := &delegationQueries{
+		sandboxQueries: sandboxQueries{
+			workspace: gatewaydb.Workspace{
+				ID:             testWorkspaceID,
+				OrganizationID: testOrganizationID,
+				State:          gatewaydb.WorkspaceStateReady,
+			},
+			permissions: []gatewaydb.GatewayResolvePermissionsRow{{
+				Active:      true,
+				WorkspaceID: pgtype.Text{String: testWorkspaceID, Valid: true},
+				Resource: gatewaydb.NullPermissionResource{
+					PermissionResource: gatewaydb.PermissionResourceInferenceProvider,
+					Valid:              true,
+				},
+				Action: gatewaydb.NullPermissionAction{
+					PermissionAction: gatewaydb.PermissionActionDelegate,
+					Valid:            true,
+				},
+			}},
+		},
+		externalAgent: &gatewaydb.ExternalAgent{
+			ClientID:       "native-client",
+			UserID:         testUserID,
+			OrganizationID: testOrganizationID,
+			WorkspaceID:    testWorkspaceID,
+		},
+	}
+	service := sandboxTestService(t, queries)
+	grant := gatewaydb.DelegationGrant{ClientID: "native-client", UserID: testUserID}
+	selection := gatewayapi.DelegationCatalog{}
+	if _, err := service.resolveDelegation(t.Context(), grant, selection); err != nil {
+		t.Fatalf("authorized empty grant: %v", err)
+	}
+	queries.permissions[0].Resource.PermissionResource = gatewaydb.PermissionResourceMcpConnection
+	if _, err := service.resolveDelegation(t.Context(), grant, selection); err != nil {
+		t.Fatalf("MCP-only delegation permission: %v", err)
+	}
+	grant.OrganizationID = pgtype.Text{String: testOrganizationID, Valid: true}
+	foreign := gatewayapi.DelegationCatalog{
+		Models: []gatewayapi.DelegationModel{{WorkspaceId: "another-workspace"}},
+	}
+	_, err := service.resolveDelegation(t.Context(), grant, foreign)
+	if err == nil || !strings.Contains(err.Error(), "model belongs to another workspace") {
+		t.Fatalf("cross-workspace model: %v", err)
+	}
+	foreign = gatewayapi.DelegationCatalog{
+		Mcp: []gatewayapi.DelegationMCP{{WorkspaceId: "another-workspace"}},
+	}
+	_, err = service.resolveDelegation(t.Context(), grant, foreign)
+	if err == nil || !strings.Contains(err.Error(), "MCP connection belongs to another workspace") {
+		t.Fatalf("cross-workspace MCP: %v", err)
+	}
+	queries.externalAgent.UserID = "another-user"
+	if _, err := service.resolveDelegation(t.Context(), grant, selection); err == nil {
+		t.Fatal("accepted another user's registration")
+	}
+	queries.externalAgent.UserID = testUserID
+	queries.permissions[0].WorkspaceID.String = "another-workspace"
+	if _, err := service.resolveDelegation(t.Context(), grant, selection); err == nil {
+		t.Fatal("accepted permission from another workspace")
+	}
+	queries.permissions[0].WorkspaceID.String = testWorkspaceID
+	queries.workspace.State = gatewaydb.WorkspaceStateDeleting
+	if _, err := service.resolveDelegation(t.Context(), grant, selection); err == nil {
+		t.Fatal("accepted a deleting workspace")
+	}
+	queries.workspace.State = gatewaydb.WorkspaceStateReady
+	queries.permissions = nil
+	if _, err := service.resolveDelegation(t.Context(), grant, selection); err == nil {
+		t.Fatal("accepted revoked Use externally permission")
+	}
 }
 
 func (q *delegationQueries) GatewayGetDelegationGrant(_ context.Context, arg gatewaydb.GatewayGetDelegationGrantParams) (gatewaydb.DelegationGrant, error) {
@@ -139,7 +221,12 @@ func TestDelegatedAccessRequiresLiveGrantAndAccessToken(t *testing.T) {
 	service.externalJWTKeyfunc = func(*jwt.Token) (any, error) { return &key.PublicKey, nil }
 	cases := []delegationTokenCase{
 		{name: "access token", typ: "at+jwt", want: http.StatusOK},
-		{name: "client origin", origin: "https://app.example", typ: "at+jwt", want: http.StatusOK},
+		{
+			name:   "client origin",
+			origin: "https://app.example",
+			typ:    "at+jwt",
+			want:   http.StatusOK,
+		},
 		{
 			name:   "another registered client's origin",
 			origin: "https://other.example",
@@ -295,6 +382,34 @@ func TestDelegatedAccessRequiresLiveGrantAndAccessToken(t *testing.T) {
 				if response.Code != http.StatusOK {
 					t.Fatalf("case-insensitive bearer scheme rejected: %d", response.Code)
 				}
+				request.Header.Add("Authorization", "Bearer "+signed)
+				response = httptest.NewRecorder()
+				service.handleDelegatedRequest(response, request)
+				if response.Code != http.StatusUnauthorized {
+					t.Fatalf("duplicate primary credentials admitted: %d", response.Code)
+				}
+				// Native agents can reserve Authorization for their own identity.
+				request.Header.Set("Authorization", "Bearer unrelated-agent-identity")
+				request.Header.Set("X-AgentZ-Authorization", "bearer "+signed)
+				response = httptest.NewRecorder()
+				service.handleDelegatedRequest(response, request)
+				if response.Code != http.StatusOK {
+					t.Fatalf("secondary bearer rejected: %d", response.Code)
+				}
+				request.Header.Set("Authorization", "Bearer "+signed)
+				request.Header.Add("X-AgentZ-Authorization", "Bearer "+signed)
+				response = httptest.NewRecorder()
+				service.handleDelegatedRequest(response, request)
+				if response.Code != http.StatusUnauthorized {
+					t.Fatalf("duplicate secondary credentials admitted: %d", response.Code)
+				}
+				request.Header.Set("X-AgentZ-Authorization", "Basic "+signed)
+				response = httptest.NewRecorder()
+				service.handleDelegatedRequest(response, request)
+				if response.Code != http.StatusUnauthorized {
+					t.Fatalf("malformed secondary credential fell back to primary: %d", response.Code)
+				}
+				request.Header.Del("X-AgentZ-Authorization")
 				request.Header.Set("Authorization", "Bearer "+signed)
 				queries.revoked = true
 				response = httptest.NewRecorder()
@@ -320,7 +435,7 @@ func TestDelegatedAccessRequiresLiveGrantAndAccessToken(t *testing.T) {
 				}
 			}
 			if test.want != http.StatusOK {
-				var body openAIError
+				var body inferenceError
 				if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil || body.Error.Message == "" {
 					t.Fatalf("missing OpenAI error: %s", response.Body.String())
 				}
@@ -352,7 +467,9 @@ func TestDelegationRechecksResourceIdentityAndPermissions(t *testing.T) {
 			OpenAI: &agentzv1alpha1.OpenAIProviderConfig{},
 			Models: []agentzv1alpha1.InferenceModel{{ID: "model"}},
 		},
-		Status: agentzv1alpha1.InferenceProviderStatus{State: agentzv1alpha1.InferenceProviderStateReady},
+		Status: agentzv1alpha1.InferenceProviderStatus{
+			State: agentzv1alpha1.InferenceProviderStateReady,
+		},
 	}
 	objects := []ctrlclient.Object{
 		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
@@ -377,7 +494,9 @@ func TestDelegationRechecksResourceIdentityAndPermissions(t *testing.T) {
 			UID:        "mcp-original",
 			Generation: 2,
 		},
-		Spec: agentzv1alpha1.MCPConnectionSpec{Endpoint: agentzv1alpha1.MCPConnectionEndpoint{URL: "https://mcp.example/mcp"}},
+		Spec: agentzv1alpha1.MCPConnectionSpec{
+			Endpoint: agentzv1alpha1.MCPConnectionEndpoint{URL: "https://mcp.example/mcp"},
+		},
 		Status: agentzv1alpha1.MCPConnectionStatus{
 			ToolCatalogReady: true,
 			Tools:            []agentzv1alpha1.MCPConnectionTool{{Name: "echo"}},
@@ -451,7 +570,10 @@ func TestDelegationReadinessRequiresCurrentAcceptedProjection(t *testing.T) {
 		}
 	}
 	service.cfg.DelegationNamespace = "private"
-	grant := gatewaydb.DelegationGrant{ID: "grant-1", Selection: []byte(`{"models":[],"mcp":[]}`)}
+	grant := gatewaydb.DelegationGrant{
+		ID:        "grant-1",
+		Selection: []byte(`{"models":[],"mcp":[]}`),
+	}
 	hash := sha256.Sum256(grant.Selection)
 	metadata := metav1.ObjectMeta{
 		Name:        "d-grant-1-model-0",
@@ -534,7 +656,9 @@ func TestDelegatedInferenceUsesPrivateGateway(t *testing.T) {
 			OpenAI: &agentzv1alpha1.OpenAIProviderConfig{},
 			Models: []agentzv1alpha1.InferenceModel{{ID: "model"}},
 		},
-		Status: agentzv1alpha1.InferenceProviderStatus{State: agentzv1alpha1.InferenceProviderStateReady},
+		Status: agentzv1alpha1.InferenceProviderStatus{
+			State: agentzv1alpha1.InferenceProviderStateReady,
+		},
 	}
 	objects := []ctrlclient.Object{
 		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
@@ -683,7 +807,12 @@ func TestDelegationCORSMethodsHeadersAndMissingOrigins(t *testing.T) {
 	}))
 	cases := []delegationCORSCase{
 		{name: "native request", path: "/api/mcp", want: http.StatusUnauthorized},
-		{name: "empty origin", path: "/api/mcp", origins: []string{""}, want: http.StatusForbidden},
+		{
+			name:    "empty origin",
+			path:    "/api/mcp",
+			origins: []string{""},
+			want:    http.StatusForbidden,
+		},
 		{
 			name:    "prefix spoof",
 			path:    "/api/inference/v1/models",
@@ -972,7 +1101,9 @@ func TestDelegatedMCPTransportBoundary(t *testing.T) {
 	namespace := agentzv1alpha1.ScopeNamespace(agentzv1alpha1.ResourceScopeWorkspace, testWorkspaceID)
 	connection := &agentzv1alpha1.MCPConnection{
 		ObjectMeta: metav1.ObjectMeta{Name: "selected", Namespace: namespace, UID: "mcp-original"},
-		Spec:       agentzv1alpha1.MCPConnectionSpec{Endpoint: agentzv1alpha1.MCPConnectionEndpoint{URL: "https://mcp.example/mcp"}},
+		Spec: agentzv1alpha1.MCPConnectionSpec{
+			Endpoint: agentzv1alpha1.MCPConnectionEndpoint{URL: "https://mcp.example/mcp"},
+		},
 	}
 	objects := []ctrlclient.Object{
 		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
@@ -1158,8 +1289,12 @@ func TestDelegatedMCPTransportBoundary(t *testing.T) {
 				Trailer: http.Header{"X-Diagnostic": {"private-credential"}},
 			}}
 			service.delegationTransport = upstream
-			request := httptest.NewRequest(http.MethodPost, "/api/mcp?api_key=private-credential", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"ping"}`))
+			request := httptest.NewRequest(
+				http.MethodPost, "/api/mcp?api_key=private-credential",
+				strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"ping"}`),
+			)
 			request.Header.Set("Authorization", "Bearer "+signed)
+			request.Header.Set("X-AgentZ-Authorization", "Bearer "+signed)
 			request.Header.Set("Cookie", "private-credential")
 			request.Header.Set("X-Api-Key", "private-credential")
 			request.Header.Set("X-AgentZ-User-ID", "spoofed")
@@ -1180,7 +1315,7 @@ func TestDelegatedMCPTransportBoundary(t *testing.T) {
 			if upstream.request.URL.RawQuery != "" {
 				t.Fatal("app query parameters reached the native gateway")
 			}
-			headers := []string{"Authorization", "Cookie", "X-Api-Key", "X-AgentZ-User-ID"}
+			headers := []string{"Authorization", "X-AgentZ-Authorization", "Cookie", "X-Api-Key", "X-AgentZ-User-ID"}
 			for _, header := range headers {
 				if upstream.request.Header.Get(header) != "" {
 					t.Fatalf("app %s reached the native gateway", header)
@@ -1190,10 +1325,28 @@ func TestDelegatedMCPTransportBoundary(t *testing.T) {
 	}
 	t.Run("deleted session cannot be revived by upstream headers", func(t *testing.T) {
 		steps := []delegationMCPSessionStep{
-			{http.MethodPost, `{"jsonrpc":"2.0","id":1,"method":"initialize"}`, "", http.StatusOK, http.StatusOK},
+			{
+				http.MethodPost,
+				`{"jsonrpc":"2.0","id":1,"method":"initialize"}`,
+				"",
+				http.StatusOK,
+				http.StatusOK,
+			},
 			{http.MethodDelete, "", "session", http.StatusAccepted, http.StatusAccepted},
-			{http.MethodPost, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`, "", http.StatusOK, http.StatusOK},
-			{http.MethodPost, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`, "session", http.StatusOK, http.StatusNotFound},
+			{
+				http.MethodPost,
+				`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`,
+				"",
+				http.StatusOK,
+				http.StatusOK,
+			},
+			{
+				http.MethodPost,
+				`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`,
+				"session",
+				http.StatusOK,
+				http.StatusNotFound,
+			},
 		}
 		for _, step := range steps {
 			service.delegationTransport = &delegationUpstream{response: &http.Response{

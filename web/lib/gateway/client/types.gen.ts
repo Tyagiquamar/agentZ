@@ -4,7 +4,15 @@ export type ClientOptions = {
   baseUrl: `${string}://${string}` | (string & {})
 }
 
+export type DelegationApiCompatibility = {
+  api: InferenceModelApi
+  support: "native" | "translated" | "unsupported"
+  warning: string
+}
+
 export type DelegationModel = {
+  model_info?: InferenceModel
+  api_compatibility?: Array<DelegationApiCompatibility>
   id: string
   workspace_id: string
   namespace: string
@@ -135,6 +143,10 @@ export type ChatSessionPreference = {
   include_workflow_runs: boolean
   group_by: ChatSessionGroupBy
   last_agent_name: AgentName | null
+}
+
+export type WatchExternalAgentsEvent = {
+  revision: string
 }
 
 export type WatchChatSessionsEvent = {
@@ -321,6 +333,7 @@ export type WorkspaceCapabilities = {
   inference_providers: ResourceCapabilities
   inference_pools: ResourceCapabilities
   api_keys: ResourceCapabilities
+  external_agents: ResourceCapabilities
   observability: ResourceCapabilities
 }
 
@@ -3548,6 +3561,47 @@ export type DashboardWidgetNamePath = DashboardWidgetName
  * Stable publish call identifier.
  */
 export type IdempotencyKeyHeader = string
+
+export type WatchExternalAgentsData = {
+  body?: never
+  headers?: {
+    /**
+     * Stable Workspace ID selecting Workspace scope. Omit for Organisation scope.
+     *
+     */
+    "X-AgentZ-Workspace-ID"?: string
+  }
+  path?: never
+  query?: never
+  url: "/api/external-agent/watch"
+}
+
+export type WatchExternalAgentsErrors = {
+  /**
+   * Request authentication failed.
+   */
+  401: Error
+  /**
+   * The authenticated principal lacks authority for this operation.
+   */
+  403: Error
+  /**
+   * Unexpected server error.
+   */
+  500: Error
+}
+
+export type WatchExternalAgentsError = WatchExternalAgentsErrors[keyof WatchExternalAgentsErrors]
+
+export type WatchExternalAgentsResponses = {
+  /**
+   * Workspace external agent change notifications.
+   */
+  200: WatchExternalAgentsEvent
+}
+
+export type WatchExternalAgentsResponse =
+  WatchExternalAgentsResponses[keyof WatchExternalAgentsResponses]
 
 export type GetDelegationCatalogData = {
   body?: never
@@ -8551,6 +8605,32 @@ export type ListInferenceModelSuggestionsResponses = {
 
 export type ListInferenceModelSuggestionsResponse =
   ListInferenceModelSuggestionsResponses[keyof ListInferenceModelSuggestionsResponses]
+
+export type GetDelegatedCatalogData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/api/inference/v1/catalog"
+}
+
+export type GetDelegatedCatalogErrors = {
+  /**
+   * Request validation failed.
+   */
+  default: Error
+}
+
+export type GetDelegatedCatalogError = GetDelegatedCatalogErrors[keyof GetDelegatedCatalogErrors]
+
+export type GetDelegatedCatalogResponses = {
+  /**
+   * Approved models in the immutable grant's order, with current API compatibility.
+   */
+  200: DelegationCatalog
+}
+
+export type GetDelegatedCatalogResponse =
+  GetDelegatedCatalogResponses[keyof GetDelegatedCatalogResponses]
 
 export type ListInferencePoolsData = {
   body?: never

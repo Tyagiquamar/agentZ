@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net/http"
 	"slices"
-	"sort"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -85,7 +84,7 @@ func (s *Service) ReplaceWorkspaceInheritedResources(w http.ResponseWriter, r *h
 	for i := range names {
 		names[i] = strings.TrimSpace(names[i])
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	invalid := slices.Contains(names, "")
 	for i := 1; i < len(names); i++ {
 		invalid = invalid || names[i-1] == names[i]
@@ -441,8 +440,14 @@ func (s *Service) validateOrganizationResourceSelection(ctx context.Context, org
 	)
 	fields := []gatewayapi.FieldError{}
 	kinds := []organizationResourceSelectionKind{
-		{agentzv1alpha1.OrganizationResourceKindSkill, "selected_organization_resources.skills"},
-		{agentzv1alpha1.OrganizationResourceKindSandbox, "selected_organization_resources.sandboxes"},
+		{
+			agentzv1alpha1.OrganizationResourceKindSkill,
+			"selected_organization_resources.skills",
+		},
+		{
+			agentzv1alpha1.OrganizationResourceKindSandbox,
+			"selected_organization_resources.sandboxes",
+		},
 		{
 			agentzv1alpha1.OrganizationResourceKindMCPConnection,
 			"selected_organization_resources.mcp_connections",
@@ -507,9 +512,18 @@ func (s *Service) validateOrganizationResourceSelection(ctx context.Context, org
 
 func insertWorkspaceResourceSelection(ctx context.Context, q gatewaydb.Querier, workspaceID, organizationID string, selected agentzv1alpha1.SelectedOrganizationResources) error {
 	kinds := []workspaceInheritedResourceKind{
-		{agentzv1alpha1.OrganizationResourceKindSkill, gatewaydb.PermissionResourceSkill},
-		{agentzv1alpha1.OrganizationResourceKindSandbox, gatewaydb.PermissionResourceSandbox},
-		{agentzv1alpha1.OrganizationResourceKindMCPConnection, gatewaydb.PermissionResourceMcpConnection},
+		{
+			agentzv1alpha1.OrganizationResourceKindSkill,
+			gatewaydb.PermissionResourceSkill,
+		},
+		{
+			agentzv1alpha1.OrganizationResourceKindSandbox,
+			gatewaydb.PermissionResourceSandbox,
+		},
+		{
+			agentzv1alpha1.OrganizationResourceKindMCPConnection,
+			gatewaydb.PermissionResourceMcpConnection,
+		},
 		{
 			agentzv1alpha1.OrganizationResourceKindInferenceProvider,
 			gatewaydb.PermissionResourceInferenceProvider,

@@ -40,7 +40,7 @@ import {
 } from "@/lib/organization-invitation"
 import { minPasswordLength } from "@/lib/password-policy"
 import { signInReturnTo } from "@/lib/sign-in-redirect"
-import { agentZOAuthProvider } from "@/lib/delegation"
+import { agentZOAuthProvider, agentZDeviceAuthorization } from "@/lib/delegation"
 
 // Better Auth uses these internal cookie names for 2FA challenge state and
 // trusted-device bypass. The plugin does not export them publicly, so the
@@ -65,6 +65,9 @@ const memberRole = organizationAccessControl.newRole({
 
 const disabledAuthPaths = [
   // AgentZ owns client registration and connected-application revocation.
+  "/device/approve",
+  "/device/deny",
+  "/device/token",
   "/oauth2/create-client",
   "/oauth2/get-client",
   "/oauth2/get-clients",
@@ -308,6 +311,7 @@ function buildAuthOptions() {
       window: 60,
       max: 100,
       customRules: {
+        "/device/code": { window: 60, max: 30 },
         "/sign-in/social": { window: 60, max: 5 },
         "/callback/:id": { window: 60, max: 10 },
       },
@@ -540,6 +544,7 @@ function buildAuthOptions() {
         }),
       } satisfies BetterAuthPlugin,
       agentZOAuthProvider(env.BETTER_AUTH_URL),
+      agentZDeviceAuthorization(),
       organization({
         ac: organizationAccessControl,
         allowUserToCreateOrganization: false,

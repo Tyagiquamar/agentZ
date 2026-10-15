@@ -47,7 +47,12 @@ func TestPTYWebSocketAuthentication(t *testing.T) {
 			"agentz.pty, agentz.bearer.test-token",
 			http.StatusForbidden,
 		},
-		{"missing origin", "", "agentz.pty, agentz.bearer.test-token", http.StatusForbidden},
+		{
+			"missing origin",
+			"",
+			"agentz.pty, agentz.bearer.test-token",
+			http.StatusForbidden,
+		},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -616,7 +621,11 @@ func TestChatInputAdmissionRecovery(t *testing.T) {
 			active:   true,
 			want:     gatewayapi.ChatInputStateSending,
 		},
-		{name: "provider error", messages: []int{http.StatusServiceUnavailable}, wantErr: true},
+		{
+			name:     "provider error",
+			messages: []int{http.StatusServiceUnavailable},
+			wantErr:  true,
+		},
 		{name: "forbidden", messages: []int{http.StatusForbidden}, wantErr: true},
 		{name: "empty success", messages: []int{http.StatusNoContent}, wantErr: true},
 		{

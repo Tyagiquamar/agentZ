@@ -3033,6 +3033,24 @@ components:
       - half
       - third
       type: string
+    DelegationAPICompatibility:
+      additionalProperties: false
+      properties:
+        api:
+          $ref: '#/components/schemas/InferenceModelAPI'
+        support:
+          enum:
+          - native
+          - translated
+          - unsupported
+          type: string
+        warning:
+          type: string
+      required:
+      - api
+      - support
+      - warning
+      type: object
     DelegationCatalog:
       additionalProperties: false
       properties:
@@ -3097,6 +3115,10 @@ components:
     DelegationModel:
       additionalProperties: false
       properties:
+        api_compatibility:
+          items:
+            $ref: '#/components/schemas/DelegationAPICompatibility'
+          type: array
         id:
           minLength: 1
           type: string
@@ -3105,6 +3127,8 @@ components:
           type: string
         model_display_name:
           type: string
+        model_info:
+          $ref: '#/components/schemas/InferenceModel'
         namespace:
           minLength: 1
           type: string
@@ -25586,6 +25610,14 @@ components:
       required:
       - revision
       type: object
+    WatchExternalAgentsEvent:
+      additionalProperties: false
+      properties:
+        revision:
+          type: string
+      required:
+      - revision
+      type: object
     WatchInferencePoolsEvent:
       additionalProperties: false
       properties:
@@ -26304,6 +26336,8 @@ components:
           $ref: '#/components/schemas/AgentWorkspaceCapabilities'
         api_keys:
           $ref: '#/components/schemas/ResourceCapabilities'
+        external_agents:
+          $ref: '#/components/schemas/ResourceCapabilities'
         inference_pools:
           $ref: '#/components/schemas/ResourceCapabilities'
         inference_providers:
@@ -26325,6 +26359,7 @@ components:
       - inference_providers
       - inference_pools
       - api_keys
+      - external_agents
       - observability
       type: object
     WorkspaceInheritedResource:
@@ -28570,6 +28605,30 @@ paths:
       summary: Get an Organisation event trail event.
       tags:
       - event-trail
+  /api/external-agent/watch:
+    post:
+      operationId: watchExternalAgents
+      parameters:
+      - $ref: '#/components/parameters/WorkspaceIDHeader'
+      responses:
+        "200":
+          content:
+            text/event-stream:
+              schema:
+                $ref: '#/components/schemas/WatchExternalAgentsEvent'
+          description: Workspace external agent change notifications.
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "500":
+          $ref: '#/components/responses/InternalError'
+      security:
+      - GatewayBearer:
+        - organization.member
+      summary: Watch external agent registration and consent changes.
+      tags:
+      - workspaces
   /api/inference/pool:
     get:
       operationId: listInferencePools
@@ -29089,6 +29148,24 @@ paths:
       - GatewayBearer:
         - inference_provider.read
       summary: Watch inference provider status changes.
+      tags:
+      - inference
+  /api/inference/v1/catalog:
+    get:
+      operationId: getDelegatedCatalog
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DelegationCatalog'
+          description: Approved models in the immutable grant's order, with current API compatibility.
+        default:
+          $ref: '#/components/responses/BadRequest'
+      security:
+      - GatewayBearer:
+        - inference:use
+      summary: Read the approved model catalog using a delegated inference credential.
       tags:
       - inference
   /api/lens/{agentName}/{sessionID}/trace:

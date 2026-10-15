@@ -89,7 +89,9 @@ func TestEvaluationScore(t *testing.T) {
 			if tt.missing {
 				execution.Tokens = nil
 			}
-			evaluation := gatewayapi.WorkflowEvaluation{Executions: []gatewayapi.EvaluationExecution{execution}}
+			evaluation := gatewayapi.WorkflowEvaluation{
+				Executions: []gatewayapi.EvaluationExecution{execution},
+			}
 			scoreEvaluation(&evaluation)
 			result := evaluation.Executions[0]
 			if tt.missing {
@@ -268,7 +270,10 @@ func TestEvaluationParallelRuns(t *testing.T) {
 			}
 			// Losing a later run must release its slot even while the first run is active.
 			var finished agentzv1alpha1.WorkflowRun
-			key := client.ObjectKey{Namespace: "test", Name: evaluation.Executions[concurrency-1].RunName}
+			key := client.ObjectKey{
+				Namespace: "test",
+				Name:      evaluation.Executions[concurrency-1].RunName,
+			}
 			if err := k8s.Get(ctx, key, &finished); err != nil {
 				t.Fatal(err)
 			}
@@ -407,8 +412,21 @@ func TestEvaluationVariants(t *testing.T) {
 			status: 200,
 			calls:  1,
 		},
-		{name: "catalog unavailable", status: 503, model: "low", calls: 1, unavailable: true},
-		{name: "catalog malformed", body: `{`, status: 200, model: "low", calls: 1, unavailable: true},
+		{
+			name:        "catalog unavailable",
+			status:      503,
+			model:       "low",
+			calls:       1,
+			unavailable: true,
+		},
+		{
+			name:        "catalog malformed",
+			body:        `{`,
+			status:      200,
+			model:       "low",
+			calls:       1,
+			unavailable: true,
+		},
 		{
 			name:        "catalog missing providers",
 			body:        `{}`,
@@ -463,8 +481,16 @@ func TestEvaluationVariants(t *testing.T) {
 				targetOverride: upstream.URL,
 			}
 			svc.outboundHTTP = upstream.Client()
-			model := gatewayapi.EvaluationModel{ProviderId: "provider", ModelId: "model", Variant: &tt.model}
-			judge := gatewayapi.EvaluationModel{ProviderId: "provider", ModelId: "model", Variant: &tt.judge}
+			model := gatewayapi.EvaluationModel{
+				ProviderId: "provider",
+				ModelId:    "model",
+				Variant:    &tt.model,
+			}
+			judge := gatewayapi.EvaluationModel{
+				ProviderId: "provider",
+				ModelId:    "model",
+				Variant:    &tt.judge,
+			}
 			fields, err := svc.validateEvaluationModels(
 				t.Context(), testWorkspaceNS, agent.Name,
 				[]gatewayapi.EvaluationModel{model, model}, judge,

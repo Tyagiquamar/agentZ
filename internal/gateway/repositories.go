@@ -55,7 +55,10 @@ func (s *Service) ListCodingRefs(w http.ResponseWriter, r *http.Request, project
 	}
 	row, err := s.queries.GatewayTouchCodingSnapshot(
 		r.Context(),
-		gatewaydb.GatewayTouchCodingSnapshotParams{ProjectID: project.ID, AgentName: params.AgentName},
+		gatewaydb.GatewayTouchCodingSnapshotParams{
+			ProjectID: project.ID,
+			AgentName: params.AgentName,
+		},
 	)
 	if err != nil {
 		apiutil.WriteInternalError(w, r, err)
@@ -166,7 +169,10 @@ func (s *Service) RefreshCodingRepository(w http.ResponseWriter, r *http.Request
 	}
 	_, err = s.queries.GatewayTouchCodingSnapshot(
 		r.Context(),
-		gatewaydb.GatewayTouchCodingSnapshotParams{ProjectID: projectId, AgentName: params.AgentName},
+		gatewaydb.GatewayTouchCodingSnapshotParams{
+			ProjectID: projectId,
+			AgentName: params.AgentName,
+		},
 	)
 	if err != nil {
 		apiutil.WriteInternalError(w, r, err)
@@ -423,7 +429,10 @@ func (s *Service) loadCodingSnapshot(ctx context.Context, access resourceAccess,
 		"Projects", base64.RawURLEncoding.EncodeToString([]byte(project.OwnerID)),
 		"github", project.ID,
 	)
-	tree := gatewaydb.CodingWorktree{AgentName: snapshot.AgentName, Directory: root + "/repo"}
+	tree := gatewaydb.CodingWorktree{
+		AgentName: snapshot.AgentName,
+		Directory: root + "/repo",
+	}
 	if snapshot.WorktreeID != "" {
 		row, err := s.queries.GatewayGetCodingWorktree(
 			ctx,
@@ -598,7 +607,7 @@ func (s *Service) loadCodingSnapshot(ctx context.Context, access resourceAccess,
 				Refs:      []gatewayapi.CodingRef{},
 				Worktrees: []gatewayapi.CodingDiscoveredWorktree{},
 			}
-			for _, line := range strings.Split(remote, "\n") {
+			for line := range strings.SplitSeq(remote, "\n") {
 				head, ref, ok := strings.Cut(line, "\t")
 				if !ok {
 					continue
@@ -637,7 +646,10 @@ func (s *Service) loadCodingSnapshot(ctx context.Context, access resourceAccess,
 					tree,
 					project,
 					false,
-					gatewayapi.CodingGitRequest{Operation: gatewayapi.CodingGitImport, Bundle: &bundle},
+					gatewayapi.CodingGitRequest{
+						Operation: gatewayapi.CodingGitImport,
+						Bundle:    &bundle,
+					},
 				)
 			}
 		}
@@ -705,11 +717,19 @@ func (s *Service) listenCoding(ctx context.Context) {
 		if err == nil {
 			q := gatewaydb.New(conn.Conn())
 			err = q.GatewayListenCoding(ctx)
+			if err == nil {
+				err = q.GatewayListenExternalAgents(ctx)
+			}
 			for err == nil {
 				notification, waitErr := conn.Conn().WaitForNotification(ctx)
 				err = waitErr
 				if err == nil {
-					s.codingEvents.publish(notification.Payload)
+					switch notification.Channel {
+					case "agentz_coding":
+						s.codingEvents.publish(notification.Payload)
+					case "agentz_external_agents":
+						s.externalAgentEvents.publish(notification.Payload)
+					}
 				}
 			}
 			conn.Release()

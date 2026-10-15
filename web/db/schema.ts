@@ -231,6 +231,34 @@ export const workspaces = pgTable(
   ]
 )
 
+export const externalAgentKind = pgEnum("external_agent_kind", ["claude", "codex"])
+
+export const externalAgents = pgTable(
+  "external_agents",
+  {
+    clientId: text("client_id")
+      .primaryKey()
+      .references(() => oauthClients.clientId, { onDelete: "cascade" }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "restrict" }),
+    workspaceId: text("workspace_id").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    kind: externalAgentKind("kind").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("external_agents_workspace_idx").on(table.organizationId, table.workspaceId),
+    foreignKey({
+      columns: [table.workspaceId, table.organizationId],
+      foreignColumns: [workspaces.id, workspaces.organizationId],
+      name: "external_agents_workspace_organization_fk",
+    }).onDelete("restrict"),
+  ]
+)
+
 // Projects are personal records. Agent authorization never grants project ownership.
 export const codingProjects = pgTable(
   "coding_projects",

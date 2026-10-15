@@ -45,6 +45,28 @@ tags:
   description: Workspace chat inbox and preference APIs.
 
 paths:
+  /api/external-agent/watch:
+    post:
+      operationId: watchExternalAgents
+      tags: [workspaces]
+      summary: Watch external agent registration and consent changes.
+      parameters:
+      - $ref: '#/components/parameters/WorkspaceIDHeader'
+      security:
+      - GatewayBearer: []
+      responses:
+        '200':
+          description: Workspace external agent change notifications.
+          content:
+            text/event-stream:
+              schema:
+                $ref: '#/components/schemas/WatchExternalAgentsEvent'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /api/delegations/catalog:
     get:
       operationId: getDelegationCatalog
@@ -2955,6 +2977,22 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /api/inference/v1/catalog:
+    get:
+      operationId: getDelegatedCatalog
+      summary: Read the approved model catalog using a delegated inference credential.
+      tags: [inference]
+      responses:
+        "200":
+          description: Approved models in the immutable grant's order, with current API compatibility.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DelegationCatalog'
+        default:
+          $ref: '#/components/responses/BadRequest'
+      security:
+      - GatewayBearer: ['inference:use']
   /api/inference/pool:
     get:
       operationId: listInferencePools
@@ -5044,11 +5082,29 @@ components:
             $ref: '#/components/schemas/Error'
 
   schemas:
+    DelegationAPICompatibility:
+      additionalProperties: false
+      properties:
+        api:
+          $ref: '#/components/schemas/InferenceModelAPI'
+        support:
+          type: string
+          enum: [native, translated, unsupported]
+        warning:
+          type: string
+      required: [api, support, warning]
+      type: object
     DelegationModel:
       type: object
       additionalProperties: false
       required: [id, workspace_id, namespace, provider, provider_display_name, uid, model, model_display_name]
       properties:
+        model_info:
+          $ref: '#/components/schemas/InferenceModel'
+        api_compatibility:
+          type: array
+          items:
+            $ref: '#/components/schemas/DelegationAPICompatibility'
         id: {type: string, minLength: 1}
         workspace_id: {type: string, minLength: 1}
         namespace: {type: string, minLength: 1}
@@ -5317,6 +5373,14 @@ components:
           - $ref: '#/components/schemas/AgentName'
           nullable: true
       required: [agent_name, participant_user_ids, include_workflow_runs, group_by, last_agent_name]
+
+    WatchExternalAgentsEvent:
+      type: object
+      additionalProperties: false
+      properties:
+        revision:
+          type: string
+      required: [revision]
 
     WatchChatSessionsEvent:
       type: object
@@ -5731,6 +5795,8 @@ components:
           $ref: '#/components/schemas/ResourceCapabilities'
         api_keys:
           $ref: '#/components/schemas/ResourceCapabilities'
+        external_agents:
+          $ref: '#/components/schemas/ResourceCapabilities'
         observability:
           $ref: '#/components/schemas/ResourceCapabilities'
       required:
@@ -5742,6 +5808,7 @@ components:
       - inference_providers
       - inference_pools
       - api_keys
+      - external_agents
       - observability
 
     AgentWorkspaceCapabilities:

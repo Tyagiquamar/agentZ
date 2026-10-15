@@ -26,6 +26,7 @@ import { toast } from "sonner"
 import { AdministrationPageHeader } from "@/components/administration"
 import type { oauthClients } from "@/db/auth-schema"
 import { Button } from "@/components/ui/button"
+import { MultiSelectDropdown } from "@/components/ui/multi-select-dropdown"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
@@ -148,6 +149,7 @@ type Application = Pick<
   | "scopes"
   | "tokenEndpointAuthMethod"
   | "applicationType"
+  | "grantTypes"
   | "disabled"
 > & { authorizedOrigins: string[] }
 
@@ -554,6 +556,7 @@ const applicationFormSchema = z
   .object({
     name: z.string(),
     type: oauthApplicationInput.shape.type,
+    loginMethods: oauthApplicationInput.shape.loginMethods,
     redirectUris: z.string(),
     authorizedOrigins: z.string(),
     scopes: z.array(z.string()),
@@ -604,12 +607,23 @@ function ApplicationEditor({
     defaultValues: {
       name: client?.name ?? "",
       type: initialType,
+      loginMethods: client
+        ? [
+            ...(client.grantTypes?.includes("authorization_code")
+              ? ["authorization_code" as const]
+              : []),
+            ...(client.grantTypes?.includes("urn:ietf:params:oauth:grant-type:device_code")
+              ? ["device_code" as const]
+              : []),
+          ]
+        : ["authorization_code"],
       redirectUris: client?.redirectUris.join("\n") ?? "",
       authorizedOrigins: client?.authorizedOrigins.join("\n") ?? "",
       scopes: client ? (client.scopes ?? []) : ["openid", "profile", "email"],
     },
   })
   const type = useWatch({ control: form.control, name: "type" })
+  const loginMethods = useWatch({ control: form.control, name: "loginMethods" })
   const pending = form.formState.isSubmitting
   const error = form.formState.errors.root?.message
   const save = form.handleSubmit(async (input) => {
@@ -672,7 +686,11 @@ function ApplicationEditor({
                       name={field.name}
                       value={field.value}
                       disabled={!!client || pending}
-                      onValueChange={field.onChange}
+                      onValueChange={(value) => {
+                        field.onChange(value)
+                        if (value !== "native")
+                          form.setValue("loginMethods", ["authorization_code"])
+                      }}
                     >
                       <SelectTrigger
                         ref={field.ref}
@@ -707,18 +725,53 @@ function ApplicationEditor({
                   </Field>
                 )}
               />
+              {type === "native" ? (
+                <Controller
+                  name="loginMethods"
+                  control={form.control}
+                  render={({ field, fieldState }) => (
+                    <Field data-invalid={fieldState.invalid}>
+                      <FieldLabel htmlFor="application-login-methods" required>
+                        Login methods
+                      </FieldLabel>
+                      <MultiSelectDropdown
+                        id="application-login-methods"
+                        disabled={pending}
+                        options={[
+                          {
+                            value: "authorization_code",
+                            label: "Browser login with PKCE",
+                            icon: Monitor,
+                          },
+                          { value: "device_code", label: "Device authorization", icon: Smartphone },
+                        ]}
+                        value={field.value ?? []}
+                        onValueChangeAction={field.onChange}
+                      />
+                      <FieldDescription>
+                        Claude uses device authorization. Codex uses browser login with PKCE. Public
+                        clients have no secret.
+                      </FieldDescription>
+                      <FieldError errors={[fieldState.error]} />
+                    </Field>
+                  )}
+                />
+              ) : null}
               <Controller
                 name="redirectUris"
                 control={form.control}
                 render={({ field, fieldState }) => (
                   <Field data-invalid={fieldState.invalid}>
-                    <FieldLabel htmlFor="application-redirects" required>
+                    <FieldLabel
+                      htmlFor="application-redirects"
+                      required={loginMethods?.includes("authorization_code")}
+                    >
                       Callback URLs
                     </FieldLabel>
                     <Textarea
                       {...field}
                       id="application-redirects"
-                      required
+                      required={loginMethods?.includes("authorization_code")}
                       disabled={pending}
                       aria-invalid={fieldState.invalid}
                       aria-describedby="application-redirects-description application-redirects-error"
@@ -732,7 +785,7 @@ function ApplicationEditor({
                         process.env.NODE_ENV === "development" &&
                         " In development, browser clients may also use HTTP on localhost, 127.0.0.1, or [::1]."}
                       {type === "native" &&
-                        " Native clients can use HTTP loopback URLs or a reverse-domain URI scheme."}
+                        " Native clients can use HTTP loopback URLs or a reverse-domain URI scheme. Device-only applications need no callback URL."}
                     </FieldDescription>
                     <FieldError id="application-redirects-error" errors={[fieldState.error]} />
                   </Field>
