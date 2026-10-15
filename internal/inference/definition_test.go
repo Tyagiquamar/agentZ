@@ -703,12 +703,13 @@ func TestDelegatedResponsesClientTools(t *testing.T) {
 	if err := input.ValidateProvider(agentzv1alpha1.InferenceProviderKindOpenAI); err != nil {
 		t.Fatal(err)
 	}
-	for _, forbidden := range []string{
+	forbidden := []string{
 		`{"model":"selected","store":false,"tools":[{"type":"tool_search"}]}`,
 		`{"model":"selected","store":false,"tools":[{"type":"tool_search","execution":"server"}]}`,
 		`{"model":"selected","store":false,"input":[{"type":"tool_search_output","execution":"client","tools":[{"type":"file_search"}]}]}`,
-	} {
-		if _, err := ValidateDelegatedRequest([]byte(forbidden), true); err == nil {
+	}
+	for _, body := range forbidden {
+		if _, err := ValidateDelegatedRequest([]byte(body), true); err == nil {
 			t.Fatal("accepted provider-hosted tool discovery")
 		}
 	}

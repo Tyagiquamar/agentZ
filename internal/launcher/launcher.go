@@ -1,4 +1,4 @@
-// Package launcher coordinates native coding-agent profiles and a loopback relay.
+// Package launcher connects coding agents to AgentZ through a local relay.
 package launcher
 
 import (
@@ -24,11 +24,13 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/blang/semver/v4"
+	"github.com/cenkalti/backoff/v5"
 	"github.com/urfave/cli/v3"
 	"go.yaml.in/yaml/v3"
 )
 
-var errRelayOwnership = errors.New("the port is already in use by a process that did not prove ownership of this AgentZ profile")
+var errRelayOwnership = errors.New("another process is using the relay port. It could not be verified as this profile's relay")
 
 type configuration struct {
 	ServerURL      string                     `yaml:"serverURL"`
@@ -51,7 +53,7 @@ type installation struct {
 	upstream   *url.URL
 }
 
-// Run executes desktop commands without loading server or Kubernetes services.
+// Run launches coding agents and manages their local relay.
 func Run(ctx context.Context, command *cli.Command) error {
 	if command.Name != "launch" {
 		var cancel context.CancelFunc
@@ -113,17 +115,18 @@ func Run(ctx context.Context, command *cli.Command) error {
 		if err != nil {
 			return fmt.Errorf("read %s version: %w", provider, err)
 		}
-		var major, minor, patch int
 		versionText := strings.TrimPrefix(string(version), "codex-cli ")
-		if _, err := fmt.Sscanf(versionText, "%d.%d.%d", &major, &minor, &patch); err != nil {
+		versionText, _, _ = strings.Cut(strings.TrimSpace(versionText), " ")
+		current, err := semver.Parse(versionText)
+		if err != nil {
 			return fmt.Errorf("read %s version: %w", provider, err)
 		}
-		oldClaude := major < 2 || major == 2 && (minor < 1 || minor == 1 && patch < 299)
-		if provider == "claude" && oldClaude {
-			return errors.New("AgentZ requires Claude Code 2.1.299 or later; run claude update")
+		minimum := semver.Version{Major: 2, Minor: 1, Patch: 299}
+		if provider == "codex" {
+			minimum = semver.Version{Minor: 162, Patch: 1}
 		}
-		if provider == "codex" && major == 0 && (minor < 162 || minor == 162 && patch < 1) {
-			return errors.New("AgentZ requires Codex 0.162.1 or later")
+		if current.LT(minimum) {
+			return fmt.Errorf("AgentZ requires %s %s or later", provider, minimum)
 		}
 		args = append([]string{provider}, args...)
 	}
@@ -137,9 +140,6 @@ func Run(ctx context.Context, command *cli.Command) error {
 			return err
 		}
 		defer response.Body.Close()
-		if response.StatusCode != http.StatusOK {
-			return fmt.Errorf("relay returned HTTP %d", response.StatusCode)
-		}
 		_, err = io.Copy(command.Writer, response.Body)
 		return err
 	case "launch", "login":
@@ -152,65 +152,65 @@ func Run(ctx context.Context, command *cli.Command) error {
 		if command.Name == "login" {
 			return errors.New("use agentz launch claude auth login for native Claude login")
 		}
-		profile := filepath.Join(installed.profile, "claude")
-		if err := os.MkdirAll(profile, 0700); err != nil {
-			return err
-		}
-		// Keep native preferences and credentials while enforcing gateway selection
-		// and supported modes. Models arrive through authenticated managed settings.
-		settingsPath := filepath.Join(profile, "settings.json")
-		settings := make(map[string]json.RawMessage)
-		data, err := os.ReadFile(settingsPath)
-		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
-		if err == nil {
-			if err := json.Unmarshal(data, &settings); err != nil {
-				return fmt.Errorf("read Claude settings: %w", err)
-			}
-			if settings == nil {
-				return errors.New("expected a JSON object in Claude settings")
-			}
-		}
-		gateway, err := json.Marshal(installed.address)
-		if err != nil {
-			return err
-		}
-		settings["forceLoginMethod"] = json.RawMessage(`"gateway"`)
-		settings["forceLoginGatewayUrl"] = gateway
-		settings["disableAutoMode"] = json.RawMessage(`"disable"`)
-		data, err = json.MarshalIndent(settings, "", "  ")
-		if err != nil {
-			return err
-		}
-		// Rename protects readers from truncated JSON during concurrent launches.
-		if err := writeProfileFile(settingsPath, data); err != nil {
-			return err
-		}
-		child := exec.CommandContext(ctx, args[0], args[1:]...)
-		child.Stdin, child.Stdout, child.Stderr = os.Stdin, command.Writer, command.ErrWriter
-		child.Env = slices.DeleteFunc(os.Environ(), func(entry string) bool {
-			name, _, _ := strings.Cut(entry, "=")
-			if runtime.GOOS == "windows" {
-				name = strings.ToUpper(name)
-			}
-			return name == "CLAUDE_CONFIG_DIR" || name == "CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY" ||
-				strings.HasPrefix(name, "ANTHROPIC_") || name == "CLAUDE_CODE_OAUTH_TOKEN" ||
-				name == "CLAUDE_CODE_USE_BEDROCK" || name == "CLAUDE_CODE_USE_VERTEX" ||
-				name == "CLAUDE_CODE_USE_FOUNDRY" || name == "CLAUDE_CODE_USE_MANTLE"
-		})
-		child.Env = append(child.Env, "CLAUDE_CONFIG_DIR="+profile, "CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1")
-		if err := child.Run(); err != nil {
-			var exit *exec.ExitError
-			if errors.As(err, &exit) {
-				return cli.Exit("Claude exited", exit.ExitCode())
-			}
-			return err
-		}
-		return nil
+		return installed.claude(ctx, command, args)
 	default:
 		return fmt.Errorf("unknown command %q", command.Name)
 	}
+}
+
+func (installed *installation) claude(ctx context.Context, command *cli.Command, args []string) error {
+	profile := filepath.Join(installed.profile, "claude")
+	if err := os.MkdirAll(profile, 0o700); err != nil {
+		return err
+	}
+	// Keep native preferences and credentials while enforcing gateway selection
+	// and supported modes. Models arrive through authenticated managed settings.
+	settingsPath := filepath.Join(profile, "settings.json")
+	settings := make(map[string]json.RawMessage)
+	data, err := os.ReadFile(settingsPath)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if err == nil {
+		if err := json.Unmarshal(data, &settings); err != nil {
+			return fmt.Errorf("read Claude settings: %w", err)
+		}
+		if settings == nil {
+			return errors.New("expected a JSON object in Claude settings")
+		}
+	}
+	gateway, _ := json.Marshal(installed.address)
+	settings["forceLoginMethod"] = json.RawMessage(`"gateway"`)
+	settings["forceLoginGatewayUrl"] = gateway
+	settings["disableAutoMode"] = json.RawMessage(`"disable"`)
+	data, err = json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return err
+	}
+	// Rename protects readers from truncated JSON during concurrent launches.
+	if err := writeProfileFile(settingsPath, data); err != nil {
+		return err
+	}
+	child := exec.CommandContext(ctx, args[0], args[1:]...)
+	child.Stdin, child.Stdout, child.Stderr = os.Stdin, command.Writer, command.ErrWriter
+	child.Env = slices.DeleteFunc(os.Environ(), func(entry string) bool {
+		name, _, _ := strings.Cut(entry, "=")
+		if runtime.GOOS == "windows" {
+			name = strings.ToUpper(name)
+		}
+		return name == "CLAUDE_CONFIG_DIR" || name == "CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY" ||
+			strings.HasPrefix(name, "ANTHROPIC_") || name == "CLAUDE_CODE_OAUTH_TOKEN" ||
+			name == "CLAUDE_CODE_USE_BEDROCK" || name == "CLAUDE_CODE_USE_VERTEX" ||
+			name == "CLAUDE_CODE_USE_FOUNDRY" || name == "CLAUDE_CODE_USE_MANTLE"
+	})
+	child.Env = append(child.Env, "CLAUDE_CONFIG_DIR="+profile, "CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1")
+	if err := child.Run(); err != nil {
+		if exit, ok := errors.AsType[*exec.ExitError](err); ok {
+			return cli.Exit("Claude exited", exit.ExitCode())
+		}
+		return err
+	}
+	return nil
 }
 
 func writeProfileFile(name string, data []byte) error {
@@ -241,7 +241,10 @@ func loadInstallation(ctx context.Context, configPath, profileName, provider str
 	}
 	file, err := os.Open(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("read %s; create it with serverURL and externalAgents from your agent setup instructions: %w", configPath, err)
+		return nil, fmt.Errorf(
+			"read %s: %w\nAdd serverURL and externalAgents from your agent setup instructions",
+			configPath, err,
+		)
 	}
 	defer file.Close()
 	var config configuration
@@ -306,19 +309,19 @@ func loadInstallation(ctx context.Context, configPath, profileName, provider str
 	invalidOrigin := upstream.Host == "" || upstream.User != nil || upstream.RawQuery != "" || upstream.Fragment != "" ||
 		(upstream.Path != "" && upstream.Path != "/") || !secure
 	if invalidOrigin {
-		return nil, errors.New("serverURL must be an HTTPS origin; HTTP is allowed only on loopback for development")
+		return nil, errors.New("serverURL must be an HTTPS origin. HTTP is allowed on loopback addresses for local development")
 	}
 	if selected.ClientID == "" || strings.ContainsAny(selected.ClientID, "\r\n\t ") {
-		return nil, errors.New("clientID must be the public native OAuth application's client ID")
+		return nil, errors.New("clientID must be the OAuth client ID from your agent setup")
 	}
 	upstream.Path = ""
 	digest := sha256.Sum256([]byte(upstream.String() + "\x00" + selected.ClientID))
 	profile := filepath.Join(root, "agentz", "profiles", hex.EncodeToString(digest[:8]))
-	if err := os.MkdirAll(profile, 0700); err != nil {
+	if err := os.MkdirAll(profile, 0o700); err != nil {
 		return nil, err
 	}
 	keyPath := filepath.Join(profile, "relay.key")
-	key, err := os.OpenFile(keyPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	key, err := os.OpenFile(keyPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err == nil {
 		_, writeErr := key.WriteString(hex.EncodeToString([]byte(rand.Text())))
 		err = errors.Join(writeErr, key.Close())
@@ -329,30 +332,35 @@ func loadInstallation(ctx context.Context, configPath, profileName, provider str
 	if err != nil && !errors.Is(err, os.ErrExist) {
 		return nil, err
 	}
-	// An exclusive creator may still be writing the key when another launcher
-	// arrives. No process guesses identity from a listening port alone.
-	var ownerKey []byte
-	for attempt := 0; attempt < 20; attempt++ {
-		ownerKey, err = os.ReadFile(keyPath)
-		if err != nil {
-			return nil, err
-		}
-		if len(ownerKey) >= 32 {
-			break
-		}
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(25 * time.Millisecond):
-		}
-	}
-	if len(ownerKey) < 32 {
-		return nil, errors.New("relay identity file is empty; remove it and launch again")
+	// Another launcher may still be writing the key. Wait for it before
+	// verifying the relay.
+	ownerKey, err := backoff.Retry(
+		ctx,
+		func() ([]byte, error) {
+			data, err := os.ReadFile(keyPath)
+			if err != nil {
+				return nil, backoff.Permanent(err)
+			}
+			if len(data) < 32 {
+				return nil, errors.New("relay identity file is incomplete. Remove it and launch again")
+			}
+			return data, nil
+		},
+		backoff.WithMaxTries(20),
+		backoff.WithBackOff(backoff.NewConstantBackOff(25*time.Millisecond)),
+	)
+	if err != nil {
+		return nil, err
 	}
 	port := 20000 + (int(digest[0])<<8|int(digest[1]))%30000
 	return &installation{
-		externalAgent: selected, name: selectedName, configPath: configPath, profile: profile,
-		address: "http://127.0.0.1:" + strconv.Itoa(port), ownerKey: string(ownerKey), upstream: upstream,
+		externalAgent: selected,
+		name:          selectedName,
+		configPath:    configPath,
+		profile:       profile,
+		address:       "http://127.0.0.1:" + strconv.Itoa(port),
+		ownerKey:      string(ownerKey),
+		upstream:      upstream,
 	}, nil
 }
 
@@ -375,7 +383,7 @@ func (installed *installation) ensureRelay(ctx context.Context) error {
 		return err
 	}
 	logPath := filepath.Join(installed.profile, "relay.log")
-	log, err := os.OpenFile(logPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
+	log, err := os.OpenFile(logPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0o600)
 	if err != nil {
 		return err
 	}
@@ -389,55 +397,58 @@ func (installed *installation) ensureRelay(ctx context.Context) error {
 	if err := startRelay(child); err != nil {
 		return err
 	}
-	exited := make(chan error, 1)
+	exited := make(chan struct{})
+	var childErr error
 	// Reap the persistent relay when it exits, even after readiness returns.
-	// The buffered result never blocks if the launching agent has already exited.
-	go func() { exited <- child.Wait() }()
-	ready, finished := false, false
+	go func() {
+		childErr = child.Wait()
+		close(exited)
+	}()
+	ready := false
 	defer func() {
-		if !ready && !finished {
+		if !ready {
 			child.Process.Kill()
 			<-exited
 		}
 	}()
-	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
-	var childErr error
-	for {
-		response, err := installed.controlRelay(startupCtx, "status")
-		if err == nil {
-			response.Body.Close()
-			// A concurrent launcher may own the ready relay. Stop our redundant
-			// child unless the responding process is the one we started.
-			ready = response.Header.Get("X-AgentZ-Relay-Pid") == strconv.Itoa(child.Process.Pid)
-			return nil
-		}
-		if errors.Is(err, errRelayOwnership) {
-			return err
-		}
-		if finished {
+	_, err = backoff.Retry(
+		startupCtx,
+		func() (bool, error) {
+			var finished bool
+
+			select {
+			case <-exited:
+				finished = true
+			default:
+			}
+
+			response, err := installed.controlRelay(startupCtx, "status")
+			if err == nil {
+				response.Body.Close()
+				// Another launcher may have started the relay first. Stop our
+				// unused child in that case.
+				ready = response.Header.Get("X-AgentZ-Relay-Pid") == strconv.Itoa(child.Process.Pid)
+				return true, nil
+			}
+			if errors.Is(err, errRelayOwnership) {
+				return false, backoff.Permanent(err)
+			}
+			if !finished {
+				return false, err
+			}
 			if childErr == nil {
 				childErr = errors.New("relay exited before becoming ready")
 			}
 			output, readErr := io.ReadAll(io.NewSectionReader(log, info.Size(), 4<<10))
-			return fmt.Errorf(
-				"start relay at %s: %w; %s; log: %s",
-				installed.address, errors.Join(childErr, readErr), strings.TrimSpace(string(output)), logPath,
-			)
-		}
-		select {
-		case childErr = <-exited:
-			finished = true
-			// Another launcher may have won the bind race. Check its identity
-			// before treating our child's exit as a startup failure.
-		case <-startupCtx.Done():
-			if err := ctx.Err(); err != nil {
-				return err
-			}
-			return fmt.Errorf("relay did not become ready at %s: %w; log: %s", installed.address, startupCtx.Err(), logPath)
-		case <-ticker.C:
-		}
+			err = fmt.Errorf("%w\n%s", errors.Join(childErr, readErr), strings.TrimSpace(string(output)))
+			return false, backoff.Permanent(err)
+		},
+		backoff.WithBackOff(backoff.NewConstantBackOff(100*time.Millisecond)),
+	)
+	if err != nil {
+		return fmt.Errorf("start relay at %s: %w\nRelay log: %s", installed.address, err, logPath)
 	}
+	return nil
 }
 
 func (installed *installation) controlRelay(ctx context.Context, operation string) (*http.Response, error) {

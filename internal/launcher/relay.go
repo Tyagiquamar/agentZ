@@ -127,170 +127,47 @@ func (installed *installation) serve(ctx context.Context) error {
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	mux := http.NewServeMux()
+	control := func(w http.ResponseWriter, r *http.Request) {
+		installed.serveControl(w, r, cancel)
+	}
+	mux.HandleFunc("GET /relay/status", control)
+	mux.HandleFunc("POST /relay/stop", control)
+	mux.HandleFunc("GET /.well-known/oauth-authorization-server", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(discovery{
+			Issuer:        installed.address,
+			DeviceURL:     installed.address + "/oauth/device_authorization",
+			TokenURL:      installed.address + "/oauth/token",
+			RevocationURL: installed.address + "/oauth/revoke",
+		})
+	})
+	oauth := func(w http.ResponseWriter, r *http.Request) {
+		installed.forwardOAuth(w, r, client)
+	}
+	mux.HandleFunc("POST /oauth/device_authorization", oauth)
+	mux.HandleFunc("POST /oauth/token", oauth)
+	mux.HandleFunc("POST /oauth/revoke", oauth)
+	mux.Handle("POST /v1/messages", proxy)
+	mux.Handle("POST /v1/messages/count_tokens", proxy)
+	mux.Handle("/mcp", proxy)
+	catalog := func(w http.ResponseWriter, r *http.Request) {
+		installed.serveCatalog(w, r, api)
+	}
+	mux.HandleFunc("GET /managed/settings", catalog)
+	mux.HandleFunc("GET /v1/models", catalog)
+	mux.HandleFunc("POST /v1/metrics", catalog)
+	mux.HandleFunc("POST /v1/logs", catalog)
+	mux.HandleFunc("POST /v1/traces", catalog)
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store, no-transform")
-		// Reject browser-origin requests and hostile Host values even when DNS
-		// resolves to loopback. The relay is only a native-client protocol adapter.
+		// Reject browser origins and hostile Host values before routing, even
+		// when DNS resolves to loopback. Only native clients use this relay.
 		if r.Host != address.Host || r.Header.Get("Origin") != "" {
 			http.Error(w, "This relay accepts local native-client requests only.", http.StatusForbidden)
 			return
 		}
-		if r.URL.Path == "/relay/status" || r.URL.Path == "/relay/stop" {
-			operation := strings.TrimPrefix(r.URL.Path, "/relay/")
-			nonce := r.Header.Get("X-AgentZ-Relay-Nonce")
-			timestamp, _, _ := strings.Cut(nonce, ":")
-			issued, err := strconv.ParseInt(timestamp, 10, 64)
-			if err != nil || time.Since(time.Unix(issued, 0)).Abs() > 30*time.Second {
-				http.Error(w, "Relay owner authentication required.", http.StatusUnauthorized)
-				return
-			}
-			message := operation + ":" + nonce
-			signature := hmac.New(sha256.New, []byte(installed.ownerKey))
-			signature.Write([]byte(message))
-			credential := strings.TrimPrefix(r.Header.Get("Authorization"), "AgentZ-HMAC ")
-			if !hmac.Equal([]byte(credential), []byte(hex.EncodeToString(signature.Sum(nil)))) {
-				http.Error(w, "Relay owner authentication required.", http.StatusUnauthorized)
-				return
-			}
-			signature.Reset()
-			signature.Write([]byte("response:" + message))
-			w.Header().Set("X-AgentZ-Relay-Proof", hex.EncodeToString(signature.Sum(nil)))
-			w.Header().Set("X-AgentZ-Relay-Pid", strconv.Itoa(os.Getpid()))
-			method := http.MethodGet
-			if r.URL.Path == "/relay/stop" {
-				method = http.MethodPost
-			}
-			if r.Method != method {
-				w.Header().Set("Allow", method)
-				w.WriteHeader(http.StatusMethodNotAllowed)
-				return
-			}
-			fmt.Fprintln(w, "AgentZ relay running at "+installed.address)
-			if method == http.MethodPost {
-				cancel()
-			}
-			return
-		}
-		if r.Method == http.MethodGet && r.URL.Path == "/.well-known/oauth-authorization-server" {
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(discovery{
-				Issuer: installed.address, DeviceURL: installed.address + "/oauth/device_authorization",
-				TokenURL: installed.address + "/oauth/token", RevocationURL: installed.address + "/oauth/revoke",
-			})
-			return
-		}
-		if r.URL.Path == "/oauth/device_authorization" || r.URL.Path == "/oauth/token" || r.URL.Path == "/oauth/revoke" {
-			installed.forwardOAuth(w, r, client)
-			return
-		}
-		messageRequest := r.Method == http.MethodPost && (r.URL.Path == "/v1/messages" || r.URL.Path == "/v1/messages/count_tokens")
-		if messageRequest || r.URL.Path == "/mcp" {
-			proxy.ServeHTTP(w, r)
-			return
-		}
-		policy := r.Method == http.MethodGet && r.URL.Path == "/managed/settings"
-		models := r.Method == http.MethodGet && r.URL.Path == "/v1/models"
-		telemetry := r.Method == http.MethodPost && slices.Contains([]string{"/v1/metrics", "/v1/logs", "/v1/traces"}, r.URL.Path)
-		if !policy && !models && !telemetry {
-			http.NotFound(w, r)
-			return
-		}
-		requestCtx, requestCancel := context.WithTimeout(r.Context(), 15*time.Second)
-		defer requestCancel()
-		catalog, err := api.GetDelegatedCatalogWithResponse(requestCtx, func(_ context.Context, outgoing *http.Request) error {
-			outgoing.Header.Set("Authorization", r.Header.Get("Authorization"))
-			return nil
-		})
-		if err != nil {
-			http.Error(w, "AgentZ catalog is unavailable.", http.StatusBadGateway)
-			return
-		}
-		if catalog.JSON200 == nil {
-			status := catalog.StatusCode()
-			if status < 400 {
-				status = http.StatusBadGateway
-			}
-			if status == http.StatusUnauthorized || status == http.StatusForbidden {
-				w.Header().Set("x-should-retry", "false")
-			}
-			http.Error(w, "AgentZ authorization is unavailable. Sign in again.", status)
-			return
-		}
-		if telemetry {
-			r.Body = http.MaxBytesReader(w, r.Body, 4<<20)
-			if _, err := io.Copy(io.Discard, r.Body); err != nil {
-				w.WriteHeader(http.StatusRequestEntityTooLarge)
-				return
-			}
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-		settings := managedSettings{
-			DisableAutoMode: "disable",
-			AvailableModels: []string{}, AvailableModelsMatch: "exact", EnforceAvailable: true,
-			ModelOverrides: map[string]string{}, ModelPicker: modelPicker{Options: []modelOption{}, ReplaceBuiltInOptions: true},
-		}
-		list := modelList{Data: []modelListItem{}}
-		for _, model := range catalog.JSON200.Models {
-			if model.ApiCompatibility == nil {
-				continue
-			}
-			supported := slices.ContainsFunc(*model.ApiCompatibility, func(item gatewayapi.DelegationAPICompatibility) bool {
-				return item.Api == gatewayapi.Messages && item.Support != gatewayapi.Unsupported
-			})
-			if !supported {
-				continue
-			}
-			option := modelOption{
-				Model:       model.Id,
-				Label:       model.ModelDisplayName,
-				Description: model.ProviderDisplayName,
-			}
-			if option.Label == "" {
-				option.Label = model.Model
-			}
-			if strings.HasPrefix(model.Model, "claude-") {
-				option.BehavesAs = model.Model
-				duplicates := slices.ContainsFunc(catalog.JSON200.Models, func(other gatewayapi.DelegationModel) bool {
-					return other.Id != model.Id && other.Model == model.Model
-				})
-				if !duplicates {
-					option.Model = model.Model
-					settings.ModelOverrides[model.Model] = model.Id
-				}
-			}
-			settings.AvailableModels = append(settings.AvailableModels, option.Model)
-			settings.ModelPicker.Options = append(settings.ModelPicker.Options, option)
-			list.Data = append(list.Data, modelListItem{ID: option.Model, DisplayName: option.Label})
-		}
-		if len(settings.AvailableModels) == 0 {
-			http.Error(w, "No approved model supports Messages. Reconnect and select a supported model.", http.StatusForbidden)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		if models {
-			json.NewEncoder(w).Encode(list)
-			return
-		}
-		settings.Model = settings.AvailableModels[0]
-		data, err := json.Marshal(settings)
-		if err != nil {
-			http.Error(w, "Cannot prepare model settings.", http.StatusInternalServerError)
-			return
-		}
-		digest := sha256.Sum256(data)
-		checksum := "sha256:" + hex.EncodeToString(digest[:])
-		etag := `"` + checksum + `"`
-		w.Header().Set("ETag", etag)
-		if r.Header.Get("If-None-Match") == etag {
-			w.WriteHeader(http.StatusNotModified)
-			return
-		}
-		json.NewEncoder(w).Encode(settingsResponse{
-			UUID:     filepath.Base(installed.profile),
-			Checksum: checksum,
-			Settings: settings,
-		})
+		mux.ServeHTTP(w, r)
 	})
 	server := &http.Server{
 		Handler: handler, ReadHeaderTimeout: 5 * time.Second,
@@ -315,12 +192,133 @@ func (installed *installation) serve(ctx context.Context) error {
 	return err
 }
 
-func (installed *installation) forwardOAuth(w http.ResponseWriter, r *http.Request, client *http.Client) {
-	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", http.MethodPost)
-		w.WriteHeader(http.StatusMethodNotAllowed)
+func (installed *installation) serveControl(w http.ResponseWriter, r *http.Request, cancel context.CancelFunc) {
+	operation := strings.TrimPrefix(r.URL.Path, "/relay/")
+	nonce := r.Header.Get("X-AgentZ-Relay-Nonce")
+	timestamp, _, _ := strings.Cut(nonce, ":")
+	issued, err := strconv.ParseInt(timestamp, 10, 64)
+	if err != nil || time.Since(time.Unix(issued, 0)).Abs() > 30*time.Second {
+		http.Error(w, "Relay owner authentication required.", http.StatusUnauthorized)
 		return
 	}
+	message := operation + ":" + nonce
+	signature := hmac.New(sha256.New, []byte(installed.ownerKey))
+	signature.Write([]byte(message))
+	credential := strings.TrimPrefix(r.Header.Get("Authorization"), "AgentZ-HMAC ")
+	if !hmac.Equal([]byte(credential), []byte(hex.EncodeToString(signature.Sum(nil)))) {
+		http.Error(w, "Relay owner authentication required.", http.StatusUnauthorized)
+		return
+	}
+	signature.Reset()
+	signature.Write([]byte("response:" + message))
+	w.Header().Set("X-AgentZ-Relay-Proof", hex.EncodeToString(signature.Sum(nil)))
+	w.Header().Set("X-AgentZ-Relay-Pid", strconv.Itoa(os.Getpid()))
+	fmt.Fprintln(w, "AgentZ relay running at "+installed.address)
+	if r.Method == http.MethodPost {
+		cancel()
+	}
+}
+
+func (installed *installation) serveCatalog(w http.ResponseWriter, r *http.Request, api *gatewayapi.ClientWithResponses) {
+	requestCtx, requestCancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer requestCancel()
+	catalog, err := api.GetDelegatedCatalogWithResponse(requestCtx, func(_ context.Context, outgoing *http.Request) error {
+		outgoing.Header.Set("Authorization", r.Header.Get("Authorization"))
+		return nil
+	})
+	if err != nil {
+		http.Error(w, "AgentZ catalog is unavailable.", http.StatusBadGateway)
+		return
+	}
+	if catalog.JSON200 == nil {
+		status := catalog.StatusCode()
+		if status < 400 {
+			status = http.StatusBadGateway
+		}
+		if status == http.StatusUnauthorized || status == http.StatusForbidden {
+			w.Header().Set("x-should-retry", "false")
+		}
+		http.Error(w, "AgentZ authorization is unavailable. Sign in again.", status)
+		return
+	}
+	if r.Method == http.MethodPost {
+		r.Body = http.MaxBytesReader(w, r.Body, 4<<20)
+		if _, err := io.Copy(io.Discard, r.Body); err != nil {
+			w.WriteHeader(http.StatusRequestEntityTooLarge)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	settings := managedSettings{
+		DisableAutoMode: "disable",
+		AvailableModels: []string{}, AvailableModelsMatch: "exact", EnforceAvailable: true,
+		ModelOverrides: map[string]string{}, ModelPicker: modelPicker{Options: []modelOption{}, ReplaceBuiltInOptions: true},
+	}
+	list := modelList{Data: []modelListItem{}}
+	for _, model := range catalog.JSON200.Models {
+		if model.ApiCompatibility == nil {
+			continue
+		}
+		supported := slices.ContainsFunc(*model.ApiCompatibility, func(item gatewayapi.DelegationAPICompatibility) bool {
+			return item.Api == gatewayapi.Messages && item.Support != gatewayapi.Unsupported
+		})
+		if !supported {
+			continue
+		}
+		option := modelOption{
+			Model:       model.Id,
+			Label:       model.ModelDisplayName,
+			Description: model.ProviderDisplayName,
+		}
+		if option.Label == "" {
+			option.Label = model.Model
+		}
+		if strings.HasPrefix(model.Model, "claude-") {
+			option.BehavesAs = model.Model
+			duplicates := slices.ContainsFunc(catalog.JSON200.Models, func(other gatewayapi.DelegationModel) bool {
+				return other.Id != model.Id && other.Model == model.Model
+			})
+			if !duplicates {
+				option.Model = model.Model
+				settings.ModelOverrides[model.Model] = model.Id
+			}
+		}
+		settings.AvailableModels = append(settings.AvailableModels, option.Model)
+		settings.ModelPicker.Options = append(settings.ModelPicker.Options, option)
+		list.Data = append(list.Data, modelListItem{ID: option.Model, DisplayName: option.Label})
+	}
+	if len(settings.AvailableModels) == 0 {
+		http.Error(w, "No approved model supports Messages. Reconnect and select a supported model.", http.StatusForbidden)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if r.URL.Path == "/v1/models" {
+		json.NewEncoder(w).Encode(list)
+		return
+	}
+	settings.Model = settings.AvailableModels[0]
+	data, err := json.Marshal(settings)
+	if err != nil {
+		http.Error(w, "Cannot prepare model settings.", http.StatusInternalServerError)
+		return
+	}
+	digest := sha256.Sum256(data)
+	checksum := "sha256:" + hex.EncodeToString(digest[:])
+	etag := `"` + checksum + `"`
+	w.Header().Set("ETag", etag)
+	if r.Header.Get("If-None-Match") == etag {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	json.NewEncoder(w).Encode(settingsResponse{
+		UUID:     filepath.Base(installed.profile),
+		Checksum: checksum,
+		Settings: settings,
+	})
+}
+
+func (installed *installation) forwardOAuth(w http.ResponseWriter, r *http.Request, client *http.Client) {
 	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "Invalid OAuth form.", http.StatusBadRequest)

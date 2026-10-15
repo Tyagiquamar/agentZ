@@ -406,7 +406,7 @@ export function Consent({
                             return {
                               value: model.id,
                               label: model.model_display_name || model.model,
-                              description: model.model,
+                              description: `${model.provider_display_name || model.provider} / ${model.model}`,
                               badge,
                               disabled:
                                 compatibility?.support === "unsupported" || codexUnsupported,

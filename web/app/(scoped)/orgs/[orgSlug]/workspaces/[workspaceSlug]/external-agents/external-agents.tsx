@@ -606,7 +606,7 @@ function ExternalAgentEditor({
 function SetupCommand({ command, label }: { command: string; label: string }) {
   return (
     <div className="flex min-w-0 items-start gap-2 rounded-md border bg-muted/40 p-3">
-      <pre className="min-w-0 flex-1 overflow-x-auto font-mono text-xs leading-relaxed break-all whitespace-pre-wrap">
+      <pre className="min-w-0 flex-1 overflow-x-auto font-mono text-xs leading-relaxed wrap-break-word whitespace-pre-wrap">
         {command}
       </pre>
       <CopyButton content={command} label={label} />
@@ -704,12 +704,7 @@ function AgentSetup({ agent }: { agent: ExternalAgent }) {
           />
         ) : null}
         <SetupCommand command={`${launch} mcp login agentz`} label="Copy MCP login command" />
-        <FieldDescription>
-          Choose tools, prompts and resources in the browser.{" "}
-          {agent.kind === "codex"
-            ? "Codex's MCP server is configured automatically."
-            : "Register the MCP server once."}
-        </FieldDescription>
+        <FieldDescription>Choose tools, prompts and resources in the browser</FieldDescription>
       </Field>
     </FieldGroup>
   )

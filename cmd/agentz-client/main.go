@@ -1,4 +1,3 @@
-// Command agentz-client builds the desktop AgentZ launcher as the agentz binary.
 package main
 
 import (
@@ -19,16 +18,26 @@ var version = "dev"
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM)
 	defer cancel()
-	// The foreground agent handles Ctrl+C itself, including turn cancellation.
+
 	interrupts := make(chan os.Signal, 1)
 	signal.Notify(interrupts, os.Interrupt)
 	defer signal.Stop(interrupts)
+
 	command := &cli.Command{
-		Name: "agentz", Version: version,
-		Usage: "Launch coding agents with AgentZ identity and governed inference",
+		Name:    "agentz",
+		Version: version,
+		Usage:   "Launch Claude or Codex through AgentZ",
 		Flags: []cli.Flag{
-			&cli.StringFlag{Name: "config", Usage: "AgentZ configuration file"},
-			&cli.StringFlag{Name: "profile", Usage: "Named external agent profile"},
+			&cli.StringFlag{
+				Name:      "config",
+				Usage:     "AgentZ configuration file",
+				TakesFile: true,
+			},
+			&cli.StringFlag{
+				Name:   "profile",
+				Usage:  "AgentZ profile to use",
+				Config: cli.StringConfig{TrimSpace: true},
+			},
 		},
 		Commands: []*cli.Command{
 			{
@@ -38,7 +47,7 @@ func main() {
 			},
 			{
 				Name:            "login",
-				Usage:           "Start a fresh native Codex gateway login",
+				Usage:           "Sign in to Codex through AgentZ",
 				ArgsUsage:       "[codex] [--profile NAME]",
 				SkipFlagParsing: true,
 				Action:          launcher.Run,
@@ -56,8 +65,7 @@ func main() {
 	if err := command.Run(ctx, os.Args); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		code := 1
-		var exit cli.ExitCoder
-		if errors.As(err, &exit) {
+		if exit, ok := errors.AsType[cli.ExitCoder](err); ok {
 			code = exit.ExitCode()
 		}
 		os.Exit(code)

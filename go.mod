@@ -10,10 +10,13 @@ require (
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.28
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.105.0
 	github.com/aws/smithy-go v1.27.3
+	github.com/blang/semver/v4 v4.0.0
 	github.com/bluekeyes/go-gitdiff v0.9.0
 	github.com/cedar-policy/cedar-go v1.8.0
+	github.com/cenkalti/backoff/v5 v5.0.3
 	github.com/cert-manager/cert-manager v1.20.2
 	github.com/cilium/cilium v1.19.5
+	github.com/cli/browser v1.3.0
 	github.com/envoyproxy/go-control-plane/envoy v1.39.1-0.20260829101913-1e3cf565f8ea
 	github.com/external-secrets/external-secrets/apis v0.0.0-20260626113040-e215053f3e68
 	github.com/getkin/kin-openapi v0.144.0
@@ -34,6 +37,7 @@ require (
 	github.com/pressly/goose/v3 v3.27.0
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
+	github.com/sourcegraph/jsonrpc2 v0.2.3
 	github.com/tmaxmax/go-sse v0.11.0
 	github.com/urfave/cli/v3 v3.10.0
 	go.opentelemetry.io/proto/otlp v1.11.0
@@ -76,8 +80,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.37.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.44.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/blang/semver/v4 v4.0.0 // indirect
-	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cilium/ebpf v0.22.0 // indirect
 	github.com/cilium/hive v0.0.0-20260108104938-97756f6ff54c // indirect
