@@ -188,7 +188,8 @@ export async function checkDelegationSelection(
   )
   for (const workspaceId of workspaceIds) {
     const catalog = await delegationCatalog(organizationId, workspaceId, user, mode === "access")
-    for (const model of selection.models.filter((item) => item.workspace_id === workspaceId)) {
+    for (const [index, model] of selection.models.entries()) {
+      if (model.workspace_id !== workspaceId) continue
       const current = catalog.models.find((item) => item.id === model.id)
       if (
         !current ||
@@ -202,9 +203,10 @@ export async function checkDelegationSelection(
           message: "A selected model is no longer available for delegation.",
         })
       }
-      approved.models[selection.models.indexOf(model)] = current
+      approved.models[index] = current
     }
-    for (const connection of selection.mcp.filter((item) => item.workspace_id === workspaceId)) {
+    for (const [index, connection] of selection.mcp.entries()) {
+      if (connection.workspace_id !== workspaceId) continue
       const current = catalog.mcp.find((item) => item.id === connection.id)
       if (
         !current ||
@@ -221,7 +223,7 @@ export async function checkDelegationSelection(
           message: "A selected MCP capability is no longer available for delegation.",
         })
       }
-      approved.mcp[selection.mcp.indexOf(connection)] = {
+      approved.mcp[index] = {
         ...current,
         tools: connection.tools,
         prompts: connection.prompts,

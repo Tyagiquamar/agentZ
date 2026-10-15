@@ -340,8 +340,9 @@ func (installed *installation) forwardOAuth(w http.ResponseWriter, r *http.Reque
 	case "/oauth/revoke":
 		path = "/api/auth/oauth2/revoke"
 	case "/oauth/token":
-		grant := form.Get("grant_type")
-		if !slices.Contains([]string{"authorization_code", "urn:ietf:params:oauth:grant-type:device_code", "refresh_token"}, grant) {
+		switch form.Get("grant_type") {
+		case "authorization_code", "urn:ietf:params:oauth:grant-type:device_code", "refresh_token":
+		default:
 			http.Error(w, "Unsupported OAuth grant type.", http.StatusBadRequest)
 			return
 		}

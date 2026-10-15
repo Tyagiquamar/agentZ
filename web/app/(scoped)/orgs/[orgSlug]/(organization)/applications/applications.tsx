@@ -746,7 +746,7 @@ function ApplicationEditor({
                           { value: "device_code", label: "Device authorization", icon: Smartphone },
                         ]}
                         value={field.value ?? []}
-                        onValueChangeAction={(values) => field.onChange(values)}
+                        onValueChangeAction={field.onChange}
                       />
                       <FieldDescription>
                         Claude uses device authorization. Codex uses browser login with PKCE. Public

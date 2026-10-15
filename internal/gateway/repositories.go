@@ -607,7 +607,7 @@ func (s *Service) loadCodingSnapshot(ctx context.Context, access resourceAccess,
 				Refs:      []gatewayapi.CodingRef{},
 				Worktrees: []gatewayapi.CodingDiscoveredWorktree{},
 			}
-			for _, line := range strings.Split(remote, "\n") {
+			for line := range strings.SplitSeq(remote, "\n") {
 				head, ref, ok := strings.Cut(line, "\t")
 				if !ok {
 					continue

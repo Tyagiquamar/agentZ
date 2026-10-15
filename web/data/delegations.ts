@@ -401,7 +401,7 @@ export async function approveDelegation(
           )
         )
         .for("update")
-      if (!pending || !client.grantTypes?.includes("urn:ietf:params:oauth:grant-type:device_code"))
+      if (!pending || !client.grantTypes?.includes(DEVICE_CODE_GRANT_TYPE))
         throw new Error("This device request expired or is no longer allowed.")
       grantId = pending.referenceId
     }

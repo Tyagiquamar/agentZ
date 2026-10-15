@@ -72,11 +72,7 @@ import { ApplicationAccessDetails } from "@/app/(account)/settings/applications/
 import { externalAgentInput } from "@/data/schema"
 import type { ExternalAgent } from "@/data/external-agents"
 import type { OrganizationSummary } from "@/data/organizations"
-import {
-  watchExternalAgents,
-  type WatchExternalAgentsEvent,
-  type Workspace,
-} from "@/lib/gateway/client"
+import { watchExternalAgents, type Workspace } from "@/lib/gateway/client"
 import { getGatewayBaseURL } from "@/lib/gateway/browser-runtime"
 import {
   createExternalAgentAction,
@@ -130,12 +126,9 @@ export function ExternalAgents({
         agents.map((agent) => agent.clientId),
       ] as const,
       placeholderData: agents,
-      queryFn: streamedQuery<
-        WatchExternalAgentsEvent & { agents: ExternalAgent[] },
-        ExternalAgent[]
-      >({
+      queryFn: streamedQuery<ExternalAgent[], ExternalAgent[]>({
         initialValue: agents,
-        reducer: (_, event) => event.agents,
+        reducer: (_, agents) => agents,
         refetchMode: "reset",
         streamFn: async function* ({ signal }) {
           const result = await watchExternalAgents({
@@ -143,8 +136,8 @@ export function ExternalAgents({
             headers: { "X-AgentZ-Workspace-ID": workspace.id },
             signal,
           })
-          for await (const event of result.stream) {
-            yield { ...event, agents: await listExternalAgentsAction(orgSlug, workspaceSlug) }
+          for await (const _ of result.stream) {
+            yield await listExternalAgentsAction(orgSlug, workspaceSlug)
           }
           if (!signal.aborted) throw new Error("External agent updates disconnected.")
         },

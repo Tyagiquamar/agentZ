@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net/http"
 	"slices"
-	"sort"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -85,7 +84,7 @@ func (s *Service) ReplaceWorkspaceInheritedResources(w http.ResponseWriter, r *h
 	for i := range names {
 		names[i] = strings.TrimSpace(names[i])
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	invalid := slices.Contains(names, "")
 	for i := 1; i < len(names); i++ {
 		invalid = invalid || names[i-1] == names[i]

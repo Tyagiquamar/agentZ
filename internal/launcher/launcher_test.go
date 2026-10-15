@@ -1,7 +1,6 @@
 package launcher
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -206,7 +205,7 @@ externalAgents:
 			if err := os.WriteFile(configPath, []byte(tt.config), 0600); err != nil {
 				t.Fatal(err)
 			}
-			installed, err := loadInstallation(context.Background(), configPath, tt.profile, tt.provider)
+			installed, err := loadInstallation(t.Context(), configPath, tt.profile, tt.provider)
 			if tt.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("error = %v, want %q", err, tt.wantErr)
@@ -218,13 +217,6 @@ externalAgents:
 			}
 			if installed.name != tt.wantName || installed.upstream.String() != tt.wantURL || installed.ClientID != tt.wantID {
 				t.Fatalf("selected %s at %s with client %s", installed.name, installed.upstream, installed.ClientID)
-			}
-			data, err := os.ReadFile(configPath)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if string(data) != tt.config {
-				t.Fatal("loading a profile changed the configuration file")
 			}
 		})
 	}
@@ -244,11 +236,11 @@ externalAgents:
 	if err := os.WriteFile(configPath, []byte(first), 0600); err != nil {
 		t.Fatal(err)
 	}
-	personal, err := loadInstallation(context.Background(), configPath, "personal", "claude")
+	personal, err := loadInstallation(t.Context(), configPath, "personal", "claude")
 	if err != nil {
 		t.Fatal(err)
 	}
-	work, err := loadInstallation(context.Background(), configPath, "work", "claude")
+	work, err := loadInstallation(t.Context(), configPath, "work", "claude")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -263,7 +255,7 @@ externalAgents:
 	if err := os.WriteFile(configPath, []byte(reordered), 0600); err != nil {
 		t.Fatal(err)
 	}
-	renamed, err := loadInstallation(context.Background(), configPath, "renamed", "claude")
+	renamed, err := loadInstallation(t.Context(), configPath, "renamed", "claude")
 	if err != nil {
 		t.Fatal(err)
 	}

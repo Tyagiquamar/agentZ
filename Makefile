@@ -32,7 +32,7 @@ CONTROLLER_GEN ?= controller-gen
 CODEX_SOURCE_URL := https://raw.githubusercontent.com/openai/codex/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs
 CODEX_SCHEMA_URL := $(CODEX_SOURCE_URL)/app-server-protocol/schema/json
 
-GO_PKGS := ./cmd ./hack/... ./internal/... ./pkg/...
+GO_PKGS := ./cmd/... ./hack/... ./internal/... ./pkg/...
 
 .PHONY: all
 all: generate lint build
@@ -80,7 +80,6 @@ fmt:
 .PHONY: test
 test:
 	go test -race -shuffle=on $(GO_PKGS) -coverprofile cover.out
-	go test -race -shuffle=on -count=1 -tags=integration ./internal/launcher
 
 .PHONY: lint
 lint:

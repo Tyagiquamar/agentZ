@@ -62,12 +62,13 @@ export async function listExternalAgents(orgSlug: string, workspaceSlug: string)
         )
         .orderBy(asc(schema.delegationGrants.createdAt))
     : []
+  const grantsByClient = Map.groupBy(grants, (grant) => grant.clientId)
   return {
     workspace: scope.workspace,
     organization: scope.scope.organization,
     delegationEnabled: setting?.enabled ?? false,
     agents: agents.map((agent) => {
-      const history = grants.filter((grant) => grant.clientId === agent.clientId)
+      const history = grantsByClient.get(agent.clientId) ?? []
       const active = history.filter((grant) => !grant.revokedAt)
       const selection: DelegationCatalog = { models: [], mcp: [] }
       for (const grant of active) {

@@ -33,15 +33,8 @@
     {
       "idx": 4,
       "version": "7",
-      "when": 1791997255681,
-      "tag": "0004_device_authorization",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1792034443285,
-      "tag": "0005_external_agents",
+      "when": 1792074567984,
+      "tag": "0004_external_agents",
       "breakpoints": true
     }
   ]

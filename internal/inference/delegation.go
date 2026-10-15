@@ -14,7 +14,6 @@ import (
 
 // DelegatedRequest contains validated inference input for a delegated model.
 type DelegatedRequest struct {
-	responses          bool
 	endpoint           string
 	nativeTools        bool
 	Model              string               `json:"model"`
@@ -52,18 +51,11 @@ func DelegatedProviderEndpoints(kind agentzv1alpha1.InferenceProviderKind) []str
 // ValidateProvider checks the selected provider before forwarding a validated
 // request to an upstream whose errors must remain private.
 func (input *DelegatedRequest) ValidateProvider(kind agentzv1alpha1.InferenceProviderKind) error {
-	endpoint := "/chat/completions"
-	if input.responses {
-		endpoint = "/responses"
-	}
-	if input.endpoint != "" {
-		endpoint = input.endpoint
-	}
 	endpoints := DelegatedProviderEndpoints(kind)
 	if len(endpoints) == 0 {
 		return errors.New("this model has no supported inference endpoint")
 	}
-	if !slices.Contains(endpoints, endpoint) {
+	if !slices.Contains(endpoints, input.endpoint) {
 		return fmt.Errorf("this model supports %s; choose a supported endpoint", strings.Join(endpoints, ", "))
 	}
 	nativeResponses := kind == agentzv1alpha1.InferenceProviderKindOpenAI ||
@@ -109,7 +101,10 @@ type inferenceFile struct {
 // request. Case-sensitive decoding matches the upstream contract, while strict
 // duplicate detection prevents two parsers from authorizing different values.
 func ValidateDelegatedRequest(body []byte, responses bool) (*DelegatedRequest, error) {
-	input := DelegatedRequest{responses: responses}
+	input := DelegatedRequest{endpoint: "/chat/completions"}
+	if responses {
+		input.endpoint = "/responses"
+	}
 	strictErrors, err := kjson.UnmarshalStrict(body, &input, kjson.DisallowDuplicateFields)
 	if err != nil || len(strictErrors) != 0 || input.Model == "" {
 		return nil, errors.New("provide a valid inference request with a model and no duplicate fields")

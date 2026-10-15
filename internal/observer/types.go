@@ -121,9 +121,21 @@ type batch struct {
 	traces    []traceSpanEvent
 }
 
-func (b batch) empty() bool {
-	return len(b.processes) == 0 &&
-		len(b.files) == 0 &&
-		len(b.networks) == 0 &&
-		len(b.traces) == 0
+func (b *batch) add(ev event) {
+	if ev.process != nil {
+		b.processes = append(b.processes, *ev.process)
+	}
+	if ev.file != nil {
+		b.files = append(b.files, *ev.file)
+	}
+	if ev.network != nil {
+		b.networks = append(b.networks, *ev.network)
+	}
+	if ev.trace != nil {
+		b.traces = append(b.traces, *ev.trace)
+	}
+}
+
+func (b *batch) count() int {
+	return len(b.processes) + len(b.files) + len(b.networks) + len(b.traces)
 }

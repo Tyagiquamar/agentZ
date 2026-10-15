@@ -886,10 +886,10 @@ func (s *delegationServer) Check(ctx context.Context, request *authv3.CheckReque
 		}
 		var input *inference.DelegatedRequest
 		var err error
-		if messages {
+		switch {
+		case messages:
 			input, err = inference.ValidateDelegatedMessages(body, strings.HasSuffix(path, "/count_tokens"))
-		}
-		if !messages {
+		default:
 			input, err = inference.ValidateDelegatedRequest(body, responses)
 		}
 		if err != nil || input.Model != extensions["agentz.target"] {

@@ -128,7 +128,6 @@ func Run(ctx context.Context, command *cli.Command) error {
 		if current.LT(minimum) {
 			return fmt.Errorf("AgentZ requires %s %s or later", provider, minimum)
 		}
-		args = append([]string{provider}, args...)
 	}
 
 	switch command.Name {
@@ -191,7 +190,7 @@ func (installed *installation) claude(ctx context.Context, command *cli.Command,
 	if err := writeProfileFile(settingsPath, data); err != nil {
 		return err
 	}
-	child := exec.CommandContext(ctx, args[0], args[1:]...)
+	child := exec.CommandContext(ctx, "claude", args...)
 	child.Stdin, child.Stdout, child.Stderr = os.Stdin, command.Writer, command.ErrWriter
 	child.Env = slices.DeleteFunc(os.Environ(), func(entry string) bool {
 		name, _, _ := strings.Cut(entry, "=")
@@ -479,11 +478,8 @@ func (installed *installation) controlRelay(ctx context.Context, operation strin
 	signature.Reset()
 	signature.Write([]byte("response:" + message))
 	expected := hex.EncodeToString(signature.Sum(nil))
-	verified := false
-	if response.StatusCode == http.StatusOK {
-		verified = hmac.Equal([]byte(response.Header.Get("X-AgentZ-Relay-Proof")), []byte(expected))
-	}
-	if !verified {
+	proof := response.Header.Get("X-AgentZ-Relay-Proof")
+	if response.StatusCode != http.StatusOK || !hmac.Equal([]byte(proof), []byte(expected)) {
 		response.Body.Close()
 		return nil, fmt.Errorf("relay at %s: %w", installed.address, errRelayOwnership)
 	}

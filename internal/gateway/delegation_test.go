@@ -435,7 +435,7 @@ func TestDelegatedAccessRequiresLiveGrantAndAccessToken(t *testing.T) {
 				}
 			}
 			if test.want != http.StatusOK {
-				var body openAIError
+				var body inferenceError
 				if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil || body.Error.Message == "" {
 					t.Fatalf("missing OpenAI error: %s", response.Body.String())
 				}

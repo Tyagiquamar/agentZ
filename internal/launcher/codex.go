@@ -120,7 +120,7 @@ func (installed *installation) codex(ctx context.Context, command *cli.Command, 
 		"-c", "mcp_oauth_callback_port=8767", "-c", provider, "-c", mcp,
 	}
 
-	mcpCommand := len(args) > 1 && args[1] == "mcp"
+	mcpCommand := len(args) > 0 && args[0] == "mcp"
 	// MCP owns a separate OAuth grant and does not need an inference login.
 	if !mcpCommand {
 		cache := filepath.Join(installed.profile, "codex-catalog.json")
@@ -156,7 +156,7 @@ func (installed *installation) codex(ctx context.Context, command *cli.Command, 
 		fileJSON, _ := json.Marshal(modelFile)
 		flags = append(flags, "-c", "model="+string(modelJSON), "-c", "model_catalog_json="+string(fileJSON))
 	}
-	flags = append(flags, args[1:]...)
+	flags = append(flags, args...)
 	child := exec.CommandContext(ctx, "codex", flags...)
 	child.Env = environment
 	child.Stdin, child.Stdout, child.Stderr = os.Stdin, command.Writer, command.ErrWriter

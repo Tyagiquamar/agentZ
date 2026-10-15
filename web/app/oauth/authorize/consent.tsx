@@ -82,6 +82,7 @@ export function Consent({
   const inference = scopes.includes("inference:use")
   const mcp = scopes.includes("mcp:use")
   const resourceAccess = inference || mcp
+  const requestedIdentityScopes = identityScopes.filter((scope) => scopes.includes(scope.value))
   const [organizationId, setOrganizationId] = useState(
     organizations.length === 1 ? (organizations[0]?.id ?? "") : ""
   )
@@ -192,7 +193,7 @@ export function Consent({
       <div className="rounded-xl border-2 border-dashed border-border/70 bg-card/40 p-5 text-sm">
         <UserIdentity name={user.name} email={user.email} image={user.image} size="default" />
       </div>
-      {identityScopes.some((scope) => scopes.includes(scope.value)) ? (
+      {requestedIdentityScopes.length ? (
         <section aria-labelledby="account-access-heading" className="flex flex-col gap-4">
           <h2 id="account-access-heading" className="text-sm font-semibold wrap-anywhere">
             {client.name} is requesting access to:
@@ -208,11 +209,9 @@ export function Consent({
                 />
               </summary>
               <ul className="mt-3 flex list-disc flex-col gap-2 pl-8 text-sm leading-relaxed text-muted-foreground">
-                {identityScopes
-                  .filter((scope) => scopes.includes(scope.value))
-                  .map((scope) => (
-                    <li key={scope.value}>{scope.label}</li>
-                  ))}
+                {requestedIdentityScopes.map((scope) => (
+                  <li key={scope.value}>{scope.label}</li>
+                ))}
               </ul>
             </details>
           </div>

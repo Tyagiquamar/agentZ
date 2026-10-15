@@ -13,7 +13,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/validation"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gwv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -256,7 +255,6 @@ func inferProtocol(path string) *agentgatewayv1alpha1.MCPProtocol {
 
 func dnsLabel(prefix string) string {
 	value := strings.ToLower(prefix)
-	value = strings.ReplaceAll(value, "_", "-")
 	value = strings.Map(
 		func(r rune) rune {
 			if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' {
@@ -267,15 +265,10 @@ func dnsLabel(prefix string) string {
 		value,
 	)
 	value = strings.Trim(value, "-")
-	value = strings.TrimSpace(value)
 	if value == "" {
 		return "mcp"
 	}
-	valid := len(value) <= 63
-	if valid {
-		valid = len(validation.IsDNS1123Label(value)) == 0
-	}
-	if valid {
+	if len(value) <= 63 {
 		return value
 	}
 

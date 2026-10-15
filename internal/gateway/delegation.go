@@ -77,20 +77,16 @@ type openAIModels struct {
 	Data   []openAIModel `json:"data"`
 }
 
-type openAIErrorDetail struct {
+type inferenceErrorDetail struct {
 	Message string  `json:"message"`
 	Type    string  `json:"type"`
 	Param   *string `json:"param"`
 	Code    string  `json:"code"`
 }
 
-type openAIError struct {
-	Error openAIErrorDetail `json:"error"`
-}
-
-type anthropicError struct {
-	Type  string            `json:"type"`
-	Error openAIErrorDetail `json:"error"`
+type inferenceError struct {
+	Type  string               `json:"type,omitempty"`
+	Error inferenceErrorDetail `json:"error"`
 }
 
 // GetDelegatedCatalog returns current compatibility for the caller's approved models.
@@ -101,6 +97,9 @@ func (s *Service) GetDelegatedCatalog(w http.ResponseWriter, r *http.Request) {
 func delegatedModelCompatibility(kind agentzv1alpha1.InferenceProviderKind, model agentzv1alpha1.InferenceModel) []gatewayapi.DelegationAPICompatibility {
 	upstream := inference.ProviderAPI(kind, model)
 	endpoints := inference.DelegatedProviderEndpoints(kind)
+	openAI := kind == agentzv1alpha1.InferenceProviderKindOpenAI || kind == agentzv1alpha1.InferenceProviderKindAzure
+	providerConversion := kind == agentzv1alpha1.InferenceProviderKindGemini ||
+		kind == agentzv1alpha1.InferenceProviderKindVertexAI || kind == agentzv1alpha1.InferenceProviderKindBedrock
 	apis := []gatewayapi.InferenceModelAPI{
 		gatewayapi.ChatCompletions,
 		gatewayapi.Responses,
@@ -129,10 +128,7 @@ func delegatedModelCompatibility(kind agentzv1alpha1.InferenceProviderKind, mode
 			case agentzv1alpha1.InferenceModelAPIMessages:
 				native = api == gatewayapi.Messages
 			}
-			openAI := kind == agentzv1alpha1.InferenceProviderKindOpenAI || kind == agentzv1alpha1.InferenceProviderKindAzure
 			dualOpenAI := model.API == nil && openAI && api != gatewayapi.Messages
-			providerConversion := kind == agentzv1alpha1.InferenceProviderKindGemini ||
-				kind == agentzv1alpha1.InferenceProviderKindVertexAI || kind == agentzv1alpha1.InferenceProviderKindBedrock
 			if (native || dualOpenAI) && !providerConversion {
 				compatibility.Support = gatewayapi.Native
 				compatibility.Warning = ""
@@ -297,7 +293,10 @@ func (s *Service) resolveDelegation(ctx context.Context, grant gatewaydb.Delegat
 	if agentErr == nil {
 		organizationID = agent.OrganizationID
 	}
-	effective, err := authorization.New(s.queries).Resolve(ctx, authorization.Subject{UserID: grant.UserID, OrganizationID: organizationID})
+	effective, err := authorization.New(s.queries).Resolve(ctx, authorization.Subject{
+		UserID:         grant.UserID,
+		OrganizationID: organizationID,
+	})
 	if err != nil {
 		return nil, errors.Join(errDelegationLookup, err)
 	}
@@ -937,16 +936,16 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 				}
 				response.Header = http.Header{"Cache-Control": {"no-store, no-transform"}}
 				response.Trailer = nil
-				detail := openAIErrorDetail{
+				failure := inferenceError{Error: inferenceErrorDetail{
 					Message: "The upstream service could not complete this request.",
 					Type:    "server_error",
 					Code:    "upstream_error",
-				}
-				body, err := json.Marshal(openAIError{Error: detail})
+				}}
 				if strings.HasPrefix(r.URL.Path, "/api/inference/v1/messages") {
-					detail.Type = "api_error"
-					body, err = json.Marshal(anthropicError{Type: "error", Error: detail})
+					failure.Type = "error"
+					failure.Error.Type = "api_error"
 				}
+				body, err := json.Marshal(failure)
 				if err != nil {
 					return err
 				}
@@ -1032,13 +1031,13 @@ func (s *Service) delegationError(w http.ResponseWriter, r *http.Request, status
 				errorType = "api_error"
 			}
 		}
-		apiutil.WriteJSON(w, status, anthropicError{
+		apiutil.WriteJSON(w, status, inferenceError{
 			Type:  "error",
-			Error: openAIErrorDetail{Message: message, Type: errorType},
+			Error: inferenceErrorDetail{Message: message, Type: errorType},
 		})
 		return
 	}
-	apiutil.WriteJSON(w, status, openAIError{Error: openAIErrorDetail{
+	apiutil.WriteJSON(w, status, inferenceError{Error: inferenceErrorDetail{
 		Message: message,
 		Type:    code,
 		Code:    code,

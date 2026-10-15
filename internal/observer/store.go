@@ -14,7 +14,7 @@ type dbStore struct {
 }
 
 func (s *dbStore) insertBatch(ctx context.Context, b batch) error {
-	if b.empty() {
+	if b.count() == 0 {
 		return nil
 	}
 
