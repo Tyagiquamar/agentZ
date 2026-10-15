@@ -5,7 +5,12 @@ import { verifyOAuthQueryParams } from "@better-auth/oauth-provider"
 import { getDB, schema } from "@/db"
 import { getAuthSession } from "@/lib/auth"
 import { getEnv } from "@/lib/env"
-import { delegationRequest, type DelegationRequest } from "@/lib/delegation"
+import {
+  delegationCatalog,
+  delegationRequest,
+  externalAgentAccess,
+  type DelegationRequest,
+} from "@/lib/delegation"
 import { Consent, ResumeAuthorization } from "./consent"
 import { AuthorizationState } from "./authorization-state"
 import { Input } from "@/components/ui/input"
@@ -104,15 +109,34 @@ async function AuthorizeContent({ searchParams }: PageProps<"/oauth/authorize">)
       name: schema.oauthClients.name,
       disabled: schema.oauthClients.disabled,
       owner: schema.organizations.name,
+      agent: schema.externalAgents,
     })
     .from(schema.oauthClients)
     .leftJoin(schema.organizations, eq(schema.organizations.id, schema.oauthClients.referenceId))
+    .leftJoin(
+      schema.externalAgents,
+      eq(schema.externalAgents.clientId, schema.oauthClients.clientId)
+    )
     .where(eq(schema.oauthClients.clientId, transaction.clientId))
-  if (!client || client.disabled)
+  if (
+    !client ||
+    client.disabled ||
+    (client.agent && client.agent.userId !== session.session.user.id)
+  )
     return (
       <AuthorizationState
         title="This app is unavailable"
         description="This application can no longer connect to AgentZ. Contact the app owner for help."
+      />
+    )
+  if (
+    client.agent &&
+    !(await externalAgentAccess(transaction.clientId, session.session.user).catch(() => undefined))
+  )
+    return (
+      <AuthorizationState
+        title="Agent access unavailable"
+        description="You need Use externally permission in this agent's workspace to continue."
       />
     )
   if (request.type === "authorization_code" && transaction.grantId)
@@ -129,7 +153,11 @@ async function AuthorizeContent({ searchParams }: PageProps<"/oauth/authorize">)
       )
     )
     .where(
-      and(eq(schema.members.userId, session.session.user.id), isNull(schema.members.disabledAt))
+      and(
+        eq(schema.members.userId, session.session.user.id),
+        isNull(schema.members.disabledAt),
+        client.agent ? eq(schema.organizations.id, client.agent.organizationId) : undefined
+      )
     )
     .orderBy(asc(schema.organizations.name))
   const workspaces = await getDB()
@@ -147,15 +175,34 @@ async function AuthorizeContent({ searchParams }: PageProps<"/oauth/authorize">)
         isNull(schema.members.disabledAt)
       )
     )
-    .where(and(isNull(schema.workspaces.deletedAt), eq(schema.workspaces.state, "ready")))
+    .where(
+      and(
+        isNull(schema.workspaces.deletedAt),
+        eq(schema.workspaces.state, "ready"),
+        client.agent ? eq(schema.workspaces.id, client.agent.workspaceId) : undefined
+      )
+    )
     .orderBy(asc(schema.workspaces.name))
   return (
     <Consent
+      initialWorkspace={
+        client.agent && organizations.length && workspaces.length
+          ? {
+              id: client.agent.workspaceId,
+              catalog: await delegationCatalog(
+                client.agent.organizationId,
+                client.agent.workspaceId,
+                session.session.user
+              ),
+            }
+          : undefined
+      }
       request={request}
       client={{
         name: client.name ?? "Application",
         owner: client.owner,
         callback: request.type === "authorization_code" ? (params.get("redirect_uri") ?? "") : "",
+        agent: client.agent?.kind,
       }}
       user={{
         name: session.session.user.name,

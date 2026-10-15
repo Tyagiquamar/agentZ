@@ -2,7 +2,7 @@ import "server-only"
 
 import { randomUUID } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
-import { and, arrayContained, asc, eq, gt, inArray, isNotNull, isNull, not } from "drizzle-orm"
+import { and, arrayContained, asc, eq, gt, inArray, isNotNull, isNull, not, sql } from "drizzle-orm"
 import { z } from "zod"
 import { getDB, schema } from "@/db"
 import { getAuth, getAuthSession } from "@/lib/auth"
@@ -10,6 +10,7 @@ import { activateOrganization, isActiveSuperadmin } from "@/data/organizations"
 import {
   checkDelegationSelection,
   delegationRequest,
+  externalAgentAccess,
   type DelegationRequest,
 } from "@/lib/delegation"
 import { DEVICE_CODE_GRANT_TYPE } from "@better-auth/oauth-provider"
@@ -212,6 +213,12 @@ export async function setOrganizationDelegation(organizationId: string, enabled:
         target: schema.organizationDelegation.organizationId,
         set: { enabled },
       })
+    await tx
+      .select({
+        notification: sql`pg_notify('agentz_external_agents', ${schema.externalAgents.workspaceId})`,
+      })
+      .from(schema.externalAgents)
+      .where(eq(schema.externalAgents.organizationId, organizationId))
     if (enabled) return
     const revoked = await tx
       .update(schema.delegationGrants)
@@ -237,7 +244,11 @@ export async function setOrganizationDelegation(organizationId: string, enabled:
 export async function disconnectOAuthApplication(clientId: string) {
   const session = await getAuthSession()
   if (!session) throw new Error("Sign in to manage connected applications.")
-  const userId = session.session.user.id
+  await revokeOAuthApplication(clientId, session.session.user.id)
+}
+
+/** revokeOAuthApplication removes a user's grants after the caller has checked management authority. */
+export async function revokeOAuthApplication(clientId: string, userId: string) {
   await getDB().transaction(async (tx) => {
     // Consent approval takes the same lock. A concurrent approval must finish
     // before disconnect, or find its transaction removed afterwards.
@@ -266,6 +277,12 @@ export async function disconnectOAuthApplication(clientId: string) {
       )
     for (const table of [schema.oauthRefreshTokens, schema.oauthAccessTokens, schema.oauthConsents])
       await tx.delete(table).where(and(eq(table.clientId, clientId), eq(table.userId, userId)))
+    await tx
+      .select({
+        notification: sql`pg_notify('agentz_external_agents', ${schema.externalAgents.workspaceId})`,
+      })
+      .from(schema.externalAgents)
+      .where(eq(schema.externalAgents.clientId, clientId))
   })
 }
 
@@ -279,6 +296,15 @@ export async function approveDelegation(
   if (!session) throw new Error("Sign in to continue.")
   const user = session.session.user
   const transaction = await delegationRequest(request, user.id, session.session.session.id)
+  const agent = await externalAgentAccess(transaction.clientId, user)
+  if (
+    agent &&
+    ((organizationId !== null && agent.organizationId !== organizationId) ||
+      [...selection.models, ...selection.mcp].some(
+        (resource) => resource.workspace_id !== agent.workspaceId
+      ))
+  )
+    throw new Error("This agent can only access its owner's selected workspace.")
   const inference = transaction.scopes.includes("inference:use")
   const mcp = transaction.scopes.includes("mcp:use")
   if ((!inference && selection.models.length) || (!mcp && selection.mcp.length))
@@ -288,7 +314,19 @@ export async function approveDelegation(
   if (!selection.models.length && !selection.mcp.length) organizationId = null
   if ((selection.models.length || selection.mcp.length) && !organizationId)
     throw new Error("Select an organization.")
-  if (organizationId) await checkDelegationSelection(organizationId, selection, user, "consent")
+  if (organizationId)
+    selection = await checkDelegationSelection(organizationId, selection, user, "consent")
+  if (
+    agent &&
+    selection.models.some((model) => {
+      const api = agent.kind === "claude" ? "Messages" : "Responses"
+      const compatibility = model.api_compatibility?.find((item) => item.api === api)
+      if (agent.kind === "codex")
+        return compatibility?.support !== "native" || !model.model_info?.capabilities.tool_call
+      return !compatibility || compatibility.support === "unsupported"
+    })
+  )
+    throw new Error("A selected model does not support this coding agent.")
   // Display names and click order do not change authority. Preserve the stored
   // order when reusing a grant because it identifies the projected routes.
   function matchesSelection(previous: DelegationCatalog) {
@@ -411,6 +449,8 @@ export async function approveDelegation(
         selection,
         approvedAt: new Date(),
       })
+    if (agent)
+      await tx.execute(sql`select pg_notify('agentz_external_agents', ${agent.workspaceId})`)
     if (transaction.type === "device_code") {
       await tx
         .update(schema.deviceCodes)

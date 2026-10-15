@@ -88,22 +88,28 @@ opencode attach https://agentzharness.ai/api/opencode/{AGENT_NAME}/
 
 ## External coding agents
 
-Create a public native application under **Organization > Applications**. Enable
-Device authorization and allow `openid`, `profile`, `email`, `offline_access`,
-`inference:use` and `mcp:use`. The application's setup sheet provides the client
-ID and configuration. Public native clients have no client secret.
+Open **Workspace settings > External agents**, choose Claude Code or Codex, and
+give the agent a name. Members with **Use externally** permission for inference
+providers or MCP connections can onboard their own agents. Workspace admins can
+manage every registration in the workspace. Each registration creates a public
+native OAuth client, bound to its owner and workspace, with the required scopes,
+login methods and callback URLs. No client secret is needed.
+
+Agents can approve resources only from their workspace, including organization
+resources selected for inheritance by that workspace. Consent, token issuance
+and refresh, and gateway requests recheck current permissions and inheritance.
 
 Install the desktop `agentz` binary and create its configuration:
 
 ```yaml
 server_url: https://agentzharness.ai
-client_id: YOUR_NATIVE_APPLICATION_CLIENT_ID
+client_id: YOUR_AGENT_CLIENT_ID
 ```
 
 Use `$XDG_CONFIG_HOME/agentz/config.yaml` or `~/.config/agentz/config.yaml` on
 Linux, `~/Library/Application Support/agentz/config.yaml` on macOS, and
 `%APPDATA%\agentz\config.yaml` on Windows. `agentz --config FILE` selects another
-configuration file.
+configuration file. Use separate files when onboarding multiple agents.
 
 ```sh
 agentz launch claude --your-claude-flags
@@ -116,11 +122,13 @@ flags pass through unchanged. The launcher uses a separate Claude profile for
 each AgentZ server and client ID. `agentz relay status` and `agentz relay stop`
 manage that profile's relay.
 
-MCP uses a separate native OAuth login. Enable Browser login with PKCE and
-register `http://localhost:8765/callback`, then follow the application's MCP
-setup instructions. Choose tools, prompts and resources during consent. Provider
-credentials remain on AgentZ. Disconnect the application under **Settings >
-Connected applications** to revoke its grants.
+MCP uses a separate native OAuth login. Follow the agent's setup Sheet to add
+Claude's MCP server and sign in. Choose tools, prompts and resources during
+consent. Provider credentials remain on AgentZ. The **Access** tab shows approved
+identity and resource access. Disconnecting the agent revokes all of its grants
+and refresh tokens. Personal **Settings > Connected applications** also supports
+revocation. Organization resource delegation must be enabled before models or
+MCP capabilities can be granted.
 
 AgentGateway 1.6.0 translates supported inference formats and streams responses.
 Consent shows conversion warnings and disables unsupported models for the
@@ -131,8 +139,8 @@ After disconnecting, run `agentz launch claude auth logout` and launch again to
 grant fresh access. Claude's managed model settings choose the first approved
 model as the default on each launch; `/model` selects another approved model.
 
-For Codex, enable Browser login with PKCE and register
-`http://127.0.0.1:8766/callback`. Codex 0.162.1 or later performs login and
+Codex's browser callbacks are registered during onboarding.
+Codex 0.162.1 or later performs login and
 refresh and keeps its credentials encrypted using the OS credential store.
 The credential store must be available and unlocked, including on headless Linux.
 Its browser callback must reach the machine running Codex. Remote SSH sessions
@@ -159,10 +167,9 @@ selects the first approved model by default; `/model` can select another.
 Provider-hosted web search and Responses WebSockets are disabled. After
 disconnecting, or to change approved models, run `agentz login codex`.
 
-Codex MCP uses a separate native OAuth grant. Register
-`http://127.0.0.1:8767/callback`, then use the Codex instructions in the existing
-application setup sheet to sign in. The launcher configures the MCP server with
-its resource-specific scopes. Tool, prompt and
+Codex MCP uses a separate native OAuth grant. Use the agent's setup Sheet to
+sign in. The launcher configures the MCP server with its resource-specific
+scopes. MCP commands do not require an inference login. Tool, prompt and
 resource grants use the same AgentZ consent and revocation controls as Claude.
 
 ## Open-Source Projects

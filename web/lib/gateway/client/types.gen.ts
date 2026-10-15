@@ -145,6 +145,10 @@ export type ChatSessionPreference = {
   last_agent_name: AgentName | null
 }
 
+export type WatchExternalAgentsEvent = {
+  revision: string
+}
+
 export type WatchChatSessionsEvent = {
   revision: string
 }
@@ -329,6 +333,7 @@ export type WorkspaceCapabilities = {
   inference_providers: ResourceCapabilities
   inference_pools: ResourceCapabilities
   api_keys: ResourceCapabilities
+  external_agents: ResourceCapabilities
   observability: ResourceCapabilities
 }
 
@@ -3556,6 +3561,47 @@ export type DashboardWidgetNamePath = DashboardWidgetName
  * Stable publish call identifier.
  */
 export type IdempotencyKeyHeader = string
+
+export type WatchExternalAgentsData = {
+  body?: never
+  headers?: {
+    /**
+     * Stable Workspace ID selecting Workspace scope. Omit for Organisation scope.
+     *
+     */
+    "X-AgentZ-Workspace-ID"?: string
+  }
+  path?: never
+  query?: never
+  url: "/api/external-agent/watch"
+}
+
+export type WatchExternalAgentsErrors = {
+  /**
+   * Request authentication failed.
+   */
+  401: Error
+  /**
+   * The authenticated principal lacks authority for this operation.
+   */
+  403: Error
+  /**
+   * Unexpected server error.
+   */
+  500: Error
+}
+
+export type WatchExternalAgentsError = WatchExternalAgentsErrors[keyof WatchExternalAgentsErrors]
+
+export type WatchExternalAgentsResponses = {
+  /**
+   * Workspace external agent change notifications.
+   */
+  200: WatchExternalAgentsEvent
+}
+
+export type WatchExternalAgentsResponse =
+  WatchExternalAgentsResponses[keyof WatchExternalAgentsResponses]
 
 export type GetDelegationCatalogData = {
   body?: never

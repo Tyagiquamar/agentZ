@@ -6,6 +6,7 @@ CREATE TYPE "public"."destructive_target" AS ENUM('organization_membership', 'te
 CREATE TYPE "public"."event_trail_actor" AS ENUM('user', 'api_key', 'system');
 CREATE TYPE "public"."event_trail_result" AS ENUM('succeeded', 'denied', 'failed');
 CREATE TYPE "public"."event_trail_target" AS ENUM('organization', 'organization_membership', 'team', 'mcp_connection', 'inference_provider', 'inference_pool', 'role', 'sandbox', 'skill', 'agent', 'api_key', 'workspace_access', 'workspace');
+CREATE TYPE "public"."external_agent_kind" AS ENUM('claude', 'codex');
 CREATE TYPE "public"."permission_action" AS ENUM('read', 'create', 'modify', 'delete', 'delegate', 'author', 'share_authored', 'share_non_authored', 'use_shared', 'read_shared_secret', 'write_shared_secret', 'delete_shared_secret');
 CREATE TYPE "public"."permission_resource" AS ENUM('mcp_connection', 'skill', 'sandbox', 'inference_provider', 'inference_pool', 'agent', 'api_key', 'observability');
 CREATE TYPE "public"."system_role" AS ENUM('superadmin', 'workspace_admin');
@@ -180,6 +181,15 @@ CREATE TABLE "event_trail_events" (
         ("event_trail_events"."actor_type" <> 'system' AND "event_trail_events"."actor_id" IS NOT NULL)),
 	CONSTRAINT "event_trail_events_workspace_target_ck" CHECK ("event_trail_events"."target_type" <> 'workspace' OR
         ("event_trail_events"."workspace_id" IS NOT NULL AND "event_trail_events"."target_id" = "event_trail_events"."workspace_id"))
+);
+
+CREATE TABLE "external_agents" (
+	"client_id" text PRIMARY KEY NOT NULL,
+	"organization_id" text NOT NULL,
+	"workspace_id" text NOT NULL,
+	"user_id" text NOT NULL,
+	"kind" "external_agent_kind" NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 
 CREATE TABLE "github_authorizations" (
@@ -719,6 +729,10 @@ ALTER TABLE "delegation_transactions" ADD CONSTRAINT "delegation_transactions_us
 ALTER TABLE "delegation_transactions" ADD CONSTRAINT "delegation_transactions_session_id_sessions_id_fk" FOREIGN KEY ("session_id") REFERENCES "public"."sessions"("id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "delegation_transactions" ADD CONSTRAINT "delegation_transactions_grant_id_delegation_grants_id_fk" FOREIGN KEY ("grant_id") REFERENCES "public"."delegation_grants"("id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "event_trail_events" ADD CONSTRAINT "event_trail_events_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE restrict ON UPDATE no action;
+ALTER TABLE "external_agents" ADD CONSTRAINT "external_agents_client_id_oauth_clients_client_id_fk" FOREIGN KEY ("client_id") REFERENCES "public"."oauth_clients"("client_id") ON DELETE cascade ON UPDATE no action;
+ALTER TABLE "external_agents" ADD CONSTRAINT "external_agents_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE restrict ON UPDATE no action;
+ALTER TABLE "external_agents" ADD CONSTRAINT "external_agents_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE restrict ON UPDATE no action;
+ALTER TABLE "external_agents" ADD CONSTRAINT "external_agents_workspace_organization_fk" FOREIGN KEY ("workspace_id","organization_id") REFERENCES "public"."workspaces"("id","organization_id") ON DELETE restrict ON UPDATE no action;
 ALTER TABLE "github_authorizations" ADD CONSTRAINT "github_authorizations_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "github_authorizations" ADD CONSTRAINT "github_authorizations_session_id_sessions_id_fk" FOREIGN KEY ("session_id") REFERENCES "public"."sessions"("id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "github_connections" ADD CONSTRAINT "github_connections_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
@@ -795,6 +809,7 @@ CREATE INDEX "delegation_transactions_user_client_idx" ON "delegation_transactio
 CREATE INDEX "event_trail_events_organization_created_idx" ON "event_trail_events" USING btree ("organization_id","created_at","id");
 CREATE INDEX "event_trail_events_workspace_created_idx" ON "event_trail_events" USING btree ("workspace_id","created_at");
 CREATE INDEX "event_trail_events_created_idx" ON "event_trail_events" USING btree ("created_at");
+CREATE INDEX "external_agents_workspace_idx" ON "external_agents" USING btree ("organization_id","workspace_id");
 CREATE INDEX "oauth_client_origins_origin_index" ON "oauth_client_origins" USING btree ("origin");
 CREATE INDEX "permission_grants_scope_idx" ON "permission_grants" USING btree ("organization_id","workspace_id");
 CREATE UNIQUE INDEX "role_scopes_organization_name_uidx" ON "role_scopes" USING btree ("organization_id",lower(btrim("display_name"))) WHERE "role_scopes"."workspace_id" IS NULL;

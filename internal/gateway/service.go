@@ -136,6 +136,7 @@ type Service struct {
 	chatSessionEvents   chatSessionEvents
 	chatInputWake       chan struct{}
 	codingEvents        chatSessionEvents
+	externalAgentEvents chatSessionEvents
 	catalog             *inference.Catalog
 	openAPI             *openapi3.T
 	outboundHTTP        *http.Client

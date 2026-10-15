@@ -15,6 +15,7 @@ import {
   ShieldCheck,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import {
   Field,
   FieldDescription,
@@ -58,11 +59,12 @@ const mcpKinds = ["tools", "prompts", "resources"] as const
 
 type ConsentProps = {
   request: DelegationRequest
-  client: { name: string; owner: string | null; callback: string }
+  client: { name: string; owner: string | null; callback: string; agent?: "claude" | "codex" }
   user: { name: string; email: string; image?: string | null }
   scopes: string[]
   organizations: { id: string; name: string }[]
   workspaces: { id: string; name: string; organizationId: string }[]
+  initialWorkspace?: { id: string; catalog: DelegationCatalog }
 }
 
 export function Consent({
@@ -72,16 +74,21 @@ export function Consent({
   scopes,
   organizations,
   workspaces,
+  initialWorkspace,
 }: ConsentProps) {
   const [inferenceAPI, setInferenceAPI] = useState(
-    request.type === "device_code" ? "Messages" : "Responses"
+    client.agent === "claude" || request.type === "device_code" ? "Messages" : "Responses"
   )
   const inference = scopes.includes("inference:use")
   const mcp = scopes.includes("mcp:use")
   const resourceAccess = inference || mcp
-  const [organizationId, setOrganizationId] = useState("")
-  const [workspaceId, setWorkspaceId] = useState("")
-  const [catalogs, setCatalogs] = useState<Record<string, DelegationCatalog>>({})
+  const [organizationId, setOrganizationId] = useState(
+    organizations.length === 1 ? (organizations[0]?.id ?? "") : ""
+  )
+  const [workspaceId, setWorkspaceId] = useState(initialWorkspace?.id ?? "")
+  const [catalogs, setCatalogs] = useState<Record<string, DelegationCatalog>>(
+    initialWorkspace ? { [initialWorkspace.id]: initialWorkspace.catalog } : {}
+  )
   const [selection, setSelection] = useState<DelegationCatalog>({ models: [], mcp: [] })
   const [error, setError] = useState<string>()
   const [pending, startTransition] = useTransition()
@@ -202,7 +209,7 @@ export function Consent({
             <Layers3 aria-hidden="true" className="size-4 text-primary" />
             Choose resource access
           </h2>
-          {inference ? (
+          {inference && !client.agent ? (
             <Field>
               <FieldLabel htmlFor="consent-inference-api">Inference API</FieldLabel>
               <Select
@@ -246,65 +253,71 @@ export function Consent({
             </Alert>
           ) : (
             <>
-              <FieldGroup className="sm:grid sm:grid-cols-2 sm:items-end">
-                <Field>
-                  <FieldLabel htmlFor="consent-organization">Organization</FieldLabel>
-                  <Select
-                    value={organizationId}
-                    disabled={pending || loading}
-                    onValueChange={(value) => {
-                      setOrganizationId(value)
-                      setWorkspaceId("")
-                      setCatalogs({})
-                      setSelection({ models: [], mcp: [] })
-                      setError(undefined)
-                      setLoadError(undefined)
-                    }}
-                  >
-                    <SelectTrigger id="consent-organization" className="w-full">
-                      <SelectValue placeholder="Select an organization" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        {organizations.map((organization) => (
-                          <SelectItem key={organization.id} value={organization.id}>
-                            {organization.name}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="consent-workspace">Workspace</FieldLabel>
-                  <Select
-                    value={workspaceId}
-                    disabled={pending || loading || !organizationId}
-                    onValueChange={loadWorkspace}
-                  >
-                    <SelectTrigger id="consent-workspace" className="w-full">
-                      <SelectValue placeholder="Select a workspace" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        {workspaces
-                          .filter((workspace) => workspace.organizationId === organizationId)
-                          .map((workspace) => (
-                            <SelectItem key={workspace.id} value={workspace.id}>
-                              {workspace.name}
+              {client.agent ? (
+                <Badge variant="secondary">
+                  {workspaces.find((workspace) => workspace.id === workspaceId)?.name}
+                </Badge>
+              ) : (
+                <FieldGroup className="sm:grid sm:grid-cols-2 sm:items-end">
+                  <Field>
+                    <FieldLabel htmlFor="consent-organization">Organization</FieldLabel>
+                    <Select
+                      value={organizationId}
+                      disabled={pending || loading}
+                      onValueChange={(value) => {
+                        setOrganizationId(value)
+                        setWorkspaceId("")
+                        setCatalogs({})
+                        setSelection({ models: [], mcp: [] })
+                        setError(undefined)
+                        setLoadError(undefined)
+                      }}
+                    >
+                      <SelectTrigger id="consent-organization" className="w-full">
+                        <SelectValue placeholder="Select an organization" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {organizations.map((organization) => (
+                            <SelectItem key={organization.id} value={organization.id}>
+                              {organization.name}
                             </SelectItem>
                           ))}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                  {organizationId &&
-                  !workspaces.some((workspace) => workspace.organizationId === organizationId) ? (
-                    <FieldDescription>
-                      No workspaces are available in this organization.
-                    </FieldDescription>
-                  ) : null}
-                </Field>
-              </FieldGroup>
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="consent-workspace">Workspace</FieldLabel>
+                    <Select
+                      value={workspaceId}
+                      disabled={pending || loading || !organizationId}
+                      onValueChange={loadWorkspace}
+                    >
+                      <SelectTrigger id="consent-workspace" className="w-full">
+                        <SelectValue placeholder="Select a workspace" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {workspaces
+                            .filter((workspace) => workspace.organizationId === organizationId)
+                            .map((workspace) => (
+                              <SelectItem key={workspace.id} value={workspace.id}>
+                                {workspace.name}
+                              </SelectItem>
+                            ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                    {organizationId &&
+                    !workspaces.some((workspace) => workspace.organizationId === organizationId) ? (
+                      <FieldDescription>
+                        No workspaces are available in this organization.
+                      </FieldDescription>
+                    ) : null}
+                  </Field>
+                </FieldGroup>
+              )}
               {loading ? (
                 <div role="status" className="flex flex-col gap-4">
                   <span className="sr-only">Loading workspace resources…</span>
@@ -363,17 +376,26 @@ export function Consent({
                             const compatibility = model.api_compatibility?.find(
                               (item) => item.api === inferenceAPI
                             )
+                            const codexUnsupported =
+                              client.agent === "codex" &&
+                              (compatibility?.support !== "native" ||
+                                !model.model_info?.capabilities.tool_call)
                             let badge = model.provider_display_name || model.provider
                             if (compatibility?.support === "unsupported") badge = "Unsupported"
                             if (compatibility?.support === "translated") badge = "Conversion"
+                            if (codexUnsupported) badge = "Unsupported"
                             let description = `${model.model} · Provider ID: ${model.provider}`
                             if (compatibility?.warning) description += ` · ${compatibility.warning}`
+                            if (codexUnsupported)
+                              description +=
+                                " · Codex requires a native Responses model with tool calls."
                             return {
                               value: model.id,
                               label: model.model_display_name || model.model,
                               description,
                               badge,
-                              disabled: compatibility?.support === "unsupported",
+                              disabled:
+                                compatibility?.support === "unsupported" || codexUnsupported,
                               icon: Cpu,
                             }
                           })}
@@ -480,10 +502,12 @@ export function Consent({
       <div className="flex items-start gap-2.5 text-sm leading-relaxed text-muted-foreground">
         <ShieldCheck aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
         <p>
-          You can disconnect this application at any time in{" "}
+          You can disconnect {client.agent ? "this agent" : "this application"} at any time in{" "}
           <span className="inline-flex items-center gap-1 align-middle">
-            Settings <ArrowRight aria-hidden="true" className="size-3" />
-            <span className="sr-only">then</span> Connected applications.
+            {client.agent ? "Workspace settings" : "Settings"}{" "}
+            <ArrowRight aria-hidden="true" className="size-3" />
+            <span className="sr-only">then</span>{" "}
+            {client.agent ? "External agents." : "Connected applications."}
           </span>
         </p>
       </div>

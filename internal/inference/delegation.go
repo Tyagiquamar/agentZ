@@ -18,7 +18,6 @@ type DelegatedRequest struct {
 	endpoint           string
 	nativeTools        bool
 	Model              string               `json:"model"`
-	Instructions       string               `json:"instructions"`
 	Stream             bool                 `json:"stream"`
 	Store              *bool                `json:"store"`
 	Background         bool                 `json:"background"`
@@ -77,9 +76,6 @@ func (input *DelegatedRequest) ValidateProvider(kind agentzv1alpha1.InferencePro
 	}
 	if !input.Stream {
 		return errors.New("this Codex model requires stream:true")
-	}
-	if input.responses && input.Instructions == "" {
-		return errors.New("this Codex model requires an instructions string")
 	}
 	return nil
 }

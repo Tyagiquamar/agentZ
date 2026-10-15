@@ -72,6 +72,10 @@ export const zChatInputUpdate = z.object({
   action: z.enum(["remove", "retry"]),
 })
 
+export const zWatchExternalAgentsEvent = z.object({
+  revision: z.string(),
+})
+
 export const zWatchChatSessionsEvent = z.object({
   revision: z.string(),
 })
@@ -280,6 +284,7 @@ export const zWorkspaceCapabilities = z.object({
   inference_providers: zResourceCapabilities,
   inference_pools: zResourceCapabilities,
   api_keys: zResourceCapabilities,
+  external_agents: zResourceCapabilities,
   observability: zResourceCapabilities,
 })
 
@@ -3968,6 +3973,15 @@ export const zDashboardWidgetNamePath = zDashboardWidgetName
  * Stable publish call identifier.
  */
 export const zIdempotencyKeyHeader = z.string().min(1).max(128)
+
+export const zWatchExternalAgentsHeaders = z.object({
+  "X-AgentZ-Workspace-ID": z.string().min(1).max(128).optional(),
+})
+
+/**
+ * Workspace external agent change notifications.
+ */
+export const zWatchExternalAgentsResponse = zWatchExternalAgentsEvent
 
 export const zGetDelegationCatalogHeaders = z.object({
   "X-AgentZ-Workspace-ID": z.string().min(1).max(128).optional(),

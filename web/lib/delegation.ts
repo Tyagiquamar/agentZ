@@ -18,7 +18,7 @@ import { z } from "zod"
 import { delegationScopes } from "@/data/schema"
 import { getDB, schema } from "@/db"
 import { getEnv } from "@/lib/env"
-import { getDelegationCatalog, type DelegationCatalog } from "@/lib/gateway/client"
+import { getDelegationCatalog, getWorkspace, type DelegationCatalog } from "@/lib/gateway/client"
 import { createClient } from "@/lib/gateway/client/client"
 import { GatewayUnauthorizedError } from "@/lib/gateway/errors"
 
@@ -82,6 +82,50 @@ export async function delegationCatalog(
     throw new Error(result.error.message)
   }
   return result.data
+}
+
+/** externalAgentAccess enforces the registration's owner and live workspace permission. */
+export async function externalAgentAccess(
+  clientId: string,
+  user: Pick<typeof schema.users.$inferSelect, "id" | "name">
+) {
+  const [agent] = await getDB()
+    .select()
+    .from(schema.externalAgents)
+    .where(eq(schema.externalAgents.clientId, clientId))
+  if (!agent) return undefined
+  if (agent.userId !== user.id)
+    throw new APIError("FORBIDDEN", {
+      error: "access_denied",
+      message: "Sign in as this agent's owner.",
+    })
+  const { getGatewayAuthToken } = await import("@/lib/gateway/auth")
+  const { serverGatewayBaseURL } = await import("@/lib/gateway/server-base-url")
+  const token = await getGatewayAuthToken(
+    agent.organizationId,
+    user.id,
+    user.name,
+    agent.workspaceId
+  ).catch((error: unknown) => {
+    if (error instanceof GatewayUnauthorizedError)
+      throw new APIError("FORBIDDEN", {
+        error: "access_denied",
+        message: "This workspace is no longer available.",
+      })
+    throw error
+  })
+  const result = await getWorkspace({
+    client: createClient({ baseUrl: serverGatewayBaseURL(), auth: token }),
+    path: { workspaceId: agent.workspaceId },
+  })
+  if (!result.response || result.response.status >= 500)
+    throw new Error("Agent access could not be verified. Try again.")
+  if (!result.data?.capabilities.external_agents.read || result.data.state !== "ready")
+    throw new APIError("FORBIDDEN", {
+      error: "access_denied",
+      message: "Use externally permission is no longer available in this workspace.",
+    })
+  return agent
 }
 
 /** checkDelegationSelection rechecks ownership and permissions, including capability availability for new consent. */
@@ -333,19 +377,20 @@ export function agentZOAuthProvider(issuer: string) {
       throw new APIError("BAD_REQUEST", { error: "invalid_grant" })
     }
     let selection = grant.selection
-    if (grant.organizationId) {
-      try {
+    try {
+      await externalAgentAccess(client.clientId, user)
+      if (grant.organizationId) {
         selection = await checkDelegationSelection(
           grant.organizationId,
           grant.selection,
           user,
           "access"
         )
-      } catch (error) {
-        if (error instanceof APIError && error.body?.error === "access_denied")
-          throw new APIError("BAD_REQUEST", { error: "invalid_grant" })
-        throw error
       }
+    } catch (error) {
+      if (error instanceof APIError && error.body?.error === "access_denied")
+        throw new APIError("BAD_REQUEST", { error: "invalid_grant" })
+      throw error
     }
     await tokenSelection.set({
       models: scopes.includes("inference:use") ? selection.models : [],
@@ -401,9 +446,22 @@ export function agentZOAuthProvider(issuer: string) {
     },
     clientReference: ({ session }) =>
       z.string().nullish().parse(session?.activeOrganizationId) ?? undefined,
-    clientPrivileges: async ({ user, session, action }) => {
+    clientPrivileges: async ({ user, session, action, headers }) => {
       const { isActiveSuperadmin } = await import("@/data/organizations")
       const organizationId = z.string().nullish().parse(session?.activeOrganizationId)
+      const workspaceId = headers.get("X-AgentZ-Workspace-ID")
+      // Registration endpoints are server-only or disabled. The onboarding
+      // action supplies fixed native metadata; workspace authority is still live.
+      if (action === "create" && user && organizationId && workspaceId) {
+        const { getGatewayAuthToken } = await import("@/lib/gateway/auth")
+        const { serverGatewayBaseURL } = await import("@/lib/gateway/server-base-url")
+        const token = await getGatewayAuthToken(organizationId, user.id, user.name, workspaceId)
+        const result = await getWorkspace({
+          client: createClient({ baseUrl: serverGatewayBaseURL(), auth: token }),
+          path: { workspaceId },
+        })
+        return !!result.data?.capabilities.external_agents.create
+      }
       return (
         action !== "configure-client-credentials-scopes" &&
         !!user &&

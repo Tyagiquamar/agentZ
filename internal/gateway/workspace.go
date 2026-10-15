@@ -521,6 +521,75 @@ func (s *Service) GetWorkspace(w http.ResponseWriter, r *http.Request, workspace
 	apiutil.WriteError(w, r, workspaceNotFound(workspaceID))
 }
 
+// WatchExternalAgents streams revisions while the caller retains external-use authority.
+func (s *Service) WatchExternalAgents(w http.ResponseWriter, r *http.Request, _ gatewayapi.WatchExternalAgentsParams) {
+	claims, apiErr := externalWorkspaceClaims(r.Context())
+	if apiErr != nil {
+		apiutil.WriteError(w, r, apiErr)
+		return
+	}
+	checkAccess := func() *apiutil.APIError {
+		if claims.WorkspaceID == "" {
+			return resourceForbidden(errors.New("select a workspace"))
+		}
+		_, _, apiErr := s.resolveResourceScope(r.Context(), claims, claims.WorkspaceID, "external agents")
+		if apiErr != nil {
+			return apiErr
+		}
+		capabilities, err := s.resolveResourceCapabilities(r.Context(), claims, claims.WorkspaceID)
+		if err != nil {
+			return apiutil.NewError(http.StatusInternalServerError, "internal_error", "request failed", err)
+		}
+		if !capabilities.externalAgent.Read {
+			return resourceForbidden(errors.New("external use permission is required"))
+		}
+		return nil
+	}
+	if apiErr := checkAccess(); apiErr != nil {
+		apiutil.WriteError(w, r, apiErr)
+		return
+	}
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		apiutil.WriteInternalError(w, r, errors.New("streaming is unavailable"))
+		return
+	}
+	events, release := s.externalAgentEvents.subscribe(claims.WorkspaceID)
+	defer release()
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case revision := <-events:
+			if checkAccess() != nil {
+				return
+			}
+			body, err := json.Marshal(gatewayapi.WatchExternalAgentsEvent{Revision: strconv.FormatUint(revision, 10)})
+			if err != nil {
+				return
+			}
+			if _, err := fmt.Fprintf(w, "data: %s\n\n", body); err != nil {
+				return
+			}
+			flusher.Flush()
+		case <-ticker.C:
+			if checkAccess() != nil {
+				return
+			}
+			if _, err := fmt.Fprint(w, ": keep-alive\n\n"); err != nil {
+				return
+			}
+			flusher.Flush()
+		}
+	}
+}
+
 // ResolveWorkspaceSlug handles GET /api/workspace/slug/{workspaceSlug}.
 func (s *Service) ResolveWorkspaceSlug(w http.ResponseWriter, r *http.Request, workspaceSlug gatewayapi.WorkspaceSlugPath) {
 	claims, apiErr := externalWorkspaceClaims(r.Context())
@@ -1013,6 +1082,7 @@ func workspaceView(row gatewaydb.Workspace, workspaceAdminCount int64, canAdmini
 			Administer:         canAdminister,
 			Agents:             gatewayapi.AgentWorkspaceCapabilities{Author: capabilities.canAuthorAgents},
 			ApiKeys:            capabilities.apiKey,
+			ExternalAgents:     capabilities.externalAgent,
 			InferencePools:     capabilities.inferencePool,
 			InferenceProviders: capabilities.inferenceProvider,
 			McpConnections:     capabilities.mcp,

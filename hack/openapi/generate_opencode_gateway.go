@@ -208,6 +208,7 @@ var baseOperationCapabilities = map[string][]string{
 	},
 	"organization.member": {
 		"getDelegationCatalog",
+		"watchExternalAgents",
 		"ensureTenant",
 		"getTenant",
 		"getWorkspace",

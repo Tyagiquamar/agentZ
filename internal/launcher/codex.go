@@ -95,7 +95,7 @@ func (installed *installation) codex(ctx context.Context, command *cli.Command) 
 		resource, authorize, token, client, resource,
 	)
 	mcp := fmt.Sprintf(
-		`mcp_servers.agentz={url=%s,scopes=["mcp:use","offline_access"],oauth={client_id=%s,callback_port=8767}}`,
+		`mcp_servers.agentz={url=%s,scopes=["mcp:use","offline_access"],oauth={client_id=%s,callback_port=8767,callback_url="http://127.0.0.1:8767/callback"}}`,
 		mcpURL, client,
 	)
 	flags := make([]string, 0, 14+command.Args().Len())
@@ -103,43 +103,52 @@ func (installed *installation) codex(ctx context.Context, command *cli.Command) 
 		"-c", `model_provider="agentz"`, "-c", `web_search="disabled"`,
 		"-c", "mcp_oauth_callback_port=8767", "-c", provider, "-c", mcp,
 	)
-	cache := filepath.Join(installed.profile, "codex-catalog.json")
-	_, err := os.Stat(cache)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
+	args := command.Args().Slice()
+	mcpCommand := len(args) > 1 && args[1] == "mcp"
+	// MCP owns a separate OAuth grant and does not need an inference login.
+	if !mcpCommand {
+		cache := filepath.Join(installed.profile, "codex-catalog.json")
+		_, err := os.Stat(cache)
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		login := command.Name == "login" || errors.Is(err, os.ErrNotExist)
+		if err := installed.codexLogin(ctx, command, flags, environment, login); err != nil {
+			return err
+		}
+		data, err := os.ReadFile(cache)
+		if err != nil {
+			return fmt.Errorf("read approved models; run agentz login codex: %w", err)
+		}
+		var approved gatewayapi.DelegationCatalog
+		if err := json.Unmarshal(data, &approved); err != nil {
+			return fmt.Errorf("read approved models: %w", err)
+		}
+		modelFile := filepath.Join(profile, "models.json")
+		model, err := installed.codexModels(ctx, approved, modelFile, environment)
+		if err != nil {
+			return err
+		}
+		if command.Name == "login" {
+			fmt.Fprintln(command.Writer, "Codex is connected. Run agentz launch codex.")
+			return nil
+		}
+		modelJSON, _ := json.Marshal(model)
+		fileJSON, _ := json.Marshal(modelFile)
+		flags = append(flags, "-c", "model="+string(modelJSON), "-c", "model_catalog_json="+string(fileJSON))
 	}
-	login := command.Name == "login" || errors.Is(err, os.ErrNotExist)
-	if err := installed.codexLogin(ctx, command, flags, environment, login); err != nil {
-		return err
-	}
-	data, err := os.ReadFile(cache)
-	if err != nil {
-		return fmt.Errorf("read approved models; run agentz login codex: %w", err)
-	}
-	var approved gatewayapi.DelegationCatalog
-	if err := json.Unmarshal(data, &approved); err != nil {
-		return fmt.Errorf("read approved models: %w", err)
-	}
-	modelFile := filepath.Join(profile, "models.json")
-	model, err := installed.codexModels(ctx, approved, modelFile, environment)
-	if err != nil {
-		return err
-	}
-	if command.Name == "login" {
-		fmt.Fprintln(command.Writer, "Codex is connected. Run agentz launch codex.")
-		return nil
-	}
-	modelJSON, _ := json.Marshal(model)
-	fileJSON, _ := json.Marshal(modelFile)
-	flags = append(flags, "-c", "model="+string(modelJSON), "-c", "model_catalog_json="+string(fileJSON))
-	flags = append(flags, command.Args().Slice()[1:]...)
+	flags = append(flags, args[1:]...)
 	child := exec.CommandContext(ctx, "codex", flags...)
 	child.Env = environment
 	child.Stdin, child.Stdout, child.Stderr = os.Stdin, command.Writer, command.ErrWriter
 	if err := child.Run(); err != nil {
 		var exit *exec.ExitError
 		if errors.As(err, &exit) {
-			return cli.Exit("Codex exited. To grant fresh access, run agentz login codex.", exit.ExitCode())
+			message := "Codex exited."
+			if !mcpCommand {
+				message += " To grant fresh access, run agentz login codex."
+			}
+			return cli.Exit(message, exit.ExitCode())
 		}
 		return err
 	}

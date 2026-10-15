@@ -21,6 +21,11 @@ export const delegationScopes = [
   "mcp:use",
 ]
 
+export const externalAgentInput = z.object({
+  name: z.string().trim().min(1, "Enter an agent name.").max(100, "Use 100 characters or fewer."),
+  kind: z.enum(["claude", "codex"]),
+})
+
 export const oauthApplicationInput = z
   .object({
     name: z

@@ -285,15 +285,58 @@ type delegationResources struct {
 }
 
 func (s *Service) resolveDelegation(ctx context.Context, grant gatewaydb.DelegationGrant, selection gatewayapi.DelegationCatalog) (*delegationResources, error) {
-	if len(selection.Models) == 0 && len(selection.Mcp) == 0 {
+	agent, agentErr := s.queries.GatewayGetExternalAgent(ctx, grant.ClientID)
+	if agentErr != nil && !errors.Is(agentErr, pgx.ErrNoRows) {
+		return nil, errors.Join(errDelegationLookup, agentErr)
+	}
+	empty := len(selection.Models) == 0 && len(selection.Mcp) == 0
+	if empty && agentErr != nil {
 		return &delegationResources{}, nil
 	}
-	effective, err := authorization.New(s.queries).Resolve(ctx, authorization.Subject{
-		UserID:         grant.UserID,
-		OrganizationID: grant.OrganizationID.String,
-	})
+	organizationID := grant.OrganizationID.String
+	if agentErr == nil {
+		organizationID = agent.OrganizationID
+	}
+	effective, err := authorization.New(s.queries).Resolve(ctx, authorization.Subject{UserID: grant.UserID, OrganizationID: organizationID})
 	if err != nil {
 		return nil, errors.Join(errDelegationLookup, err)
+	}
+	if agentErr == nil {
+		workspace, err := s.queries.GatewayGetWorkspace(ctx, gatewaydb.GatewayGetWorkspaceParams{
+			ID:             agent.WorkspaceID,
+			OrganizationID: agent.OrganizationID,
+		})
+		if err != nil {
+			return nil, errors.Join(errDelegationLookup, err)
+		}
+		if workspace.DeletedAt.Valid || workspace.State != gatewaydb.WorkspaceStateReady {
+			return nil, errors.New("external agent workspace is unavailable")
+		}
+		scope := authorization.Scope{
+			OrganizationID: agent.OrganizationID,
+			WorkspaceID:    agent.WorkspaceID,
+		}
+		delegate := effective.CanDelegate(scope, gatewaydb.PermissionResourceInferenceProvider) ||
+			effective.CanDelegate(scope, gatewaydb.PermissionResourceMcpConnection)
+		if agent.UserID != grant.UserID || !delegate {
+			return nil, errors.New("external agent access is no longer allowed")
+		}
+		if !empty && grant.OrganizationID.String != agent.OrganizationID {
+			return nil, errors.New("external agent organization does not match")
+		}
+		for _, model := range selection.Models {
+			if model.WorkspaceId != agent.WorkspaceID {
+				return nil, errors.New("external agent model belongs to another workspace")
+			}
+		}
+		for _, connection := range selection.Mcp {
+			if connection.WorkspaceId != agent.WorkspaceID {
+				return nil, errors.New("external agent MCP connection belongs to another workspace")
+			}
+		}
+	}
+	if empty {
+		return &delegationResources{}, nil
 	}
 	workspaces := make(map[string]bool)
 	// Health affects execution, not consent. Recheck ownership and permissions

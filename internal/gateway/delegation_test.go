@@ -46,6 +46,88 @@ type delegationQueries struct {
 	sessionErr     error
 	mcpSession     string
 	permissionsErr error
+	externalAgent  *gatewaydb.ExternalAgent
+}
+
+func (q *delegationQueries) GatewayGetExternalAgent(context.Context, string) (gatewaydb.ExternalAgent, error) {
+	if q.externalAgent == nil {
+		return gatewaydb.ExternalAgent{}, pgx.ErrNoRows
+	}
+	return *q.externalAgent, nil
+}
+
+func TestExternalAgentRechecksOwnerWorkspaceAndPermission(t *testing.T) {
+	queries := &delegationQueries{
+		sandboxQueries: sandboxQueries{
+			workspace: gatewaydb.Workspace{
+				ID:             testWorkspaceID,
+				OrganizationID: testOrganizationID,
+				State:          gatewaydb.WorkspaceStateReady,
+			},
+			permissions: []gatewaydb.GatewayResolvePermissionsRow{{
+				Active:      true,
+				WorkspaceID: pgtype.Text{String: testWorkspaceID, Valid: true},
+				Resource: gatewaydb.NullPermissionResource{
+					PermissionResource: gatewaydb.PermissionResourceInferenceProvider,
+					Valid:              true,
+				},
+				Action: gatewaydb.NullPermissionAction{
+					PermissionAction: gatewaydb.PermissionActionDelegate,
+					Valid:            true,
+				},
+			}},
+		},
+		externalAgent: &gatewaydb.ExternalAgent{
+			ClientID:       "native-client",
+			UserID:         testUserID,
+			OrganizationID: testOrganizationID,
+			WorkspaceID:    testWorkspaceID,
+		},
+	}
+	service := sandboxTestService(t, queries)
+	grant := gatewaydb.DelegationGrant{ClientID: "native-client", UserID: testUserID}
+	selection := gatewayapi.DelegationCatalog{}
+	if _, err := service.resolveDelegation(t.Context(), grant, selection); err != nil {
+		t.Fatalf("authorized empty grant: %v", err)
+	}
+	queries.permissions[0].Resource.PermissionResource = gatewaydb.PermissionResourceMcpConnection
+	if _, err := service.resolveDelegation(t.Context(), grant, selection); err != nil {
+		t.Fatalf("MCP-only delegation permission: %v", err)
+	}
+	grant.OrganizationID = pgtype.Text{String: testOrganizationID, Valid: true}
+	foreign := gatewayapi.DelegationCatalog{
+		Models: []gatewayapi.DelegationModel{{WorkspaceId: "another-workspace"}},
+	}
+	_, err := service.resolveDelegation(t.Context(), grant, foreign)
+	if err == nil || !strings.Contains(err.Error(), "model belongs to another workspace") {
+		t.Fatalf("cross-workspace model: %v", err)
+	}
+	foreign = gatewayapi.DelegationCatalog{
+		Mcp: []gatewayapi.DelegationMCP{{WorkspaceId: "another-workspace"}},
+	}
+	_, err = service.resolveDelegation(t.Context(), grant, foreign)
+	if err == nil || !strings.Contains(err.Error(), "MCP connection belongs to another workspace") {
+		t.Fatalf("cross-workspace MCP: %v", err)
+	}
+	queries.externalAgent.UserID = "another-user"
+	if _, err := service.resolveDelegation(t.Context(), grant, selection); err == nil {
+		t.Fatal("accepted another user's registration")
+	}
+	queries.externalAgent.UserID = testUserID
+	queries.permissions[0].WorkspaceID.String = "another-workspace"
+	if _, err := service.resolveDelegation(t.Context(), grant, selection); err == nil {
+		t.Fatal("accepted permission from another workspace")
+	}
+	queries.permissions[0].WorkspaceID.String = testWorkspaceID
+	queries.workspace.State = gatewaydb.WorkspaceStateDeleting
+	if _, err := service.resolveDelegation(t.Context(), grant, selection); err == nil {
+		t.Fatal("accepted a deleting workspace")
+	}
+	queries.workspace.State = gatewaydb.WorkspaceStateReady
+	queries.permissions = nil
+	if _, err := service.resolveDelegation(t.Context(), grant, selection); err == nil {
+		t.Fatal("accepted revoked Use externally permission")
+	}
 }
 
 func (q *delegationQueries) GatewayGetDelegationGrant(_ context.Context, arg gatewaydb.GatewayGetDelegationGrantParams) (gatewaydb.DelegationGrant, error) {

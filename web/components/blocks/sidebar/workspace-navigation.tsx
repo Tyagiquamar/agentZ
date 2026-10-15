@@ -6,6 +6,7 @@ import {
   Activity,
   ArrowLeft,
   Bot,
+  BotMessageSquare,
   Box,
   Cable,
   FolderGit2,
@@ -86,6 +87,13 @@ export function WorkspaceNavigation({
     },
   ] as const
   const administration = [
+    {
+      href: `${root}/external-agents`,
+      label: "External agents",
+      icon: BotMessageSquare,
+      visible: workspace.capabilities.external_agents.read,
+      tour: "external-agents",
+    },
     {
       href: `${root}/roles`,
       label: "Roles",
@@ -193,15 +201,15 @@ export function WorkspaceNavigation({
                     </SidebarNavigationLink>
                   </SidebarMenuItem>
                 ) : null}
-                {canAdminister
-                  ? administration.map(({ href, label, icon: Icon, tour }) => (
-                      <SidebarMenuItem key={href} data-tour={tour}>
-                        <SidebarNavigationLink href={href} label={label}>
-                          <Icon aria-hidden="true" />
-                        </SidebarNavigationLink>
-                      </SidebarMenuItem>
-                    ))
-                  : null}
+                {administration
+                  .filter((item) => item.visible)
+                  .map(({ href, label, icon: Icon, tour }) => (
+                    <SidebarMenuItem key={href} data-tour={tour}>
+                      <SidebarNavigationLink href={href} label={label}>
+                        <Icon aria-hidden="true" />
+                      </SidebarNavigationLink>
+                    </SidebarMenuItem>
+                  ))}
               </SidebarMenu>
             </SidebarGroup>
           </nav>

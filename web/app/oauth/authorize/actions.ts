@@ -3,7 +3,12 @@
 import { and, eq, isNull } from "drizzle-orm"
 import { getDB, schema } from "@/db"
 import { getAuthSession } from "@/lib/auth"
-import { delegationCatalog, delegationRequest, type DelegationRequest } from "@/lib/delegation"
+import {
+  delegationCatalog,
+  delegationRequest,
+  externalAgentAccess,
+  type DelegationRequest,
+} from "@/lib/delegation"
 import { approveDelegation, denyDeviceDelegation } from "@/data/delegations"
 import { zDelegationCatalog } from "@/lib/gateway/client/zod.gen"
 import type { DelegationCatalog } from "@/lib/gateway/client"
@@ -15,7 +20,14 @@ export async function delegationWorkspaceAction(
 ) {
   const session = await getAuthSession()
   if (!session) throw new Error("Sign in to continue.")
-  await delegationRequest(request, session.session.user.id, session.session.session.id)
+  const transaction = await delegationRequest(
+    request,
+    session.session.user.id,
+    session.session.session.id
+  )
+  const agent = await externalAgentAccess(transaction.clientId, session.session.user)
+  if (agent && (agent.organizationId !== organizationId || agent.workspaceId !== workspaceId))
+    throw new Error("This agent is restricted to its owner's workspace.")
   const [membership] = await getDB()
     .select({ id: schema.members.id })
     .from(schema.members)

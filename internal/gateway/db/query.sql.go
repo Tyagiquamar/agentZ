@@ -2016,6 +2016,24 @@ func (q *Queries) GatewayGetDelegationGrant(ctx context.Context, arg GatewayGetD
 	return i, err
 }
 
+const gatewayGetExternalAgent = `-- name: GatewayGetExternalAgent :one
+SELECT client_id, organization_id, workspace_id, user_id, kind, created_at FROM external_agents WHERE client_id = $1
+`
+
+func (q *Queries) GatewayGetExternalAgent(ctx context.Context, clientID string) (ExternalAgent, error) {
+	row := q.db.QueryRow(ctx, gatewayGetExternalAgent, clientID)
+	var i ExternalAgent
+	err := row.Scan(
+		&i.ClientID,
+		&i.OrganizationID,
+		&i.WorkspaceID,
+		&i.UserID,
+		&i.Kind,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const gatewayGetMCPGraph = `-- name: GatewayGetMCPGraph :many
 WITH range_rows AS (
   SELECT
@@ -5367,6 +5385,15 @@ LISTEN agentz_coding
 
 func (q *Queries) GatewayListenCoding(ctx context.Context) error {
 	_, err := q.db.Exec(ctx, gatewayListenCoding)
+	return err
+}
+
+const gatewayListenExternalAgents = `-- name: GatewayListenExternalAgents :exec
+LISTEN agentz_external_agents
+`
+
+func (q *Queries) GatewayListenExternalAgents(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, gatewayListenExternalAgents)
 	return err
 }
 

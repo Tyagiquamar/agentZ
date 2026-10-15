@@ -45,6 +45,28 @@ tags:
   description: Workspace chat inbox and preference APIs.
 
 paths:
+  /api/external-agent/watch:
+    post:
+      operationId: watchExternalAgents
+      tags: [workspaces]
+      summary: Watch external agent registration and consent changes.
+      parameters:
+      - $ref: '#/components/parameters/WorkspaceIDHeader'
+      security:
+      - GatewayBearer: []
+      responses:
+        '200':
+          description: Workspace external agent change notifications.
+          content:
+            text/event-stream:
+              schema:
+                $ref: '#/components/schemas/WatchExternalAgentsEvent'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /api/delegations/catalog:
     get:
       operationId: getDelegationCatalog
@@ -5352,6 +5374,14 @@ components:
           nullable: true
       required: [agent_name, participant_user_ids, include_workflow_runs, group_by, last_agent_name]
 
+    WatchExternalAgentsEvent:
+      type: object
+      additionalProperties: false
+      properties:
+        revision:
+          type: string
+      required: [revision]
+
     WatchChatSessionsEvent:
       type: object
       additionalProperties: false
@@ -5765,6 +5795,8 @@ components:
           $ref: '#/components/schemas/ResourceCapabilities'
         api_keys:
           $ref: '#/components/schemas/ResourceCapabilities'
+        external_agents:
+          $ref: '#/components/schemas/ResourceCapabilities'
         observability:
           $ref: '#/components/schemas/ResourceCapabilities'
       required:
@@ -5776,6 +5808,7 @@ components:
       - inference_providers
       - inference_pools
       - api_keys
+      - external_agents
       - observability
 
     AgentWorkspaceCapabilities:

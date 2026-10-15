@@ -404,10 +404,10 @@ func TestDelegatedCodexRequiresResponsesStreaming(t *testing.T) {
 			false,
 		},
 		{
-			"missing instructions",
-			`{"model":"selected","store":false,"stream":true}`,
+			"inline instructions from stock Codex",
+			`{"model":"selected","store":false,"stream":true,"input":[{"type":"message","role":"developer","content":[{"type":"input_text","text":"Be helpful"}]}]}`,
 			true,
-			false,
+			true,
 		},
 		{
 			"valid responses",
@@ -418,12 +418,6 @@ func TestDelegatedCodexRequiresResponsesStreaming(t *testing.T) {
 		{
 			"case sensitive stream",
 			`{"model":"selected","store":false,"instructions":"Be helpful","stream":false,"STREAM":true}`,
-			true,
-			false,
-		},
-		{
-			"case sensitive instructions",
-			`{"model":"selected","store":false,"INSTRUCTIONS":"Be helpful","stream":true}`,
 			true,
 			false,
 		},

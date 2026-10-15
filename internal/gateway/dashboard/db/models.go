@@ -505,6 +505,48 @@ func (ns NullEventTrailTarget) Value() (driver.Value, error) {
 	return string(ns.EventTrailTarget), nil
 }
 
+type ExternalAgentKind string
+
+const (
+	ExternalAgentKindClaude ExternalAgentKind = "claude"
+	ExternalAgentKindCodex  ExternalAgentKind = "codex"
+)
+
+func (e *ExternalAgentKind) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = ExternalAgentKind(s)
+	case string:
+		*e = ExternalAgentKind(s)
+	default:
+		return fmt.Errorf("unsupported scan type for ExternalAgentKind: %T", src)
+	}
+	return nil
+}
+
+type NullExternalAgentKind struct {
+	ExternalAgentKind ExternalAgentKind `json:"external_agent_kind"`
+	Valid             bool              `json:"valid"` // Valid is true if ExternalAgentKind is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullExternalAgentKind) Scan(value interface{}) error {
+	if value == nil {
+		ns.ExternalAgentKind, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.ExternalAgentKind.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullExternalAgentKind) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.ExternalAgentKind), nil
+}
+
 type PermissionAction string
 
 const (
@@ -1154,6 +1196,15 @@ type EventTrailEvent struct {
 	Result         EventTrailResult   `json:"result"`
 	Before         []byte             `json:"before"`
 	After          []byte             `json:"after"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
+type ExternalAgent struct {
+	ClientID       string             `json:"client_id"`
+	OrganizationID string             `json:"organization_id"`
+	WorkspaceID    string             `json:"workspace_id"`
+	UserID         string             `json:"user_id"`
+	Kind           ExternalAgentKind  `json:"kind"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 }
 
