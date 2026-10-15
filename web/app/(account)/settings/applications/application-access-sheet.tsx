@@ -3,6 +3,8 @@
 import type { ReactNode } from "react"
 import { Building2, Check, ChevronDown, Cpu, Plug } from "lucide-react"
 import { Separator } from "@/components/ui/separator"
+import { Badge } from "@/components/ui/badge"
+import { TruncatedText } from "@/components/ui/tooltip"
 import {
   Sheet,
   SheetContent,
@@ -153,74 +155,83 @@ export function ApplicationAccessDetails({
                   {access.organization ?? "Organization unavailable"}
                 </h4>
               ) : null}
-              <Table
-                aria-label={`Resource access in ${access.organization ?? "unavailable organization"}`}
-                className="w-full table-fixed"
-              >
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className={cn("px-4", workspaceScoped ? "w-1/2" : "w-1/3")}>
-                      Resource
-                    </TableHead>
-                    {!workspaceScoped ? (
-                      <TableHead className="w-1/4 px-4">Workspace</TableHead>
-                    ) : null}
-                    <TableHead className="px-4">Access</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {access.selection.models.map((model) => (
-                    <TableRow key={model.id}>
-                      <TableCell className="px-4 py-3 align-top whitespace-normal">
-                        <div className="break-words">{model.model_display_name || model.model}</div>
-                        <div className="text-xs break-all text-muted-foreground">
-                          {model.provider_display_name || model.provider} / {model.model}
-                        </div>
-                      </TableCell>
+              {access.selection.models.length ? (
+                <Table
+                  aria-label={`Resource access in ${access.organization ?? "unavailable organization"}`}
+                  className="w-full table-fixed"
+                >
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className={cn("px-4", workspaceScoped ? "w-1/2" : "w-1/3")}>
+                        Resource
+                      </TableHead>
                       {!workspaceScoped ? (
-                        <TableCell className="px-4 py-3 align-top break-all whitespace-normal text-muted-foreground">
-                          {workspaces[model.workspace_id] ?? model.workspace_id}
-                        </TableCell>
+                        <TableHead className="w-1/4 px-4">Workspace</TableHead>
                       ) : null}
-                      <TableCell className="px-4 py-3 align-top whitespace-normal text-muted-foreground">
-                        Model inference
-                      </TableCell>
+                      <TableHead className="px-4">Access</TableHead>
                     </TableRow>
-                  ))}
-                  {access.selection.mcp.map((connection) => (
-                    <TableRow key={connection.id}>
-                      <TableCell className="px-4 py-3 align-top break-all whitespace-normal">
-                        {connection.connection}
-                        <div className="text-xs text-muted-foreground">MCP connection</div>
-                      </TableCell>
-                      {!workspaceScoped ? (
-                        <TableCell className="px-4 py-3 align-top break-all whitespace-normal text-muted-foreground">
-                          {workspaces[connection.workspace_id] ?? connection.workspace_id}
+                  </TableHeader>
+                  <TableBody>
+                    {access.selection.models.map((model) => (
+                      <TableRow key={model.id}>
+                        <TableCell className="px-4 py-3 align-top whitespace-normal">
+                          <div className="break-words">
+                            {model.model_display_name || model.model}
+                          </div>
+                          <div className="text-xs break-all text-muted-foreground">
+                            {model.provider_display_name || model.provider} / {model.model}
+                          </div>
                         </TableCell>
-                      ) : null}
-                      <TableCell className="px-4 py-3 align-top whitespace-normal">
-                        <dl className="flex flex-col gap-2">
-                          {(["tools", "prompts", "resources"] as const).map((capability) =>
-                            connection[capability].length ? (
-                              <div key={capability}>
-                                <dt className="text-xs text-muted-foreground capitalize">
-                                  {capability}
-                                </dt>
-                                <dd className="break-all">{connection[capability].join(", ")}</dd>
-                              </div>
-                            ) : null
-                          )}
-                        </dl>
-                        {!connection.tools.length &&
-                        !connection.prompts.length &&
-                        !connection.resources.length ? (
-                          <span className="text-muted-foreground">No capabilities approved.</span>
+                        {!workspaceScoped ? (
+                          <TableCell className="px-4 py-3 align-top break-all whitespace-normal text-muted-foreground">
+                            {workspaces[model.workspace_id] ?? model.workspace_id}
+                          </TableCell>
                         ) : null}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                        <TableCell className="px-4 py-3 align-top whitespace-normal text-muted-foreground">
+                          Model inference
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : null}
+              {access.selection.mcp.map((connection) => (
+                <section key={connection.id} className="flex min-w-0 flex-col gap-4 px-4 py-3">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Plug aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+                    <TruncatedText className="min-w-0 font-medium" value={connection.connection} />
+                    {!workspaceScoped ? (
+                      <span className="ml-auto min-w-0 text-xs text-muted-foreground">
+                        <TruncatedText
+                          className="block"
+                          value={workspaces[connection.workspace_id] ?? connection.workspace_id}
+                        />
+                      </span>
+                    ) : null}
+                  </div>
+                  <dl className="flex min-w-0 flex-col gap-4">
+                    {(["tools", "prompts", "resources"] as const).map((capability) =>
+                      connection[capability].length ? (
+                        <div key={capability} className="flex min-w-0 flex-col gap-2">
+                          <dt className="text-sm font-medium capitalize">{capability}</dt>
+                          <dd className="flex min-w-0 flex-wrap gap-2">
+                            {connection[capability].map((name) => (
+                              <Badge key={name} variant="secondary" className="max-w-full min-w-0">
+                                <TruncatedText value={name} />
+                              </Badge>
+                            ))}
+                          </dd>
+                        </div>
+                      ) : null
+                    )}
+                  </dl>
+                  {!connection.tools.length &&
+                  !connection.prompts.length &&
+                  !connection.resources.length ? (
+                    <p className="text-sm text-muted-foreground">No capabilities approved.</p>
+                  ) : null}
+                </section>
+              ))}
             </section>
           ))
         ) : (

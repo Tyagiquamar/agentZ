@@ -399,8 +399,9 @@ export function Consent({
                               (compatibility?.support !== "native" ||
                                 !model.model_info?.capabilities.tool_call)
                             let badge = model.provider_display_name || model.provider
+                            if (compatibility?.support === "native") badge = "Native"
                             if (compatibility?.support === "unsupported") badge = "Unsupported"
-                            if (compatibility?.support === "translated") badge = "Conversion"
+                            if (compatibility?.support === "translated") badge = "Supported"
                             if (codexUnsupported) badge = "Unsupported"
                             return {
                               value: model.id,
