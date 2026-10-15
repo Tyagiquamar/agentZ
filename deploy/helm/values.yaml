@@ -837,6 +837,8 @@ web:
 # Shared ingress for the web UI and gateway API.
 ingress:
   # Enable a single ingress that routes gateway APIs and web-owned endpoints.
+  # Inference, MCP and external-agent watches use the gateway API route.
+  # OAuth, device authorization, consent and discovery use the web routes.
   enabled: false
 
   # Optional ingressClassName.
