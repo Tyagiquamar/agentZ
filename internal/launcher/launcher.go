@@ -22,18 +22,26 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/urfave/cli/v3"
 	"go.yaml.in/yaml/v3"
 )
 
 type configuration struct {
-	ServerURL string `yaml:"server_url"`
-	ClientID  string `yaml:"client_id"`
+	ServerURL      string                     `yaml:"serverURL"`
+	ExternalAgents []map[string]externalAgent `yaml:"externalAgents"`
+}
+
+type externalAgent struct {
+	Provider  string `yaml:"provider"`
+	ServerURL string `yaml:"serverUrl,omitempty"`
+	ClientID  string `yaml:"clientID"`
 }
 
 type installation struct {
-	configuration
+	externalAgent
+	name       string
 	configPath string
 	profile    string
 	address    string
@@ -48,35 +56,76 @@ func Run(ctx context.Context, command *cli.Command) error {
 		ctx, cancel = signal.NotifyContext(ctx, os.Interrupt)
 		defer cancel()
 	}
-	if command.Name == "launch" || command.Name == "login" {
-		args := command.Args().Slice()
-		if len(args) == 0 || !slices.Contains([]string{"claude", "codex"}, args[0]) {
-			return errors.New("usage: agentz [--config FILE] launch claude|codex [native flags]")
+	args := command.Args().Slice()
+	profileName := command.String("profile")
+	if command.IsSet("profile") && profileName == "" {
+		return errors.New("--profile requires an AgentZ profile name")
+	}
+	provider := ""
+	launch := command.Name == "launch" || command.Name == "login"
+	if launch {
+		// Parse only the launcher prefix. Everything after -- or the first
+		// native argument belongs to the coding agent, including --profile.
+		for len(args) > 0 {
+			arg := args[0]
+			if arg == "--" {
+				args = args[1:]
+				break
+			}
+			if provider == "" && (arg == "claude" || arg == "codex") {
+				provider, args = arg, args[1:]
+				continue
+			}
+			if arg != "--profile" && !strings.HasPrefix(arg, "--profile=") {
+				break
+			}
+			if profileName != "" {
+				return errors.New("specify the AgentZ profile only once")
+			}
+			profileName = strings.TrimPrefix(arg, "--profile=")
+			args = args[1:]
+			if arg == "--profile" {
+				if len(args) == 0 || strings.HasPrefix(args[0], "--") {
+					return errors.New("--profile requires an AgentZ profile name")
+				}
+				profileName, args = args[0], args[1:]
+			}
+			if profileName == "" {
+				return errors.New("--profile requires an AgentZ profile name")
+			}
 		}
-		if _, err := exec.LookPath(args[0]); err != nil {
-			return fmt.Errorf("install %s before launching it: %w", args[0], err)
+		if provider == "" && profileName == "" && len(args) > 0 {
+			return errors.New("usage: agentz launch [claude|codex] [--profile NAME] [-- native flags]")
 		}
-		version, err := exec.CommandContext(ctx, args[0], "--version").Output()
+	}
+	installed, err := loadInstallation(ctx, command.String("config"), profileName, provider)
+	if err != nil {
+		return err
+	}
+	if launch {
+		provider = installed.Provider
+		if _, err := exec.LookPath(provider); err != nil {
+			return fmt.Errorf("install %s before launching it: %w", provider, err)
+		}
+		version, err := exec.CommandContext(ctx, provider, "--version").Output()
 		if err != nil {
-			return fmt.Errorf("read %s version: %w", args[0], err)
+			return fmt.Errorf("read %s version: %w", provider, err)
 		}
 		var major, minor, patch int
 		versionText := strings.TrimPrefix(string(version), "codex-cli ")
 		if _, err := fmt.Sscanf(versionText, "%d.%d.%d", &major, &minor, &patch); err != nil {
-			return fmt.Errorf("read %s version: %w", args[0], err)
+			return fmt.Errorf("read %s version: %w", provider, err)
 		}
 		oldClaude := major < 2 || major == 2 && (minor < 1 || minor == 1 && patch < 299)
-		if args[0] == "claude" && oldClaude {
+		if provider == "claude" && oldClaude {
 			return errors.New("AgentZ requires Claude Code 2.1.299 or later; run claude update")
 		}
-		if args[0] == "codex" && major == 0 && (minor < 162 || minor == 162 && patch < 1) {
+		if provider == "codex" && major == 0 && (minor < 162 || minor == 162 && patch < 1) {
 			return errors.New("AgentZ requires Codex 0.162.1 or later")
 		}
+		args = append([]string{provider}, args...)
 	}
-	installed, err := loadInstallation(ctx, command.String("config"))
-	if err != nil {
-		return err
-	}
+
 	switch command.Name {
 	case "serve":
 		return installed.serve(ctx)
@@ -95,8 +144,8 @@ func Run(ctx context.Context, command *cli.Command) error {
 		if err := installed.ensureRelay(ctx); err != nil {
 			return err
 		}
-		if command.Args().First() == "codex" {
-			return installed.codex(ctx, command)
+		if installed.Provider == "codex" {
+			return installed.codex(ctx, command, args)
 		}
 		if command.Name == "login" {
 			return errors.New("use agentz launch claude auth login for native Claude login")
@@ -135,7 +184,6 @@ func Run(ctx context.Context, command *cli.Command) error {
 		if err := writeProfileFile(settingsPath, data); err != nil {
 			return err
 		}
-		args := command.Args().Slice()
 		child := exec.CommandContext(ctx, args[0], args[1:]...)
 		child.Stdin, child.Stdout, child.Stderr = os.Stdin, command.Writer, command.ErrWriter
 		child.Env = slices.DeleteFunc(os.Environ(), func(entry string) bool {
@@ -176,7 +224,7 @@ func writeProfileFile(name string, data []byte) error {
 	return os.Rename(file.Name(), name)
 }
 
-func loadInstallation(ctx context.Context, configPath string) (*installation, error) {
+func loadInstallation(ctx context.Context, configPath, profileName, provider string) (*installation, error) {
 	root, err := os.UserConfigDir()
 	if err != nil {
 		return nil, err
@@ -190,7 +238,7 @@ func loadInstallation(ctx context.Context, configPath string) (*installation, er
 	}
 	file, err := os.Open(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("read %s; create it with server_url and client_id from your native OAuth application: %w", configPath, err)
+		return nil, fmt.Errorf("read %s; create it with serverURL and externalAgents from your agent setup instructions: %w", configPath, err)
 	}
 	defer file.Close()
 	var config configuration
@@ -202,22 +250,66 @@ func loadInstallation(ctx context.Context, configPath string) (*installation, er
 	if err := decoder.Decode(new(configuration)); err != io.EOF {
 		return nil, errors.New("AgentZ configuration must contain one YAML document")
 	}
-	upstream, err := url.Parse(config.ServerURL)
+	if len(config.ExternalAgents) == 0 {
+		return nil, errors.New("externalAgents must contain at least one named agent")
+	}
+	var selected externalAgent
+	selectedName := ""
+	names := make(map[string]bool, len(config.ExternalAgents))
+	for index, entry := range config.ExternalAgents {
+		if len(entry) != 1 {
+			return nil, fmt.Errorf("externalAgents entry %d must contain exactly one named agent", index+1)
+		}
+		for name, agent := range entry {
+			if strings.TrimSpace(name) == "" || strings.IndexFunc(name, unicode.IsControl) >= 0 {
+				return nil, errors.New("external agent profile names must not be empty or contain control characters")
+			}
+			if names[name] {
+				return nil, fmt.Errorf("duplicate external agent profile %q", name)
+			}
+			names[name] = true
+			if agent.Provider != "claude" && agent.Provider != "codex" {
+				return nil, fmt.Errorf("profile %q: provider must be claude or codex", name)
+			}
+			if profileName != "" && profileName != name {
+				continue
+			}
+			if profileName == "" && provider != "" && provider != agent.Provider {
+				continue
+			}
+			if selectedName == "" {
+				selected, selectedName = agent, name
+			}
+		}
+	}
+	if selectedName == "" {
+		if profileName != "" {
+			return nil, fmt.Errorf("external agent profile %q was not found", profileName)
+		}
+		return nil, fmt.Errorf("no external agent profile is configured for %s", provider)
+	}
+	if provider != "" && provider != selected.Provider {
+		return nil, fmt.Errorf("profile %q uses %s, not %s", selectedName, selected.Provider, provider)
+	}
+	if selected.ServerURL == "" {
+		selected.ServerURL = config.ServerURL
+	}
+	upstream, err := url.Parse(selected.ServerURL)
 	if err != nil {
-		return nil, fmt.Errorf("invalid server_url: %w", err)
+		return nil, fmt.Errorf("invalid serverURL: %w", err)
 	}
 	loopback := upstream.Hostname() == "localhost" || upstream.Hostname() == "127.0.0.1" || upstream.Hostname() == "::1"
 	secure := upstream.Scheme == "https" || upstream.Scheme == "http" && loopback
 	invalidOrigin := upstream.Host == "" || upstream.User != nil || upstream.RawQuery != "" || upstream.Fragment != "" ||
 		(upstream.Path != "" && upstream.Path != "/") || !secure
 	if invalidOrigin {
-		return nil, errors.New("server_url must be an HTTPS origin; HTTP is allowed only on loopback for development")
+		return nil, errors.New("serverURL must be an HTTPS origin; HTTP is allowed only on loopback for development")
 	}
-	if config.ClientID == "" || strings.ContainsAny(config.ClientID, "\r\n\t ") {
-		return nil, errors.New("client_id must be the public native OAuth application's client ID")
+	if selected.ClientID == "" || strings.ContainsAny(selected.ClientID, "\r\n\t ") {
+		return nil, errors.New("clientID must be the public native OAuth application's client ID")
 	}
 	upstream.Path = ""
-	digest := sha256.Sum256([]byte(upstream.String() + "\x00" + config.ClientID))
+	digest := sha256.Sum256([]byte(upstream.String() + "\x00" + selected.ClientID))
 	profile := filepath.Join(root, "agentz", "profiles", hex.EncodeToString(digest[:8]))
 	if err := os.MkdirAll(profile, 0700); err != nil {
 		return nil, err
@@ -256,7 +348,7 @@ func loadInstallation(ctx context.Context, configPath string) (*installation, er
 	}
 	port := 20000 + (int(digest[0])<<8|int(digest[1]))%30000
 	return &installation{
-		configuration: config, configPath: configPath, profile: profile,
+		externalAgent: selected, name: selectedName, configPath: configPath, profile: profile,
 		address: "http://127.0.0.1:" + strconv.Itoa(port), ownerKey: string(ownerKey), upstream: upstream,
 	}, nil
 }
@@ -282,7 +374,7 @@ func (installed *installation) ensureRelay(ctx context.Context) error {
 		return err
 	}
 	defer log.Close()
-	child := exec.Command(executable, "--config", installed.configPath, "relay", "serve")
+	child := exec.Command(executable, "--config", installed.configPath, "--profile", installed.name, "relay", "serve")
 	child.Stdout, child.Stderr = log, log
 	if err := startRelay(child); err != nil {
 		return err

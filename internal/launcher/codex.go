@@ -71,7 +71,7 @@ type codexModel struct {
 	ToolMode                   string                              `json:"tool_mode"`
 }
 
-func (installed *installation) codex(ctx context.Context, command *cli.Command) error {
+func (installed *installation) codex(ctx context.Context, command *cli.Command, args []string) error {
 	profile := filepath.Join(installed.profile, "codex")
 	if err := os.MkdirAll(profile, 0700); err != nil {
 		return err
@@ -98,12 +98,11 @@ func (installed *installation) codex(ctx context.Context, command *cli.Command) 
 		`mcp_servers.agentz={url=%s,scopes=["mcp:use","offline_access"],oauth={client_id=%s,callback_port=8767,callback_url="http://127.0.0.1:8767/callback"}}`,
 		mcpURL, client,
 	)
-	flags := make([]string, 0, 14+command.Args().Len())
+	flags := make([]string, 0, 14+len(args))
 	flags = append(flags,
 		"-c", `model_provider="agentz"`, "-c", `web_search="disabled"`,
 		"-c", "mcp_oauth_callback_port=8767", "-c", provider, "-c", mcp,
 	)
-	args := command.Args().Slice()
 	mcpCommand := len(args) > 1 && args[1] == "mcp"
 	// MCP owns a separate OAuth grant and does not need an inference login.
 	if !mcpCommand {
@@ -118,7 +117,7 @@ func (installed *installation) codex(ctx context.Context, command *cli.Command) 
 		}
 		data, err := os.ReadFile(cache)
 		if err != nil {
-			return fmt.Errorf("read approved models; run agentz login codex: %w", err)
+			return fmt.Errorf("read approved models; run agentz login codex with the same --profile: %w", err)
 		}
 		var approved gatewayapi.DelegationCatalog
 		if err := json.Unmarshal(data, &approved); err != nil {
@@ -130,7 +129,7 @@ func (installed *installation) codex(ctx context.Context, command *cli.Command) 
 			return err
 		}
 		if command.Name == "login" {
-			fmt.Fprintln(command.Writer, "Codex is connected. Run agentz launch codex.")
+			fmt.Fprintln(command.Writer, "Codex is connected.")
 			return nil
 		}
 		modelJSON, _ := json.Marshal(model)
@@ -146,7 +145,7 @@ func (installed *installation) codex(ctx context.Context, command *cli.Command) 
 		if errors.As(err, &exit) {
 			message := "Codex exited."
 			if !mcpCommand {
-				message += " To grant fresh access, run agentz login codex."
+				message += " To grant fresh access, run agentz login codex with the same --profile."
 			}
 			return cli.Exit(message, exit.ExitCode())
 		}

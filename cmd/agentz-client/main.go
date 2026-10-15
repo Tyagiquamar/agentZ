@@ -26,15 +26,20 @@ func main() {
 	command := &cli.Command{
 		Name: "agentz", Version: version,
 		Usage: "Launch coding agents with AgentZ identity and governed inference",
-		Flags: []cli.Flag{&cli.StringFlag{Name: "config", Usage: "AgentZ configuration file"}},
+		Flags: []cli.Flag{
+			&cli.StringFlag{Name: "config", Usage: "AgentZ configuration file"},
+			&cli.StringFlag{Name: "profile", Usage: "Named external agent profile"},
+		},
 		Commands: []*cli.Command{
 			{
 				Name: "launch", Usage: "Launch Claude or Codex with native flags",
+				ArgsUsage:       "[claude|codex] [--profile NAME] [-- native flags]",
 				SkipFlagParsing: true, Action: launcher.Run,
 			},
 			{
 				Name:            "login",
 				Usage:           "Start a fresh native Codex gateway login",
+				ArgsUsage:       "[codex] [--profile NAME]",
 				SkipFlagParsing: true,
 				Action:          launcher.Run,
 			},

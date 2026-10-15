@@ -616,7 +616,14 @@ function SetupCommand({ command, label }: { command: string; label: string }) {
 
 function AgentSetup({ agent }: { agent: ExternalAgent }) {
   const [os, setOS] = useState("linux")
-  const config = `server_url: ${window.location.origin}\nclient_id: ${agent.clientId}\n`
+  const config = `externalAgents:
+  - ${JSON.stringify(agent.name)}:
+      provider: ${agent.kind}
+      serverUrl: ${window.location.origin}
+      clientID: ${agent.clientId}
+`
+  const profile = `'${agent.name.replaceAll("'", os === "windows" ? "''" : "'\\''")}'`
+  const launch = `agentz launch ${agent.kind} --profile ${profile} --`
   const reconnect = agent.previouslyConnected && !agent.connected
   return (
     <FieldGroup className="p-4 pt-0">
@@ -664,26 +671,23 @@ function AgentSetup({ agent }: { agent: ExternalAgent }) {
           </TabsContent>
           <TabsContent value="windows">
             <FieldDescription>
-              <code>%APPDATA%\agentz\config.yaml</code>
+              <code>%APPDATA%\agentz\config.yaml</code>. Use PowerShell for the commands below.
             </FieldDescription>
           </TabsContent>
         </Tabs>
         <SetupCommand command={config} label="Copy AgentZ configuration" />
         <FieldDescription>
-          For multiple agents, save separate files and pass <code>--config FILE</code> before{" "}
-          <code>launch</code>.
+          Add this entry to <code>externalAgents</code>. Keep your existing profiles.
         </FieldDescription>
       </Field>
       <Field>
         <FieldLabel>{reconnect ? "3. Reconnect models" : "3. Connect models"}</FieldLabel>
         {reconnect && agent.kind === "claude" ? (
-          <SetupCommand command="agentz launch claude auth logout" label="Copy logout command" />
+          <SetupCommand command={`${launch} auth logout`} label="Copy logout command" />
         ) : null}
         <SetupCommand
           command={
-            reconnect && agent.kind === "codex"
-              ? "agentz login codex"
-              : `agentz launch ${agent.kind}`
+            reconnect && agent.kind === "codex" ? `agentz login codex --profile ${profile}` : launch
           }
           label="Copy launch command"
         />
@@ -695,14 +699,11 @@ function AgentSetup({ agent }: { agent: ExternalAgent }) {
         <FieldLabel>4. Connect MCP tools</FieldLabel>
         {agent.kind === "claude" ? (
           <SetupCommand
-            command={`agentz launch claude mcp add --transport http --scope user --client-id ${agent.clientId} --callback-port 8765 agentz ${window.location.origin}/api/mcp`}
+            command={`${launch} mcp add --transport http --scope user --client-id ${agent.clientId} --callback-port 8765 agentz ${window.location.origin}/api/mcp`}
             label="Copy MCP registration command"
           />
         ) : null}
-        <SetupCommand
-          command={`agentz launch ${agent.kind} mcp login agentz`}
-          label="Copy MCP login command"
-        />
+        <SetupCommand command={`${launch} mcp login agentz`} label="Copy MCP login command" />
         <FieldDescription>
           Choose tools, prompts and resources in the browser.{" "}
           {agent.kind === "codex"

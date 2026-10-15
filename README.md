@@ -102,14 +102,44 @@ and refresh, and gateway requests recheck current permissions and inheritance.
 Install the desktop `agentz` binary and create its configuration:
 
 ```yaml
-server_url: https://agentzharness.ai
-client_id: YOUR_AGENT_CLIENT_ID
+serverURL: https://agentzharness.ai
+externalAgents:
+  - myCodex:
+      provider: codex
+      clientID: YOUR_CODEX_CLIENT_ID
+  - myClaude:
+      provider: claude
+      clientID: YOUR_CLAUDE_CLIENT_ID
+  - workClaude:
+      provider: claude
+      serverUrl: https://another-agentz.example.com
+      clientID: YOUR_WORK_CLIENT_ID
 ```
 
 Use `$XDG_CONFIG_HOME/agentz/config.yaml` or `~/.config/agentz/config.yaml` on
 Linux, `~/Library/Application Support/agentz/config.yaml` on macOS, and
 `%APPDATA%\agentz\config.yaml` on Windows. `agentz --config FILE` selects another
-configuration file. Use separate files when onboarding multiple agents.
+configuration file. Add agents to the existing `externalAgents` list. An entry's
+optional `serverUrl` overrides the shared `serverURL`.
+
+`--profile NAME` selects an AgentZ profile. Without it, the launcher selects the
+first entry for the requested provider, in YAML list order. Omit the provider to
+infer it from the selected profile. With neither, the first entry is used.
+Unknown profiles and provider mismatches fail before login. Profile names must
+be unique in the configuration file.
+
+```sh
+agentz launch claude --profile myClaude -- --dangerously-skip-permissions
+agentz launch --profile myCodex
+agentz --profile myClaude relay status
+```
+
+AgentZ reads `--profile` before native arguments. Use `--` to pass a native
+`--profile` to Codex, for example
+`agentz launch codex --profile myCodex -- --profile nativePreferences`.
+Existing single-agent configurations using `server_url` and `client_id` must
+be changed to the format above. Keep the same server and client ID to retain
+native credentials and settings.
 
 ```sh
 agentz launch claude --your-claude-flags
@@ -119,8 +149,9 @@ Claude Code 2.1.299 or later handles browser login, credential storage and
 refresh. Choose models during AgentZ consent. A persistent loopback relay
 connects Claude's private gateway protocol to the public AgentZ service. Native
 flags pass through unchanged. The launcher uses a separate Claude profile for
-each AgentZ server and client ID. `agentz relay status` and `agentz relay stop`
-manage that profile's relay.
+each AgentZ server and client ID. Renaming or reordering entries keeps that
+profile. `agentz --profile NAME relay status` and
+`agentz --profile NAME relay stop` manage a selected profile's relay.
 
 MCP uses a separate native OAuth login. Follow the agent's setup Sheet to add
 Claude's MCP server and sign in. Choose tools, prompts and resources during
