@@ -59,8 +59,13 @@ func (s *Service) delegationReady(ctx context.Context, grant gatewaydb.Delegatio
 		if foreignParent {
 			continue
 		}
-		ready = ready || conditionsReady(parent.Conditions, route.Generation,
-			string(gwv1.RouteConditionAccepted), string(gwv1.RouteConditionResolvedRefs))
+		ready = conditionsReady(
+			parent.Conditions, route.Generation,
+			string(gwv1.RouteConditionAccepted), string(gwv1.RouteConditionResolvedRefs),
+		)
+		if ready {
+			break
+		}
 	}
 	if !ready {
 		return errors.New("route is not accepted")
@@ -95,7 +100,10 @@ func (s *Service) delegationReady(ctx context.Context, grant gatewaydb.Delegatio
 			if !matchingGateway {
 				continue
 			}
-			ready = ready || conditionsReady(ancestor.Conditions, policy.Generation, "Accepted", "Attached")
+			ready = conditionsReady(ancestor.Conditions, policy.Generation, "Accepted", "Attached")
+			if ready {
+				break
+			}
 		}
 		if !ready {
 			return errors.New("delegated policy is not attached")

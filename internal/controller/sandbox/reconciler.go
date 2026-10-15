@@ -531,9 +531,12 @@ func (r *Reconciler) reconcileGateway(ctx context.Context, namespace string) err
 		return err
 	}
 	delegated := slices.ContainsFunc(grants.Items, func(route gwv1.HTTPRoute) bool {
-		return slices.ContainsFunc(route.Spec.ParentRefs, func(parent gwv1.ParentReference) bool {
-			return parent.Name == gwv1.ObjectName(mcp.GatewayName)
-		})
+		for _, parent := range route.Spec.ParentRefs {
+			if parent.Name == gwv1.ObjectName(mcp.GatewayName) {
+				return true
+			}
+		}
+		return false
 	})
 	if len(owners) == 0 && delegated {
 		return nil
