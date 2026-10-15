@@ -12,8 +12,5 @@ func startRelay(child *exec.Cmd) error {
 	child.SysProcAttr = &syscall.SysProcAttr{
 		CreationFlags: windows.DETACHED_PROCESS | windows.CREATE_NEW_PROCESS_GROUP,
 	}
-	if err := child.Start(); err != nil {
-		return err
-	}
-	return child.Process.Release()
+	return child.Start()
 }

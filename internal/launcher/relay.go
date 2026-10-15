@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -153,6 +154,7 @@ func (installed *installation) serve(ctx context.Context) error {
 			signature.Reset()
 			signature.Write([]byte("response:" + message))
 			w.Header().Set("X-AgentZ-Relay-Proof", hex.EncodeToString(signature.Sum(nil)))
+			w.Header().Set("X-AgentZ-Relay-Pid", strconv.Itoa(os.Getpid()))
 			method := http.MethodGet
 			if r.URL.Path == "/relay/stop" {
 				method = http.MethodPost

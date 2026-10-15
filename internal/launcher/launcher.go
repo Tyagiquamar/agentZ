@@ -28,6 +28,8 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
+var errRelayOwnership = errors.New("the port is already in use by a process that did not prove ownership of this AgentZ profile")
+
 type configuration struct {
 	ServerURL      string                     `yaml:"serverURL"`
 	ExternalAgents []map[string]externalAgent `yaml:"externalAgents"`
@@ -354,42 +356,87 @@ func loadInstallation(ctx context.Context, configPath, profileName, provider str
 }
 
 func (installed *installation) ensureRelay(ctx context.Context) error {
-	ready := func() bool {
-		response, err := installed.controlRelay(ctx, "status")
-		if err != nil {
-			return false
-		}
+	startupCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	response, err := installed.controlRelay(startupCtx, "status")
+	if err == nil {
 		response.Body.Close()
-		return true
-	}
-	if ready() {
 		return nil
+	}
+	if errors.Is(err, errRelayOwnership) {
+		return err
+	}
+	if err := startupCtx.Err(); err != nil {
+		return err
 	}
 	executable, err := os.Executable()
 	if err != nil {
 		return err
 	}
-	log, err := os.OpenFile(filepath.Join(installed.profile, "relay.log"), os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0600)
+	logPath := filepath.Join(installed.profile, "relay.log")
+	log, err := os.OpenFile(logPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
 	if err != nil {
 		return err
 	}
 	defer log.Close()
+	info, err := log.Stat()
+	if err != nil {
+		return err
+	}
 	child := exec.Command(executable, "--config", installed.configPath, "--profile", installed.name, "relay", "serve")
 	child.Stdout, child.Stderr = log, log
 	if err := startRelay(child); err != nil {
 		return err
 	}
-	for attempt := 0; attempt < 50; attempt++ {
-		if ready() {
+	exited := make(chan error, 1)
+	// Reap the persistent relay when it exits, even after readiness returns.
+	// The buffered result never blocks if the launching agent has already exited.
+	go func() { exited <- child.Wait() }()
+	ready, finished := false, false
+	defer func() {
+		if !ready && !finished {
+			child.Process.Kill()
+			<-exited
+		}
+	}()
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	var childErr error
+	for {
+		response, err := installed.controlRelay(startupCtx, "status")
+		if err == nil {
+			response.Body.Close()
+			// A concurrent launcher may own the ready relay. Stop our redundant
+			// child unless the responding process is the one we started.
+			ready = response.Header.Get("X-AgentZ-Relay-Pid") == strconv.Itoa(child.Process.Pid)
 			return nil
 		}
+		if errors.Is(err, errRelayOwnership) {
+			return err
+		}
+		if finished {
+			if childErr == nil {
+				childErr = errors.New("relay exited before becoming ready")
+			}
+			output, readErr := io.ReadAll(io.NewSectionReader(log, info.Size(), 4<<10))
+			return fmt.Errorf(
+				"start relay at %s: %w; %s; log: %s",
+				installed.address, errors.Join(childErr, readErr), strings.TrimSpace(string(output)), logPath,
+			)
+		}
 		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(100 * time.Millisecond):
+		case childErr = <-exited:
+			finished = true
+			// Another launcher may have won the bind race. Check its identity
+			// before treating our child's exit as a startup failure.
+		case <-startupCtx.Done():
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			return fmt.Errorf("relay did not become ready at %s: %w; log: %s", installed.address, startupCtx.Err(), logPath)
+		case <-ticker.C:
 		}
 	}
-	return errors.New("relay could not start; check the profile's relay.log for a port conflict")
 }
 
 func (installed *installation) controlRelay(ctx context.Context, operation string) (*http.Response, error) {
@@ -407,7 +454,9 @@ func (installed *installation) controlRelay(ctx context.Context, operation strin
 	signature.Write([]byte(message))
 	request.Header.Set("X-AgentZ-Relay-Nonce", nonce)
 	request.Header.Set("Authorization", "AgentZ-HMAC "+hex.EncodeToString(signature.Sum(nil)))
+	// Idle probe connections can otherwise keep Shutdown waiting for headers.
 	client := &http.Client{
+		Transport:     &http.Transport{DisableKeepAlives: true},
 		Timeout:       time.Second,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
@@ -424,7 +473,7 @@ func (installed *installation) controlRelay(ctx context.Context, operation strin
 	}
 	if !verified {
 		response.Body.Close()
-		return nil, errors.New("the listening process did not prove it owns this AgentZ profile")
+		return nil, fmt.Errorf("relay at %s: %w", installed.address, errRelayOwnership)
 	}
 	return response, nil
 }

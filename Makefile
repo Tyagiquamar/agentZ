@@ -63,6 +63,7 @@ fmt:
 .PHONY: test
 test:
 	go test -race -shuffle=on $(GO_PKGS) -coverprofile cover.out
+	go test -race -shuffle=on -count=1 -tags=integration ./internal/launcher
 
 .PHONY: lint
 lint:

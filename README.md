@@ -152,6 +152,9 @@ flags pass through unchanged. The launcher uses a separate Claude profile for
 each AgentZ server and client ID. Renaming or reordering entries keeps that
 profile. `agentz --profile NAME relay status` and
 `agentz --profile NAME relay stop` manage a selected profile's relay.
+A healthy relay remains available after the coding agent exits. A failed or
+cancelled relay startup terminates and reaps the new child before returning.
+Listeners that cannot prove profile ownership are reported without being stopped.
 
 MCP uses a separate native OAuth login. Follow the agent's setup Sheet to add
 Claude's MCP server and sign in. Choose tools, prompts and resources during

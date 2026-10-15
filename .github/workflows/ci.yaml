@@ -29,6 +29,8 @@ jobs:
         go-version-file: go.mod
     - name: Test
       run: go test -race -shuffle=on ./cmd/... ./hack/... ./internal/... ./pkg/...
+    - name: Test relay lifecycle
+      run: go test -race -shuffle=on -count=1 -tags=integration ./internal/launcher
 
   go-lint:
     name: Go lint
