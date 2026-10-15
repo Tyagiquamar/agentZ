@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/json"
@@ -138,48 +139,36 @@ func (s *Service) recordChatPrompt(ctx context.Context, input gatewaydb.GatewayC
 		if err != nil {
 			return execution, err
 		}
-		_, err = q.GatewayCreateChatAttempt(ctx, gatewaydb.GatewayCreateChatAttemptParams{
+		err = q.GatewayCreateChatAttempt(ctx, gatewaydb.GatewayCreateChatAttemptParams{
 			ExecutionID: execution.ID,
 			Number:      1,
 			Incarnation: incarnation,
 			Payload:     payload,
+			MessageID:   messageID,
 		})
 		if err != nil {
 			return execution, err
 		}
 	}
 	if messageID != "" {
-		_, err = q.GatewayCreateChatExecutionPrompt(ctx, gatewaydb.GatewayCreateChatExecutionPromptParams{
+		err = q.GatewayCreateChatExecutionPrompt(ctx, gatewaydb.GatewayCreateChatExecutionPromptParams{
 			ExecutionID: execution.ID,
 			Attempt:     execution.Attempt,
 			MessageID:   messageID,
-			Payload:     payload,
 		})
 		if err != nil {
 			return execution, err
 		}
-		attempt, readErr := q.GatewayGetChatAttempt(ctx, gatewaydb.GatewayGetChatAttemptParams{
-			ExecutionID: execution.ID,
-			Number:      execution.Attempt,
-		})
-		if readErr != nil {
-			return execution, readErr
-		}
-		attempt.State = gatewaydb.ChatAttemptStateSubmitting
-		attempt.MessageID = messageID
-		attempt.Payload = payload
-		attempt.Submissions++
-		err = q.GatewayUpdateChatAttempt(ctx, gatewaydb.GatewayUpdateChatAttemptParams{
-			ExecutionID:   attempt.ExecutionID,
-			Number:        attempt.Number,
-			State:         attempt.State,
-			MessageID:     attempt.MessageID,
-			Payload:       attempt.Payload,
-			Submissions:   attempt.Submissions,
-			NextAttemptAt: time.Now(),
-		})
-		if err != nil {
-			return execution, err
+		if active {
+			err = q.GatewayAdmitChatAttempt(ctx, gatewaydb.GatewayAdmitChatAttemptParams{
+				ExecutionID: execution.ID,
+				Number:      execution.Attempt,
+				MessageID:   messageID,
+				Payload:     payload,
+			})
+			if err != nil {
+				return execution, err
+			}
 		}
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -197,27 +186,44 @@ func (s *Service) runChatExecutions(ctx context.Context) {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 	for {
-		rows, err := s.queries.GatewayPendingChatExecutions(ctx)
-		if err != nil && ctx.Err() == nil {
-			slog.ErrorContext(ctx, "read conversation executions", "error", err)
-		}
-		var workers sync.WaitGroup
-		slots := make(chan struct{}, 4)
-		for _, execution := range rows {
-			select {
-			case slots <- struct{}{}:
-			case <-ctx.Done():
-				workers.Wait()
-				return
-			}
-			workers.Go(func() {
-				defer func() { <-slots }()
-				if err := s.reconcileChatExecution(ctx, execution); err != nil && ctx.Err() == nil {
-					slog.ErrorContext(ctx, "reconcile conversation execution", "execution", execution.ID, "error", err)
+		seen := make(map[uuid.UUID]struct{})
+		for {
+			rows, err := s.queries.GatewayPendingChatExecutions(ctx)
+			if err != nil {
+				if ctx.Err() == nil {
+					slog.ErrorContext(ctx, "read conversation executions", "error", err)
 				}
-			})
+				break
+			}
+			var workers sync.WaitGroup
+			slots := make(chan struct{}, 4)
+			pending := false
+			for _, execution := range rows {
+				if _, visited := seen[execution.ID]; visited {
+					continue
+				}
+				seen[execution.ID] = struct{}{}
+				pending = true
+				select {
+				case slots <- struct{}{}:
+				case <-ctx.Done():
+					workers.Wait()
+					return
+				}
+				workers.Go(func() {
+					defer func() { <-slots }()
+					err := s.reconcileChatExecution(ctx, execution)
+					if err != nil && ctx.Err() == nil {
+						slog.ErrorContext(ctx, "reconcile conversation execution", "execution", execution.ID, "error", err)
+					}
+				})
+			}
+			workers.Wait()
+			// Released leases move to the back of the queue. Drain unseen work before waiting.
+			if !pending || len(rows) < 100 {
+				break
+			}
 		}
-		workers.Wait()
 		select {
 		case <-ctx.Done():
 			return
@@ -393,7 +399,7 @@ type chatAttemptObservation struct {
 	busy, completed, failed, aborted, waiting, missing bool
 }
 
-func (s *Service) observeChatAttempt(ctx context.Context, client *gatewayapi.ClientWithResponses, execution gatewaydb.ChatExecution, attempt gatewaydb.ChatAttempt, incarnation string, update gatewaydb.GatewayUpdateChatExecutionParams) error {
+func (s *Service) observeChatAttempt(ctx context.Context, client *gatewayapi.ClientWithResponses, execution gatewaydb.ChatExecution, attempt gatewaydb.GatewayGetChatAttemptRow, incarnation string, update gatewaydb.GatewayUpdateChatExecutionParams) error {
 	prompts, err := s.queries.GatewayChatExecutionPrompts(ctx, gatewaydb.GatewayChatExecutionPromptsParams{
 		ExecutionID: execution.ID,
 		Attempt:     execution.Attempt,
@@ -401,17 +407,17 @@ func (s *Service) observeChatAttempt(ctx context.Context, client *gatewayapi.Cli
 	if err != nil {
 		return err
 	}
+	changed := incarnation != attempt.Incarnation
 	var observed chatAttemptObservation
 	switch execution.Protocol {
 	case gatewaydb.ChatProtocolV1:
-		observed, err = s.readChatAttempt(ctx, client, execution, prompts)
+		observed, err = s.readChatAttempt(ctx, client, execution, prompts, changed)
 	case gatewaydb.ChatProtocolV2:
-		observed, err = s.readV2ChatAttempt(ctx, client, execution, prompts)
+		observed, err = s.readV2ChatAttempt(ctx, client, execution, prompts, changed)
 	}
 	if err != nil {
 		return err
 	}
-	changed := incarnation != attempt.Incarnation
 	accepted := len(prompts) > 0 && prompts[len(prompts)-1].Accepted
 	switch {
 	case observed.missing:
@@ -448,7 +454,7 @@ func (s *Service) observeChatAttempt(ctx context.Context, client *gatewayapi.Cli
 	return s.updateChatExecution(ctx, update)
 }
 
-func (s *Service) readChatAttempt(ctx context.Context, client *gatewayapi.ClientWithResponses, execution gatewaydb.ChatExecution, prompts []gatewaydb.ChatExecutionPrompt) (chatAttemptObservation, error) {
+func (s *Service) readChatAttempt(ctx context.Context, client *gatewayapi.ClientWithResponses, execution gatewaydb.ChatExecution, prompts []gatewaydb.ChatExecutionPrompt, runtimeChanged bool) (chatAttemptObservation, error) {
 	status, err := client.SessionStatusWithResponse(ctx, execution.AgentName, &gatewayapi.SessionStatusParams{Directory: &execution.Directory})
 	if err != nil {
 		return chatAttemptObservation{}, err
@@ -464,6 +470,39 @@ func (s *Service) readChatAttempt(ctx context.Context, client *gatewayapi.Client
 		}
 		busy = kind != string(gatewayapi.Idle)
 	}
+	permissions, err := client.PermissionListWithResponse(
+		ctx,
+		execution.AgentName,
+		&gatewayapi.PermissionListParams{Directory: &execution.Directory},
+	)
+	if err != nil {
+		return chatAttemptObservation{}, err
+	}
+	questions, err := client.QuestionListWithResponse(
+		ctx,
+		execution.AgentName,
+		&gatewayapi.QuestionListParams{Directory: &execution.Directory},
+	)
+	if err != nil {
+		return chatAttemptObservation{}, err
+	}
+	if permissions.JSON200 == nil || questions.JSON200 == nil {
+		return chatAttemptObservation{}, errors.New("could not verify pending user input")
+	}
+	waiting := slices.ContainsFunc(*permissions.JSON200, func(request gatewayapi.OpencodePermissionRequest) bool {
+		return request.SessionID == execution.SessionID
+	})
+	if !waiting {
+		waiting = slices.ContainsFunc(*questions.JSON200, func(request gatewayapi.OpencodeQuestionRequest) bool {
+			return request.SessionID == execution.SessionID
+		})
+	}
+	// Once admission is confirmed, busy turns need history only after a restart.
+	confirmed := len(prompts) > 0 && prompts[len(prompts)-1].Accepted
+	if busy && !runtimeChanged && confirmed {
+		return chatAttemptObservation{busy: busy, waiting: waiting}, nil
+	}
+
 	history, err := client.SessionMessagesWithResponse(ctx, execution.AgentName, execution.SessionID, &gatewayapi.SessionMessagesParams{
 		Directory: &execution.Directory,
 		Limit:     new(200),
@@ -492,7 +531,7 @@ func (s *Service) readChatAttempt(ctx context.Context, client *gatewayapi.Client
 			}
 			lastUser = user.Id
 			for i := range prompts {
-				if prompts[i].MessageID == user.Id {
+				if prompts[i].MessageID == user.Id && !prompts[i].Accepted {
 					prompts[i].Accepted = true
 					err = s.queries.GatewayAcceptChatExecutionPrompt(ctx, gatewaydb.GatewayAcceptChatExecutionPromptParams{
 						ExecutionID: execution.ID,
@@ -527,33 +566,6 @@ func (s *Service) readChatAttempt(ctx context.Context, client *gatewayapi.Client
 		}
 		aborted = kind == "MessageAbortedError"
 	}
-	permissions, err := client.PermissionListWithResponse(
-		ctx,
-		execution.AgentName,
-		&gatewayapi.PermissionListParams{Directory: &execution.Directory},
-	)
-	if err != nil {
-		return chatAttemptObservation{}, err
-	}
-	questions, err := client.QuestionListWithResponse(
-		ctx,
-		execution.AgentName,
-		&gatewayapi.QuestionListParams{Directory: &execution.Directory},
-	)
-	if err != nil {
-		return chatAttemptObservation{}, err
-	}
-	if permissions.JSON200 == nil || questions.JSON200 == nil {
-		return chatAttemptObservation{}, errors.New("could not verify pending user input")
-	}
-	waiting := slices.ContainsFunc(*permissions.JSON200, func(request gatewayapi.OpencodePermissionRequest) bool {
-		return request.SessionID == execution.SessionID
-	})
-	if !waiting {
-		waiting = slices.ContainsFunc(*questions.JSON200, func(request gatewayapi.OpencodeQuestionRequest) bool {
-			return request.SessionID == execution.SessionID
-		})
-	}
 	return chatAttemptObservation{
 		busy:      busy,
 		completed: completed,
@@ -563,7 +575,7 @@ func (s *Service) readChatAttempt(ctx context.Context, client *gatewayapi.Client
 	}, nil
 }
 
-func (s *Service) readV2ChatAttempt(ctx context.Context, client *gatewayapi.ClientWithResponses, execution gatewaydb.ChatExecution, prompts []gatewaydb.ChatExecutionPrompt) (chatAttemptObservation, error) {
+func (s *Service) readV2ChatAttempt(ctx context.Context, client *gatewayapi.ClientWithResponses, execution gatewaydb.ChatExecution, prompts []gatewaydb.ChatExecutionPrompt, runtimeChanged bool) (chatAttemptObservation, error) {
 	active, err := client.V2SessionActiveWithResponse(ctx, execution.AgentName)
 	if err != nil {
 		return chatAttemptObservation{}, err
@@ -572,6 +584,10 @@ func (s *Service) readV2ChatAttempt(ctx context.Context, client *gatewayapi.Clie
 		return chatAttemptObservation{}, fmt.Errorf("read native active sessions: %s", active.Status())
 	}
 	_, busy := active.JSON200.Data[execution.SessionID]
+	confirmed := len(prompts) > 0 && prompts[len(prompts)-1].Accepted
+	if busy && !runtimeChanged && confirmed {
+		return chatAttemptObservation{busy: true, waiting: execution.WaitingOnUser}, nil
+	}
 	history, err := client.V2SessionMessagesWithResponse(ctx, execution.AgentName, execution.SessionID, &gatewayapi.V2SessionMessagesParams{
 		Order: new(gatewayapi.V2SessionMessagesParamsOrderDesc),
 		Limit: new(float32(200)),
@@ -604,7 +620,7 @@ func (s *Service) readV2ChatAttempt(ctx context.Context, client *gatewayapi.Clie
 				userIndex = index
 			}
 			for i := range prompts {
-				if prompts[i].MessageID != current.Id {
+				if prompts[i].MessageID != current.Id || prompts[i].Accepted {
 					continue
 				}
 				prompts[i].Accepted = true
@@ -640,7 +656,7 @@ func (s *Service) readV2ChatAttempt(ctx context.Context, client *gatewayapi.Clie
 	}, nil
 }
 
-func (s *Service) continueChatExecution(ctx context.Context, execution gatewaydb.ChatExecution, attempt gatewaydb.ChatAttempt, incarnation string, accepted bool, update gatewaydb.GatewayUpdateChatExecutionParams) error {
+func (s *Service) continueChatExecution(ctx context.Context, execution gatewaydb.ChatExecution, attempt gatewaydb.GatewayGetChatAttemptRow, incarnation string, accepted bool, update gatewaydb.GatewayUpdateChatExecutionParams) error {
 	if !s.cfg.ConversationRecoveryEnabled {
 		update.State = gatewaydb.ChatExecutionStateFailed
 		update.Reason = "recovery_disabled"
@@ -653,7 +669,14 @@ func (s *Service) continueChatExecution(ctx context.Context, execution gatewaydb
 		update.Message = "The conversation stopped after three consecutive restart continuations"
 		return s.updateChatExecution(ctx, update)
 	}
-	payload := attempt.Payload
+	payload, err := s.queries.GatewayChatAttemptPayload(ctx, gatewaydb.GatewayChatAttemptPayloadParams{
+		ExecutionID: attempt.ExecutionID,
+		Number:      attempt.Number,
+	})
+	if err != nil {
+		return err
+	}
+	originalPayload := payload
 	if accepted || execution.Continuations > 0 {
 		var data workflowRunPromptData
 		if execution.WorkflowRunUid != "" {
@@ -752,14 +775,14 @@ func (s *Service) continueChatExecution(ctx context.Context, execution gatewaydb
 		Number:        attempt.Number,
 		State:         gatewaydb.ChatAttemptStateInterrupted,
 		MessageID:     attempt.MessageID,
-		Payload:       attempt.Payload,
+		Payload:       originalPayload,
 		Submissions:   attempt.Submissions,
 		NextAttemptAt: attempt.NextAttemptAt,
 	})
 	if err != nil {
 		return err
 	}
-	_, err = q.GatewayCreateChatAttempt(ctx, gatewaydb.GatewayCreateChatAttemptParams{
+	err = q.GatewayCreateChatAttempt(ctx, gatewaydb.GatewayCreateChatAttemptParams{
 		ExecutionID: execution.ID,
 		Number:      execution.Attempt,
 		Incarnation: incarnation,
@@ -781,9 +804,16 @@ func (s *Service) continueChatExecution(ctx context.Context, execution gatewaydb
 	return err
 }
 
-func (s *Service) submitChatAttempt(ctx context.Context, client *gatewayapi.ClientWithResponses, execution gatewaydb.ChatExecution, attempt gatewaydb.ChatAttempt) error {
+func (s *Service) submitChatAttempt(ctx context.Context, client *gatewayapi.ClientWithResponses, execution gatewaydb.ChatExecution, attempt gatewaydb.GatewayGetChatAttemptRow) error {
 	if time.Now().Before(attempt.NextAttemptAt) {
 		return nil
+	}
+	payload, err := s.queries.GatewayChatAttemptPayload(ctx, gatewaydb.GatewayChatAttemptPayloadParams{
+		ExecutionID: attempt.ExecutionID,
+		Number:      attempt.Number,
+	})
+	if err != nil {
+		return err
 	}
 	if attempt.MessageID == "" {
 		attempt.MessageID = fmt.Sprintf("msg_%012x%s", (time.Now().UnixMilli()<<12)&0xffffffffffff, rand.Text()[:14])
@@ -791,26 +821,24 @@ func (s *Service) submitChatAttempt(ctx context.Context, client *gatewayapi.Clie
 	switch execution.Protocol {
 	case gatewaydb.ChatProtocolV1:
 		var body gatewayapi.SessionPromptAsyncJSONRequestBody
-		if err := json.Unmarshal(attempt.Payload, &body); err != nil {
+		if err := json.Unmarshal(payload, &body); err != nil {
 			return err
 		}
 		body.MessageID = &attempt.MessageID
-		payload, err := json.Marshal(body)
+		payload, err = json.Marshal(body)
 		if err != nil {
 			return err
 		}
-		attempt.Payload = payload
 	case gatewaydb.ChatProtocolV2:
 		var body gatewayapi.V2SessionPromptJSONRequestBody
-		if err := json.Unmarshal(attempt.Payload, &body); err != nil {
+		if err := json.Unmarshal(payload, &body); err != nil {
 			return err
 		}
 		body.Id = &attempt.MessageID
-		payload, err := json.Marshal(body)
+		payload, err = json.Marshal(body)
 		if err != nil {
 			return err
 		}
-		attempt.Payload = payload
 	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -818,11 +846,10 @@ func (s *Service) submitChatAttempt(ctx context.Context, client *gatewayapi.Clie
 	}
 	defer tx.Rollback(ctx)
 	q := gatewaydb.New(tx)
-	_, err = q.GatewayCreateChatExecutionPrompt(ctx, gatewaydb.GatewayCreateChatExecutionPromptParams{
+	err = q.GatewayCreateChatExecutionPrompt(ctx, gatewaydb.GatewayCreateChatExecutionPromptParams{
 		ExecutionID: execution.ID,
 		Attempt:     execution.Attempt,
 		MessageID:   attempt.MessageID,
-		Payload:     attempt.Payload,
 	})
 	if err != nil {
 		return err
@@ -834,7 +861,7 @@ func (s *Service) submitChatAttempt(ctx context.Context, client *gatewayapi.Clie
 		Number:        attempt.Number,
 		State:         attempt.State,
 		MessageID:     attempt.MessageID,
-		Payload:       attempt.Payload,
+		Payload:       payload,
 		Submissions:   attempt.Submissions,
 		NextAttemptAt: time.Now(),
 	})
@@ -868,7 +895,7 @@ func (s *Service) submitChatAttempt(ctx context.Context, client *gatewayapi.Clie
 			execution.SessionID,
 			&gatewayapi.SessionPromptAsyncParams{Directory: &execution.Directory},
 			"application/json",
-			strings.NewReader(string(attempt.Payload)),
+			bytes.NewReader(payload),
 		)
 		if err != nil {
 			return err
@@ -880,7 +907,7 @@ func (s *Service) submitChatAttempt(ctx context.Context, client *gatewayapi.Clie
 			execution.AgentName,
 			execution.SessionID,
 			"application/json",
-			strings.NewReader(string(attempt.Payload)),
+			bytes.NewReader(payload),
 		)
 		if err != nil {
 			return err
@@ -897,7 +924,7 @@ func (s *Service) submitChatAttempt(ctx context.Context, client *gatewayapi.Clie
 			Number:        attempt.Number,
 			State:         gatewaydb.ChatAttemptStatePending,
 			MessageID:     attempt.MessageID,
-			Payload:       attempt.Payload,
+			Payload:       payload,
 			Submissions:   attempt.Submissions,
 			NextAttemptAt: time.Now().Add(delay),
 		})

@@ -2803,24 +2803,33 @@ FROM chat_executions e WHERE a.execution_id = e.id AND a.number = e.attempt
  AND e.state IN ('completed', 'cancelled', 'failed')
  AND a.state NOT IN ('completed', 'cancelled', 'failed');
 
--- name: GatewayCreateChatAttempt :one
-INSERT INTO chat_attempts (execution_id, number, incarnation, payload)
-VALUES (@execution_id, @number, @incarnation, @payload)
-RETURNING *;
+-- name: GatewayCreateChatAttempt :exec
+INSERT INTO chat_attempts (execution_id, number, incarnation, payload, message_id, state, submissions)
+VALUES (@execution_id, @number, @incarnation, @payload, @message_id,
+  CASE WHEN @message_id = '' THEN 'pending'::chat_attempt_state ELSE 'submitting'::chat_attempt_state END,
+  CASE WHEN @message_id = '' THEN 0 ELSE 1 END);
 
 -- name: GatewayGetChatAttempt :one
-SELECT * FROM chat_attempts WHERE execution_id = @execution_id AND number = @number;
+SELECT execution_id, number, incarnation, state, message_id, submissions, next_attempt_at, updated_at
+FROM chat_attempts WHERE execution_id = @execution_id AND number = @number;
+
+-- name: GatewayChatAttemptPayload :one
+SELECT payload FROM chat_attempts WHERE execution_id = @execution_id AND number = @number;
+
+-- name: GatewayAdmitChatAttempt :exec
+UPDATE chat_attempts SET state = 'submitting', message_id = @message_id, payload = @payload,
+  submissions = submissions + 1, next_attempt_at = now(), updated_at = now()
+WHERE execution_id = @execution_id AND number = @number;
 
 -- name: GatewayUpdateChatAttempt :exec
 UPDATE chat_attempts SET state = @state, message_id = @message_id, payload = @payload,
   submissions = @submissions, next_attempt_at = @next_attempt_at, updated_at = now()
 WHERE execution_id = @execution_id AND number = @number;
 
--- name: GatewayCreateChatExecutionPrompt :one
-INSERT INTO chat_execution_prompts (execution_id, attempt, message_id, payload)
-VALUES (@execution_id, @attempt, @message_id, @payload)
-ON CONFLICT (execution_id, message_id) DO UPDATE SET message_id = EXCLUDED.message_id
-RETURNING *;
+-- name: GatewayCreateChatExecutionPrompt :exec
+INSERT INTO chat_execution_prompts (execution_id, attempt, message_id)
+VALUES (@execution_id, @attempt, @message_id)
+ON CONFLICT (execution_id, message_id) DO NOTHING;
 
 -- name: GatewayAcceptChatExecutionPrompt :exec
 UPDATE chat_execution_prompts SET accepted = true

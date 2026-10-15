@@ -14,12 +14,14 @@ import (
 type Querier interface {
 	GatewayAcceptChatExecutionPrompt(ctx context.Context, arg GatewayAcceptChatExecutionPromptParams) error
 	GatewayAddAgentShareGrant(ctx context.Context, arg GatewayAddAgentShareGrantParams) (int64, error)
+	GatewayAdmitChatAttempt(ctx context.Context, arg GatewayAdmitChatAttemptParams) error
 	GatewayAdoptCodingWorktree(ctx context.Context, arg GatewayAdoptCodingWorktreeParams) (CodingWorktree, error)
 	GatewayAgentExists(ctx context.Context, arg GatewayAgentExistsParams) (bool, error)
 	GatewayAssignWorkspaceAdmins(ctx context.Context, arg GatewayAssignWorkspaceAdminsParams) (int64, error)
 	GatewayBeginCodingProjectDeletion(ctx context.Context, id string) error
 	GatewayBindCodingSession(ctx context.Context, arg GatewayBindCodingSessionParams) error
 	GatewayCancelChatExecution(ctx context.Context, arg GatewayCancelChatExecutionParams) (int64, error)
+	GatewayChatAttemptPayload(ctx context.Context, arg GatewayChatAttemptPayloadParams) ([]byte, error)
 	GatewayChatExecutionAPIKeyValid(ctx context.Context, arg GatewayChatExecutionAPIKeyValidParams) (bool, error)
 	GatewayChatExecutionDefinition(ctx context.Context, workflowRunUid string) ([]byte, error)
 	GatewayChatExecutionPrompts(ctx context.Context, arg GatewayChatExecutionPromptsParams) ([]ChatExecutionPrompt, error)
@@ -44,9 +46,9 @@ type Querier interface {
 	GatewayCreateAgent(ctx context.Context, arg GatewayCreateAgentParams) (Agent, error)
 	GatewayCreateAgentOwner(ctx context.Context, arg GatewayCreateAgentOwnerParams) (AgentOwner, error)
 	GatewayCreateAgentShare(ctx context.Context, arg GatewayCreateAgentShareParams) (AgentShare, error)
-	GatewayCreateChatAttempt(ctx context.Context, arg GatewayCreateChatAttemptParams) (ChatAttempt, error)
+	GatewayCreateChatAttempt(ctx context.Context, arg GatewayCreateChatAttemptParams) error
 	GatewayCreateChatExecution(ctx context.Context, arg GatewayCreateChatExecutionParams) (ChatExecution, error)
-	GatewayCreateChatExecutionPrompt(ctx context.Context, arg GatewayCreateChatExecutionPromptParams) (ChatExecutionPrompt, error)
+	GatewayCreateChatExecutionPrompt(ctx context.Context, arg GatewayCreateChatExecutionPromptParams) error
 	GatewayCreateChatInput(ctx context.Context, arg GatewayCreateChatInputParams) (ChatInput, error)
 	GatewayCreateCodingOperation(ctx context.Context, arg GatewayCreateCodingOperationParams) (CodingOperation, error)
 	GatewayCreateCodingProject(ctx context.Context, arg GatewayCreateCodingProjectParams) (CodingProject, error)
@@ -78,7 +80,7 @@ type Querier interface {
 	GatewayGetAgent(ctx context.Context, arg GatewayGetAgentParams) (Agent, error)
 	GatewayGetAgentOwner(ctx context.Context, arg GatewayGetAgentOwnerParams) (AgentOwner, error)
 	GatewayGetAgentShare(ctx context.Context, arg GatewayGetAgentShareParams) (AgentShare, error)
-	GatewayGetChatAttempt(ctx context.Context, arg GatewayGetChatAttemptParams) (ChatAttempt, error)
+	GatewayGetChatAttempt(ctx context.Context, arg GatewayGetChatAttemptParams) (GatewayGetChatAttemptRow, error)
 	GatewayGetChatExecution(ctx context.Context, arg GatewayGetChatExecutionParams) (ChatExecution, error)
 	GatewayGetChatInput(ctx context.Context, arg GatewayGetChatInputParams) (ChatInput, error)
 	GatewayGetChatSessionGroup(ctx context.Context, arg GatewayGetChatSessionGroupParams) (GatewayGetChatSessionGroupRow, error)

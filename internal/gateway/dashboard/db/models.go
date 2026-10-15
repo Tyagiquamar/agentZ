@@ -1051,7 +1051,6 @@ type ChatExecutionPrompt struct {
 	ExecutionID uuid.UUID `json:"execution_id"`
 	Attempt     int32     `json:"attempt"`
 	MessageID   string    `json:"message_id"`
-	Payload     []byte    `json:"payload"`
 	Accepted    bool      `json:"accepted"`
 	CreatedAt   time.Time `json:"created_at"`
 }

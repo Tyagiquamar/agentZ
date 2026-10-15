@@ -41,7 +41,9 @@ CREATE UNIQUE INDEX chat_executions_active_idx
   WHERE state IN ('admitting', 'running', 'recovering', 'blocked');
 CREATE UNIQUE INDEX chat_executions_workflow_idx
   ON chat_executions(workflow_run_uid) WHERE workflow_run_uid <> '';
-CREATE INDEX chat_executions_pending_idx ON chat_executions(updated_at)
+CREATE INDEX chat_executions_session_idx
+  ON chat_executions(workspace_id, agent_name, session_id, created_at DESC);
+CREATE INDEX chat_executions_pending_idx ON chat_executions(lease_until, updated_at)
   WHERE state IN ('admitting', 'running', 'recovering', 'blocked');
 
 CREATE TABLE chat_attempts (
@@ -62,7 +64,6 @@ CREATE TABLE chat_execution_prompts (
   execution_id UUID NOT NULL,
   attempt INTEGER NOT NULL,
   message_id TEXT NOT NULL,
-  payload JSONB NOT NULL,
   accepted BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (execution_id, message_id),

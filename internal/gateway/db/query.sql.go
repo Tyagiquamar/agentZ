@@ -62,6 +62,29 @@ func (q *Queries) GatewayAddAgentShareGrant(ctx context.Context, arg GatewayAddA
 	return result.RowsAffected(), nil
 }
 
+const gatewayAdmitChatAttempt = `-- name: GatewayAdmitChatAttempt :exec
+UPDATE chat_attempts SET state = 'submitting', message_id = $1, payload = $2,
+  submissions = submissions + 1, next_attempt_at = now(), updated_at = now()
+WHERE execution_id = $3 AND number = $4
+`
+
+type GatewayAdmitChatAttemptParams struct {
+	MessageID   string    `json:"message_id"`
+	Payload     []byte    `json:"payload"`
+	ExecutionID uuid.UUID `json:"execution_id"`
+	Number      int32     `json:"number"`
+}
+
+func (q *Queries) GatewayAdmitChatAttempt(ctx context.Context, arg GatewayAdmitChatAttemptParams) error {
+	_, err := q.db.Exec(ctx, gatewayAdmitChatAttempt,
+		arg.MessageID,
+		arg.Payload,
+		arg.ExecutionID,
+		arg.Number,
+	)
+	return err
+}
+
 const gatewayAdoptCodingWorktree = `-- name: GatewayAdoptCodingWorktree :one
 INSERT INTO coding_worktrees(id, workspace_id, project_id, agent_name, directory, branch, ready, shared)
 VALUES ($1, $2, $3, $4, $5, $6, true, true)
@@ -243,6 +266,22 @@ func (q *Queries) GatewayCancelChatExecution(ctx context.Context, arg GatewayCan
 	return result.RowsAffected(), nil
 }
 
+const gatewayChatAttemptPayload = `-- name: GatewayChatAttemptPayload :one
+SELECT payload FROM chat_attempts WHERE execution_id = $1 AND number = $2
+`
+
+type GatewayChatAttemptPayloadParams struct {
+	ExecutionID uuid.UUID `json:"execution_id"`
+	Number      int32     `json:"number"`
+}
+
+func (q *Queries) GatewayChatAttemptPayload(ctx context.Context, arg GatewayChatAttemptPayloadParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, gatewayChatAttemptPayload, arg.ExecutionID, arg.Number)
+	var payload []byte
+	err := row.Scan(&payload)
+	return payload, err
+}
+
 const gatewayChatExecutionAPIKeyValid = `-- name: GatewayChatExecutionAPIKeyValid :one
 SELECT EXISTS (
  SELECT 1 FROM apikeys k JOIN api_key_scopes s ON s.api_key_id = k.id
@@ -289,7 +328,7 @@ func (q *Queries) GatewayChatExecutionDefinition(ctx context.Context, workflowRu
 }
 
 const gatewayChatExecutionPrompts = `-- name: GatewayChatExecutionPrompts :many
-SELECT execution_id, attempt, message_id, payload, accepted, created_at FROM chat_execution_prompts WHERE execution_id = $1 AND attempt = $2
+SELECT execution_id, attempt, message_id, accepted, created_at FROM chat_execution_prompts WHERE execution_id = $1 AND attempt = $2
 ORDER BY created_at
 `
 
@@ -311,7 +350,6 @@ func (q *Queries) GatewayChatExecutionPrompts(ctx context.Context, arg GatewayCh
 			&i.ExecutionID,
 			&i.Attempt,
 			&i.MessageID,
-			&i.Payload,
 			&i.Accepted,
 			&i.CreatedAt,
 		); err != nil {
@@ -1008,10 +1046,11 @@ func (q *Queries) GatewayCreateAgentShare(ctx context.Context, arg GatewayCreate
 	return i, err
 }
 
-const gatewayCreateChatAttempt = `-- name: GatewayCreateChatAttempt :one
-INSERT INTO chat_attempts (execution_id, number, incarnation, payload)
-VALUES ($1, $2, $3, $4)
-RETURNING execution_id, number, incarnation, state, message_id, payload, submissions, next_attempt_at, created_at, updated_at
+const gatewayCreateChatAttempt = `-- name: GatewayCreateChatAttempt :exec
+INSERT INTO chat_attempts (execution_id, number, incarnation, payload, message_id, state, submissions)
+VALUES ($1, $2, $3, $4, $5,
+  CASE WHEN $5 = '' THEN 'pending'::chat_attempt_state ELSE 'submitting'::chat_attempt_state END,
+  CASE WHEN $5 = '' THEN 0 ELSE 1 END)
 `
 
 type GatewayCreateChatAttemptParams struct {
@@ -1019,29 +1058,18 @@ type GatewayCreateChatAttemptParams struct {
 	Number      int32     `json:"number"`
 	Incarnation string    `json:"incarnation"`
 	Payload     []byte    `json:"payload"`
+	MessageID   string    `json:"message_id"`
 }
 
-func (q *Queries) GatewayCreateChatAttempt(ctx context.Context, arg GatewayCreateChatAttemptParams) (ChatAttempt, error) {
-	row := q.db.QueryRow(ctx, gatewayCreateChatAttempt,
+func (q *Queries) GatewayCreateChatAttempt(ctx context.Context, arg GatewayCreateChatAttemptParams) error {
+	_, err := q.db.Exec(ctx, gatewayCreateChatAttempt,
 		arg.ExecutionID,
 		arg.Number,
 		arg.Incarnation,
 		arg.Payload,
+		arg.MessageID,
 	)
-	var i ChatAttempt
-	err := row.Scan(
-		&i.ExecutionID,
-		&i.Number,
-		&i.Incarnation,
-		&i.State,
-		&i.MessageID,
-		&i.Payload,
-		&i.Submissions,
-		&i.NextAttemptAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
+	return err
 }
 
 const gatewayCreateChatExecution = `-- name: GatewayCreateChatExecution :one
@@ -1133,37 +1161,21 @@ func (q *Queries) GatewayCreateChatExecution(ctx context.Context, arg GatewayCre
 	return i, err
 }
 
-const gatewayCreateChatExecutionPrompt = `-- name: GatewayCreateChatExecutionPrompt :one
-INSERT INTO chat_execution_prompts (execution_id, attempt, message_id, payload)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (execution_id, message_id) DO UPDATE SET message_id = EXCLUDED.message_id
-RETURNING execution_id, attempt, message_id, payload, accepted, created_at
+const gatewayCreateChatExecutionPrompt = `-- name: GatewayCreateChatExecutionPrompt :exec
+INSERT INTO chat_execution_prompts (execution_id, attempt, message_id)
+VALUES ($1, $2, $3)
+ON CONFLICT (execution_id, message_id) DO NOTHING
 `
 
 type GatewayCreateChatExecutionPromptParams struct {
 	ExecutionID uuid.UUID `json:"execution_id"`
 	Attempt     int32     `json:"attempt"`
 	MessageID   string    `json:"message_id"`
-	Payload     []byte    `json:"payload"`
 }
 
-func (q *Queries) GatewayCreateChatExecutionPrompt(ctx context.Context, arg GatewayCreateChatExecutionPromptParams) (ChatExecutionPrompt, error) {
-	row := q.db.QueryRow(ctx, gatewayCreateChatExecutionPrompt,
-		arg.ExecutionID,
-		arg.Attempt,
-		arg.MessageID,
-		arg.Payload,
-	)
-	var i ChatExecutionPrompt
-	err := row.Scan(
-		&i.ExecutionID,
-		&i.Attempt,
-		&i.MessageID,
-		&i.Payload,
-		&i.Accepted,
-		&i.CreatedAt,
-	)
-	return i, err
+func (q *Queries) GatewayCreateChatExecutionPrompt(ctx context.Context, arg GatewayCreateChatExecutionPromptParams) error {
+	_, err := q.db.Exec(ctx, gatewayCreateChatExecutionPrompt, arg.ExecutionID, arg.Attempt, arg.MessageID)
+	return err
 }
 
 const gatewayCreateChatInput = `-- name: GatewayCreateChatInput :one
@@ -2159,7 +2171,8 @@ func (q *Queries) GatewayGetAgentShare(ctx context.Context, arg GatewayGetAgentS
 }
 
 const gatewayGetChatAttempt = `-- name: GatewayGetChatAttempt :one
-SELECT execution_id, number, incarnation, state, message_id, payload, submissions, next_attempt_at, created_at, updated_at FROM chat_attempts WHERE execution_id = $1 AND number = $2
+SELECT execution_id, number, incarnation, state, message_id, submissions, next_attempt_at, updated_at
+FROM chat_attempts WHERE execution_id = $1 AND number = $2
 `
 
 type GatewayGetChatAttemptParams struct {
@@ -2167,19 +2180,28 @@ type GatewayGetChatAttemptParams struct {
 	Number      int32     `json:"number"`
 }
 
-func (q *Queries) GatewayGetChatAttempt(ctx context.Context, arg GatewayGetChatAttemptParams) (ChatAttempt, error) {
+type GatewayGetChatAttemptRow struct {
+	ExecutionID   uuid.UUID        `json:"execution_id"`
+	Number        int32            `json:"number"`
+	Incarnation   string           `json:"incarnation"`
+	State         ChatAttemptState `json:"state"`
+	MessageID     string           `json:"message_id"`
+	Submissions   int32            `json:"submissions"`
+	NextAttemptAt time.Time        `json:"next_attempt_at"`
+	UpdatedAt     time.Time        `json:"updated_at"`
+}
+
+func (q *Queries) GatewayGetChatAttempt(ctx context.Context, arg GatewayGetChatAttemptParams) (GatewayGetChatAttemptRow, error) {
 	row := q.db.QueryRow(ctx, gatewayGetChatAttempt, arg.ExecutionID, arg.Number)
-	var i ChatAttempt
+	var i GatewayGetChatAttemptRow
 	err := row.Scan(
 		&i.ExecutionID,
 		&i.Number,
 		&i.Incarnation,
 		&i.State,
 		&i.MessageID,
-		&i.Payload,
 		&i.Submissions,
 		&i.NextAttemptAt,
-		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err
