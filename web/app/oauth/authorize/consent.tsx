@@ -384,15 +384,10 @@ export function Consent({
                             if (compatibility?.support === "unsupported") badge = "Unsupported"
                             if (compatibility?.support === "translated") badge = "Conversion"
                             if (codexUnsupported) badge = "Unsupported"
-                            let description = `${model.model} · Provider ID: ${model.provider}`
-                            if (compatibility?.warning) description += ` · ${compatibility.warning}`
-                            if (codexUnsupported)
-                              description +=
-                                " · Codex requires a native Responses model with tool calls."
                             return {
                               value: model.id,
                               label: model.model_display_name || model.model,
-                              description,
+                              description: model.model,
                               badge,
                               disabled:
                                 compatibility?.support === "unsupported" || codexUnsupported,

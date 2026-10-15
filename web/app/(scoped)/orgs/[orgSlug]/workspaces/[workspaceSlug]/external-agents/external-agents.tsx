@@ -13,7 +13,6 @@ import {
 import { ClaudeAI, CodexLight } from "@ridemountainpig/svgl-react"
 import {
   ArrowUpRight,
-  BotMessageSquare,
   Brain,
   Cable,
   CircleCheck,
@@ -24,7 +23,7 @@ import {
   Unplug,
 } from "lucide-react"
 import { toast } from "sonner"
-import { AdministrationPageHeader } from "@/components/administration"
+import { AdministrationPageHeader, AdministrationState } from "@/components/administration"
 import { AdminDataGrid, type AdminColumnLayout } from "@/components/admin-data-grid"
 import { UserAvatar, UserIdentity } from "@/components/ui/avatar"
 import { TruncatedText } from "@/components/ui/tooltip"
@@ -326,24 +325,11 @@ export function ExternalAgents({
         onRowActivate={(agent) => setSelectedId(agent.clientId)}
         rowAriaLabel={(agent) => `Open ${agent.name}`}
         emptyState={
-          <Empty className="mx-4 border border-dashed py-16 md:mx-6">
-            <EmptyHeader>
-              <EmptyMedia variant="icon">
-                <BotMessageSquare aria-hidden="true" />
-              </EmptyMedia>
-              <EmptyTitle>Bring your coding agent</EmptyTitle>
-              <EmptyDescription>
-                Connect Claude Code or Codex with your AgentZ identity. Choose the models and tools
-                it can use.
-              </EmptyDescription>
-            </EmptyHeader>
-            {workspace.capabilities.external_agents.create ? (
-              <Button variant="outline" onClick={() => setEditor("new")}>
-                <Plus aria-hidden="true" data-icon="inline-start" />
-                Add agent
-              </Button>
-            ) : null}
-          </Empty>
+          <AdministrationState
+            description="Connect Claude Code or Codex and choose which models and tools it can use."
+            kind={workspace.capabilities.external_agents.create ? "welcome" : "empty"}
+            title="Let's connect your coding agent"
+          />
         }
       />
       {editor ? (

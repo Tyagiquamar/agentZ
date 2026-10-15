@@ -2992,7 +2992,7 @@ paths:
         default:
           $ref: '#/components/responses/BadRequest'
       security:
-      - GatewayBearer: [inference:use]
+      - GatewayBearer: ['inference:use']
   /api/inference/pool:
     get:
       operationId: listInferencePools
