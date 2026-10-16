@@ -259,10 +259,11 @@ func (r *ExtAuthRuntimeReconciler) reconcileDelegationTracing(ctx context.Contex
 		}
 	}
 	attrs := []agw.AttributeAdd{}
-	for _, field := range []string{
+	fields := []string{
 		"client_id", "app_name", "grant_id", "user_id", "organization_id", "workspace_id",
 		"resource_kind", "resource_namespace", "resource_name", "resource_uid", "target_id",
-	} {
+	}
+	for _, field := range fields {
 		attrs = append(attrs, agw.AttributeAdd{
 			Name:       "agentz." + field,
 			Expression: agw.CELExpression("metadata.agentz_observability." + field),
@@ -304,7 +305,9 @@ func (r *ExtAuthRuntimeReconciler) reconcileDelegationTracing(ctx context.Contex
 		)
 	}
 	sample := agw.CELExpression("true")
-	filter := agw.CELExpression(`metadata.agentz_observability.resource_kind == "inference" || (metadata.agentz_observability.resource_kind == "mcp" && default(mcp.methodName, json(request.body).method) == "tools/call")`)
+	filter := agw.CELExpression(
+		`metadata.agentz_observability.resource_kind == "inference" || (metadata.agentz_observability.resource_kind == "mcp" && default(mcp.methodName, json(request.body).method) == "tools/call")`,
+	)
 	bufferSize := resource.MustParse("32Mi")
 	_, err := ctrlutil.CreateOrPatch(ctx, r.Client, policy, func() error {
 		policy.OwnerReferences = owners
@@ -318,13 +321,18 @@ func (r *ExtAuthRuntimeReconciler) reconcileDelegationTracing(ctx context.Contex
 			Frontend: &agw.Frontend{HTTP: &agw.FrontendHTTP{
 				MaxBufferSize: &agw.ByteSize{Value: &bufferSize},
 			}, Tracing: &agw.Tracing{
-				PolicyBackendEndpoint: agw.PolicyBackendEndpoint{BackendRef: r.TraceBackend.BackendRef(backend.Name)},
-				Protocol:              agw.OTLPProtocolGrpc,
-				RandomSampling:        &sample, ClientSampling: &sample, ParentNotSampled: &sample,
+				PolicyBackendEndpoint: agw.PolicyBackendEndpoint{
+					BackendRef: r.TraceBackend.BackendRef(backend.Name),
+				},
+				Protocol:       agw.OTLPProtocolGrpc,
+				RandomSampling: &sample, ClientSampling: &sample, ParentNotSampled: &sample,
 				Filter: &filter, Attributes: &agw.LogTracingAttributes{Add: attrs},
 				Resources: []agw.ResourceAdd{
 					{Name: "service.name", Expression: `"agentz-oauth-gateway"`},
-					{Name: "service.namespace", Expression: agw.CELExpression(strconv.Quote(namespace))},
+					{
+						Name:       "service.namespace",
+						Expression: agw.CELExpression(strconv.Quote(namespace)),
+					},
 				},
 			}},
 		}

@@ -253,7 +253,7 @@ func (s *Service) GetAppOperation(w http.ResponseWriter, r *http.Request, client
 	}
 	op, payload := row.ObserverAppOperation, row.ObserverAppOperationPayload
 	result := gatewayapi.AppOperationResponse{Span: appSpan(op)}
-	for target, raw := range map[*string][]byte{
+	payloads := map[*string][]byte{
 		&result.ResourceAttributes:     op.ResourceAttributes,
 		&result.SpanAttributes:         op.SpanAttributes,
 		&result.Payload.InputMessages:  payload.InputMessages,
@@ -261,7 +261,8 @@ func (s *Service) GetAppOperation(w http.ResponseWriter, r *http.Request, client
 		&result.Payload.ToolArguments:  payload.ToolArguments,
 		&result.Payload.ToolResult:     payload.ToolResult,
 		&result.ToolError:              payload.ToolError,
-	} {
+	}
+	for target, raw := range payloads {
 		var formatted bytes.Buffer
 		if err := json.Indent(&formatted, raw, "", "  "); err != nil {
 			apiutil.WriteInternalError(w, r, err)

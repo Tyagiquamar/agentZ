@@ -71,11 +71,12 @@ func TestAppMCPFailureAndAttribution(t *testing.T) {
 			attr.Value = &commonpb.AnyValue{Value: &commonpb.AnyValue_StringValue{StringValue: "mcp"}}
 		}
 	}
-	for name, value := range map[string]string{
+	attributes := map[string]string{
 		attrMCPMethodName: "tools/call", attrGenAIToolName: "lookup",
 		attrToolParameters: `{"n":9007199254740993}`, attrOutputValue: `{"isError":true,"structuredContent":{"reason":"denied"}}`,
 		attrToolError: `{"code":-32001,"message":"denied","data":{"n":9007199254740993}}`,
-	} {
+	}
+	for name, value := range attributes {
 		span.Attributes = append(span.Attributes, &commonpb.KeyValue{
 			Key: name, Value: &commonpb.AnyValue{Value: &commonpb.AnyValue_StringValue{StringValue: value}},
 		})

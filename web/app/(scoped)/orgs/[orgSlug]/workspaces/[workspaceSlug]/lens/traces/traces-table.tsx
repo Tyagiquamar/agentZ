@@ -739,29 +739,16 @@ function SpanJSONSections({
     rows.push(["app.client_id", span.subject.clientID])
   }
 
-  const payload = detail?.payload ?? []
-  const input = payload.find((section) => section.key === "input_messages")
-  const output = payload.find((section) => section.key === "output_messages")
-  const toolArguments = payload.find((section) => section.key === "tool_arguments")
-  const toolResult = payload.find((section) => section.key === "tool_result")
-  const toolError = payload.find((section) => section.key === "tool_error")
-
   return (
     <div className="flex flex-col gap-5">
       {span.error ? (
         <TraceContentPanel title="Error" code={JSON.stringify({ error: span.error }, null, 2)} />
       ) : null}
-      {input && !input.empty ? <TraceContentPanel title="Input" code={input.json} /> : null}
-      {output && !output.empty ? <TraceContentPanel title="Output" code={output.json} /> : null}
-      {toolArguments && !toolArguments.empty ? (
-        <TraceContentPanel title="Tool arguments" code={toolArguments.json} />
-      ) : null}
-      {toolResult && !toolResult.empty ? (
-        <TraceContentPanel title="Tool result" code={toolResult.json} />
-      ) : null}
-      {toolError && !toolError.empty ? (
-        <TraceContentPanel title="Tool error" code={toolError.json} />
-      ) : null}
+      {detail?.payload.map((section) =>
+        section.empty ? null : (
+          <TraceContentPanel key={section.key} title={section.label} code={section.json} />
+        )
+      )}
       {detail?.resourceAttributes && !detail.resourceAttributes.empty ? (
         <TraceContentPanel title="Resource attributes" code={detail.resourceAttributes.json} />
       ) : null}

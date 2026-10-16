@@ -852,6 +852,7 @@ type delegationServer struct {
 	*Service
 }
 
+// Check authorizes native gateway requests against owner-scoped delegation grants.
 func (s *delegationServer) Check(ctx context.Context, request *authv3.CheckRequest) (*authv3.CheckResponse, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()

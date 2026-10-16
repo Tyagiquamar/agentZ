@@ -355,7 +355,10 @@ func TestMCPProbeDiscoversBoundedPaginatedCatalog(t *testing.T) {
 					outcome.prompts[i] != name ||
 					outcome.resources[i] != "test:///"+name
 				if changedIdentifiers {
-					t.Fatalf("catalog identifiers changed: tool=%q prompt=%q resource=%q", outcome.tools[i].Name, outcome.prompts[i], outcome.resources[i])
+					t.Fatalf(
+						"catalog identifiers changed: tool=%q prompt=%q resource=%q",
+						outcome.tools[i].Name, outcome.prompts[i], outcome.resources[i],
+					)
 				}
 			}
 		})

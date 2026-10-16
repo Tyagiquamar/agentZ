@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import type { LensSubject, TraceSessionFilterItem } from "@/data/types"
+import type { TraceSessionFilterItem } from "@/data/types"
 import { dayjs, formatDateParam } from "@/lib/format"
 import type { Agent, LensApp } from "@/lib/gateway/client"
 
@@ -44,11 +44,8 @@ export function LensFilters({
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const [pending, startTransition] = React.useTransition()
-
-  const subjects: LensSubject[] = [
-    ...agents.map((agent): LensSubject => ({ kind: "agent", name: agent.name })),
-    ...apps.map((app): LensSubject => ({ kind: "app", name: app.name, clientID: app.client_id })),
-  ]
+  let selectedSubject = selectedAgentName ? `agent:${selectedAgentName}` : ""
+  if (selectedAppClientID) selectedSubject = "external-apps"
 
   function update(values: Record<string, string | undefined>) {
     const params = new URLSearchParams(searchParams)
@@ -75,64 +72,75 @@ export function LensFilters({
     >
       <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
         <Select
-          value={
-            selectedAppClientID
-              ? `app:${selectedAppClientID}`
-              : selectedAgentName
-                ? `agent:${selectedAgentName}`
-                : ""
-          }
+          value={selectedSubject}
           onValueChange={(value) => {
-            const subject = subjects.find(
-              (subject) =>
-                (subject.kind === "app" ? `app:${subject.clientID}` : `agent:${subject.name}`) ===
-                value
-            )
-            if (!subject) return
-            select(
-              subject.kind === "app"
-                ? { app_client_id: subject.clientID }
-                : { agent_name: subject.name }
-            )
+            if (value === "external-apps") {
+              const app = apps[0]
+              if (app) select({ app_client_id: app.client_id })
+              return
+            }
+            const agent = agents.find((agent) => `agent:${agent.name}` === value)
+            if (agent) select({ agent_name: agent.name })
           }}
-          disabled={subjects.length === 0 || pending || selectionPending}
+          disabled={agents.length + apps.length === 0 || pending || selectionPending}
         >
           <SelectTrigger
-            aria-label="Agent or app"
+            aria-label="Agent or external apps"
             className="h-8 w-full min-w-0 rounded-md sm:w-64 sm:min-w-52"
           >
-            <SelectValue placeholder="Agent or app" />
+            <SelectValue placeholder="Agent or external apps" />
           </SelectTrigger>
           <SelectContent>
             <SelectGroup>
-              {subjects.map((subject) => {
-                const id =
-                  subject.kind === "app" ? `app:${subject.clientID}` : `agent:${subject.name}`
-                return (
-                  <SelectItem key={id} value={id}>
-                    {subject.kind === "app" ? (
-                      <AppWindowIcon aria-label="App" />
-                    ) : (
-                      <BotIcon aria-label="Agent" />
-                    )}
-                    {subject.name}
-                    {subject.kind === "app" &&
-                    apps.some(
-                      (app) => app.name === subject.name && app.client_id !== subject.clientID
-                    ) ? (
-                      <span
-                        className="max-w-28 truncate text-xs text-muted-foreground"
-                        title={subject.clientID}
-                      >
-                        {subject.clientID}
-                      </span>
-                    ) : null}
-                  </SelectItem>
-                )
-              })}
+              {agents.map((agent) => (
+                <SelectItem key={agent.name} value={`agent:${agent.name}`}>
+                  <BotIcon aria-label="Agent" />
+                  {agent.name}
+                </SelectItem>
+              ))}
+              {apps.length > 0 ? (
+                <SelectItem value="external-apps">
+                  <AppWindowIcon aria-hidden="true" />
+                  External apps
+                </SelectItem>
+              ) : null}
             </SelectGroup>
           </SelectContent>
         </Select>
+        {selectedAppClientID ? (
+          <Select
+            value={selectedAppClientID}
+            onValueChange={(app_client_id) => select({ app_client_id })}
+            disabled={pending || selectionPending}
+          >
+            <SelectTrigger
+              aria-label="External app"
+              className="h-8 w-full min-w-0 rounded-md sm:w-72 sm:min-w-52"
+            >
+              <SelectValue placeholder="External app" className="truncate" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {apps.map((app) => (
+                  <SelectItem key={app.client_id} value={app.client_id}>
+                    <AppWindowIcon aria-hidden="true" />
+                    {app.name}
+                    {apps.some(
+                      (other) => other.name === app.name && other.client_id !== app.client_id
+                    ) ? (
+                      <span
+                        className="max-w-28 truncate text-xs text-muted-foreground"
+                        title={app.client_id}
+                      >
+                        {app.client_id}
+                      </span>
+                    ) : null}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        ) : null}
         {sessions && !selectedAppClientID ? (
           <Select
             value={selectedSessionId ?? ""}

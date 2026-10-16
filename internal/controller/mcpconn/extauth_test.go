@@ -234,7 +234,9 @@ func TestDelegationRestoresAgentGatewayParameters(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	namespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "telemetry-test", UID: "namespace-uid"}}
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{Name: "telemetry-test", UID: "namespace-uid"},
+	}
 	normal := &gwv1.HTTPRoute{
 		ObjectMeta: metav1.ObjectMeta{Namespace: namespace.Name, Name: "agent-route"},
 		Spec: gwv1.HTTPRouteSpec{CommonRouteSpec: gwv1.CommonRouteSpec{

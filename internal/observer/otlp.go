@@ -213,9 +213,12 @@ func appOperationFromOTLPSpan(sp *tracepb.Span, resourceAttrs map[string]*common
 		SessionID:          attrs[attrMCPSessionID].GetStringValue(),
 		ResourceAttributes: jsonObject(attrsForStorage(resourceAttrs)),
 	}
-	for _, identity := range []string{operation.OrganizationID, operation.WorkspaceID, operation.ClientID,
+	identities := []string{
+		operation.OrganizationID, operation.WorkspaceID, operation.ClientID,
 		operation.GrantID, operation.UserID, operation.ResourceNamespace, operation.ResourceName,
-		operation.ResourceUid, operation.TargetID} {
+		operation.ResourceUid, operation.TargetID,
+	}
+	for _, identity := range identities {
 		if identity == "" {
 			return operation, errors.New("app operation attribution is incomplete")
 		}
@@ -230,13 +233,14 @@ func appOperationFromOTLPSpan(sp *tracepb.Span, resourceAttrs map[string]*common
 	switch operation.ResourceKind {
 	case "inference":
 		operation.SpanClass, operation.OperationName = spanClassLLM, operationChat
-		for key, tokens := range map[string]*pgtype.Int8{
+		usage := map[string]*pgtype.Int8{
 			attrGenAIInputTokens:            &operation.InputTokens,
 			attrGenAIOutputTokens:           &operation.OutputTokens,
 			attrGenAICacheRead:              &operation.CachedInputTokens,
 			attrGenAICacheWrite:             &operation.CachedWriteTokens,
 			"gen_ai.usage.reasoning_tokens": &operation.ReasoningTokens,
-		} {
+		}
+		for key, tokens := range usage {
 			if value, ok := attrs[key]; ok {
 				tokens.Int64, tokens.Valid = value.GetIntValue(), true
 			}
