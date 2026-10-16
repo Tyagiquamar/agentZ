@@ -55,6 +55,12 @@ const identityScopes = [
   { value: "offline_access", label: "Keep access when you are away, until you disconnect" },
 ]
 
+const inferenceAPIOptions = [
+  { value: "ChatCompletions", label: "Chat Completions", icon: Cpu },
+  { value: "Responses", label: "Responses", icon: Cpu },
+  { value: "Messages", label: "Messages", icon: Cpu },
+]
+
 const mcpKinds = ["tools", "prompts", "resources"] as const
 
 type ConsentProps = {
@@ -76,9 +82,12 @@ export function Consent({
   workspaces,
   initialWorkspace,
 }: ConsentProps) {
-  const [inferenceAPI, setInferenceAPI] = useState(
-    client.agent === "claude" || request.type === "device_code" ? "Messages" : "Responses"
+  const [inferenceAPIs, setInferenceAPIs] = useState<string[]>(
+    inferenceAPIOptions.map((option) => option.value)
   )
+  const selectedAPIs = client.agent
+    ? [client.agent === "claude" ? "Messages" : "Responses"]
+    : inferenceAPIs
   const inference = scopes.includes("inference:use")
   const mcp = scopes.includes("mcp:use")
   const resourceAccess = inference || mcp
@@ -229,35 +238,29 @@ export function Consent({
           {inference && !client.agent ? (
             <Field>
               <FieldLabel htmlFor="consent-inference-api">Inference API</FieldLabel>
-              <Select
-                value={inferenceAPI}
-                onValueChange={(value) => {
-                  setInferenceAPI(value)
+              <MultiSelectDropdown
+                id="consent-inference-api"
+                options={inferenceAPIOptions}
+                value={inferenceAPIs}
+                placeholder="Select APIs"
+                searchPlaceholder="Search APIs…"
+                onValueChangeAction={(apis) => {
+                  setInferenceAPIs(apis)
                   setSelection((current) => ({
                     ...current,
                     models: current.models.filter((model) =>
-                      model.api_compatibility?.some(
-                        (item) => item.api === value && item.support !== "unsupported"
+                      apis.every((api) =>
+                        model.api_compatibility?.some(
+                          (item) => item.api === api && item.support !== "unsupported"
+                        )
                       )
                     ),
                   }))
                 }}
                 disabled={pending || loading}
-              >
-                <SelectTrigger id="consent-inference-api" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectItem value="Messages">Messages, used by Claude</SelectItem>
-                    <SelectItem value="Responses">Responses, used by Codex</SelectItem>
-                    <SelectItem value="ChatCompletions">Chat Completions</SelectItem>
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
+              />
               <FieldDescription>
-                Choose your client&apos;s API to see conversion warnings. Unsupported models cannot
-                be selected for this API.
+                Choose your client&apos;s APIs to see conversion warnings.
               </FieldDescription>
             </Field>
           ) : null}
@@ -390,25 +393,32 @@ export function Consent({
                           searchPlaceholder="Search models or providers…"
                           emptyMessage="No matching models."
                           options={catalog.models.map((model) => {
-                            const compatibility = model.api_compatibility?.find(
-                              (item) => item.api === inferenceAPI
+                            const compatibility =
+                              model.api_compatibility?.filter((item) =>
+                                selectedAPIs.includes(item.api)
+                              ) ?? []
+                            const unsupported = compatibility.some(
+                              (item) => item.support === "unsupported"
                             )
                             const codexUnsupported =
                               client.agent === "codex" &&
-                              (compatibility?.support !== "native" ||
+                              (compatibility[0]?.support !== "native" ||
                                 !model.model_info?.capabilities.tool_call)
                             let badge = model.provider_display_name || model.provider
-                            if (compatibility?.support === "native") badge = "Native"
-                            if (compatibility?.support === "unsupported") badge = "Unsupported"
-                            if (compatibility?.support === "translated") badge = "Supported"
-                            if (codexUnsupported) badge = "Unsupported"
+                            if (
+                              compatibility.length &&
+                              compatibility.every((item) => item.support === "native")
+                            )
+                              badge = "Native"
+                            if (compatibility.some((item) => item.support === "translated"))
+                              badge = "Supported"
+                            if (unsupported || codexUnsupported) badge = "Unsupported"
                             return {
                               value: model.id,
                               label: model.model_display_name || model.model,
                               description: `${model.provider_display_name || model.provider} / ${model.model}`,
                               badge,
-                              disabled:
-                                compatibility?.support === "unsupported" || codexUnsupported,
+                              disabled: unsupported || codexUnsupported,
                               icon: Cpu,
                             }
                           })}
