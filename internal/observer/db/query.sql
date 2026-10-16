@@ -571,11 +571,14 @@ WITH affected AS MATERIALIZED (
   FROM affected key
   JOIN observer_app_operations mcp ON mcp.organization_id = key.organization_id AND mcp.workspace_id = key.workspace_id
     AND mcp.client_id = key.client_id AND mcp.user_id = key.user_id AND mcp.tool_call_id = key.call_id
+    -- Explicit nonempty IDs keep correlation probes on the partial call index.
+    AND mcp.tool_call_id <> ''
     AND mcp.resource_kind = 'mcp' AND mcp.agent_kind IN ('claude', 'codex')
     AND (mcp.session_id = '' OR mcp.turn_id = '')
   LEFT JOIN observer_app_operations tool ON tool.organization_id = mcp.organization_id AND tool.workspace_id = mcp.workspace_id
     AND tool.client_id = mcp.client_id AND tool.user_id = mcp.user_id AND tool.tool_call_id = mcp.tool_call_id
     AND tool.resource_kind = 'tool' AND tool.agent_kind = mcp.agent_kind
+    AND tool.tool_call_id <> ''
     AND (mcp.session_id = '' OR tool.session_id = mcp.session_id)
     AND (mcp.turn_id = '' OR tool.turn_id = mcp.turn_id)
   GROUP BY mcp.id
@@ -594,7 +597,7 @@ WITH affected AS MATERIALIZED (
   FROM affected key JOIN observer_app_operations tool
     ON tool.organization_id = key.organization_id AND tool.workspace_id = key.workspace_id
     AND tool.client_id = key.client_id AND tool.user_id = key.user_id AND tool.tool_call_id = key.call_id
-    AND tool.resource_kind = 'tool'
+    AND tool.resource_kind = 'tool' AND tool.tool_call_id <> ''
   JOIN observer_app_operations source ON source.id = tool.source_operation_id
 ), matches AS (
   SELECT tool.id, (
