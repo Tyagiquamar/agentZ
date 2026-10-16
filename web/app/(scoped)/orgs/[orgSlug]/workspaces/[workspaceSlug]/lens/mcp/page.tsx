@@ -25,6 +25,7 @@ export const metadata: Metadata = {
 const mcpSearchParamsSchema = z.object({
   agent_name: searchParamStringSchema,
   app_client_id: searchParamStringSchema,
+  session_id: searchParamStringSchema,
   from: searchParamStringSchema,
   to: searchParamStringSchema,
 })
@@ -32,6 +33,7 @@ const mcpSearchParamsSchema = z.object({
 type McpSearchParams = {
   agent_name?: SearchParamStringInput
   app_client_id?: SearchParamStringInput
+  session_id?: SearchParamStringInput
   from?: SearchParamStringInput
   to?: SearchParamStringInput
 }
@@ -57,10 +59,12 @@ export default async function McpPage({
 
   const resolved = resolveMcpSearchParams(searchParams)
   const workspaceId = workspace.workspace.id
+  const contentKey = JSON.stringify(await resolved)
   const selection = resolved.then((params) =>
     resolvePageSelection(workspace, "lens/mcp", {
       agent_name: params.agentName,
       app_client_id: params.appClientID,
+      session_id: params.sessionID,
     })
   )
 
@@ -78,7 +82,7 @@ export default async function McpPage({
         >
           <Filters searchParams={resolved} selection={selection} />
         </Suspense>
-        <Suspense fallback={<McpGraphSkeleton />}>
+        <Suspense key={contentKey} fallback={<McpGraphSkeleton />}>
           <Graph searchParams={resolved} workspaceId={workspaceId} selection={selection} />
         </Suspense>
       </div>
@@ -99,6 +103,11 @@ async function Filters({
     <>
       <RememberPageSelection selected={scope.selected} requested={scope.requested} />
       <LensFilters
+        workspaceId={scope.workspaceId}
+        defaultAppClientID={scope.defaultAppClientID}
+        sessions={scope.sessions}
+        selectedSessionId={scope.selected.session_id}
+        sessionNextPageToken={scope.sessionNextPageToken}
         agents={scope.agents}
         apps={scope.apps}
         selectedAppClientID={scope.selected.app_client_id}
@@ -127,13 +136,17 @@ async function Graph({
     return <ErrorPanel message={scope.error.message} />
   }
 
+  if (scope.subject?.kind === "agent" && !scope.selected.session_id) {
+    return <EmptyState message="No sessions for this agent" />
+  }
+
   if (!scope.subject) {
     return <EmptyState message="No agents or apps available" />
   }
 
   const result = await getMcpGraphAction(
     scope.subject,
-    { from: range.from, to: range.to },
+    { from: range.from, to: range.to, session_id: scope.selected.session_id },
     workspaceId
   )
   if (result.error) {
@@ -149,9 +162,10 @@ async function Graph({
       <McpGraph
         subject={scope.subject}
         key={[
-          scope.subject.kind === "app"
+          scope.subject.kind !== "agent"
             ? `app:${scope.subject.clientID}`
             : `agent:${scope.subject.name}`,
+          scope.selected.session_id,
           range.from,
           range.to,
           result.data.connections.length,
@@ -167,6 +181,7 @@ async function Graph({
 type ResolvedMcpSearchParams = {
   agentName?: string
   appClientID?: string
+  sessionID?: string
   range: ReturnType<typeof lensDateRange>
 }
 
@@ -178,6 +193,7 @@ async function resolveMcpSearchParams(
   return {
     agentName: params.agent_name,
     appClientID: params.app_client_id,
+    sessionID: params.session_id,
     range: lensDateRange(params.from, params.to),
   }
 }

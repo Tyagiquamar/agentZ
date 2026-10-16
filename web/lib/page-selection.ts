@@ -64,9 +64,8 @@ export function selectionGroups(page: SelectionPage, selection: PageSelection): 
     case "workflows/triggers/runs/graph":
       return [["agent_name"], ["workflow_name"], ["run_name"]]
     case "lens/traces":
-      return [["agent_name", "app_client_id"], ["session_id"]]
     case "lens/mcp":
-      return [["agent_name", "app_client_id"]]
+      return [["agent_name", "app_client_id"], ["session_id"]]
     default:
       return [["agent_name"]]
   }

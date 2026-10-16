@@ -269,29 +269,55 @@ func (r *ExtAuthRuntimeReconciler) reconcileDelegationTracing(ctx context.Contex
 			Expression: agw.CELExpression("metadata.agentz_observability." + field),
 		})
 	}
+	// Registration controls which native metadata is accepted as conversation identity.
+	agentKind := `default(metadata.agentz_observability.agent_kind, "")`
+	attrs = append(attrs, agw.AttributeAdd{
+		Name:       "agentz.agent_kind",
+		Expression: agw.CELExpression(agentKind),
+	})
 	if gateway == inference.GatewayName {
 		attrs = append(attrs,
-			agw.AttributeAdd{Name: "llm.input_messages", Expression: "json(request.body)"},
+			agw.AttributeAdd{
+				Name:       "session.id",
+				Expression: agw.CELExpression(agentKind + ` == "codex" ? default(request.headers["thread-id"], "") : (` + agentKind + ` == "claude" ? default(request.headers["x-claude-code-session-id"], "") : "")`),
+			},
+			agw.AttributeAdd{
+				Name:       "agentz.turn_id",
+				Expression: agw.CELExpression(agentKind + ` == "codex" ? default(json(request.headers["x-codex-turn-metadata"]).turn_id, "") : (` + agentKind + ` == "claude" ? default(request.headers["x-claude-code-prompt-id"], "") : "")`),
+			},
+			agw.AttributeAdd{Name: "llm.input_messages", Expression: "string(request.body)"},
 			agw.AttributeAdd{
 				Name:       "gen_ai.request.model",
 				Expression: "default(llm.requestModel, json(request.body).model)",
 			},
 			agw.AttributeAdd{
 				Name:       "llm.output_messages",
-				Expression: `{"completion": default(llm.completion, []), "tool_calls": default(llm.toolCalls, [])}`,
+				Expression: `toJson({"completion": default(llm.completion, []), "tool_calls": default(llm.toolCalls, [])})`,
 			},
 		)
 	}
 	if gateway == mcp.GatewayName {
 		attrs = append(attrs,
 			agw.AttributeAdd{
-				Name:       "tool.parameters",
-				Expression: "default(mcp.tool.arguments, json(request.body).params.arguments)",
+				Name:       "session.id",
+				Expression: agw.CELExpression(agentKind + ` == "codex" ? default(json(request.body).params._meta["x-codex-turn-metadata"].thread_id, "") : ""`),
 			},
-			agw.AttributeAdd{Name: "output.value", Expression: "mcp.tool.result"},
+			agw.AttributeAdd{
+				Name:       "agentz.turn_id",
+				Expression: agw.CELExpression(agentKind + ` == "codex" ? default(json(request.body).params._meta["x-codex-turn-metadata"].turn_id, "") : ""`),
+			},
+			agw.AttributeAdd{
+				Name:       "gen_ai.tool.call.id",
+				Expression: agw.CELExpression(agentKind + ` == "claude" ? default(json(request.body).params._meta["claudecode/toolUseId"], "") : (` + agentKind + ` == "codex" ? default(json(request.body).params._meta.callId, "") : "")`),
+			},
+			agw.AttributeAdd{
+				Name:       "tool.parameters",
+				Expression: "toJson(default(mcp.tool.arguments, json(request.body).params.arguments))",
+			},
+			agw.AttributeAdd{Name: "output.value", Expression: "toJson(mcp.tool.result)"},
 			agw.AttributeAdd{
 				Name:       "tool.error",
-				Expression: "response.code >= 400 ? default(mcp.tool.error, string(response.body)) : mcp.tool.error",
+				Expression: "toJson(response.code >= 400 ? default(mcp.tool.error, string(response.body)) : mcp.tool.error)",
 			},
 			agw.AttributeAdd{Name: "mcp.request.id", Expression: "json(request.body).id"},
 			agw.AttributeAdd{

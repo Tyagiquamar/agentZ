@@ -3,7 +3,7 @@
 import * as React from "react"
 import dagre from "@dagrejs/dagre"
 import type { GraphLabel as DagreGraphLabel, NodeLabel as DagreNodeLabel } from "@dagrejs/dagre"
-import { AppWindowIcon, BotIcon, GaugeIcon, HammerIcon, HistoryIcon } from "lucide-react"
+import { GaugeIcon, HammerIcon, HistoryIcon } from "lucide-react"
 import {
   Handle,
   Position,
@@ -25,6 +25,7 @@ import { mcpConnectionFallbackIcon, renderMcpServerIcon } from "@/app/(app)/mcps
 import { formatAge } from "@/lib/format"
 import type { McpGraphEdge, McpGraphResponse } from "@/lib/gateway/client"
 
+import { LensSourceIcon } from "../lens-filters"
 import type { LensSubject } from "@/data/types"
 
 type McpGraphData = Pick<McpGraphResponse, "connections" | "tools" | "edges">
@@ -45,18 +46,9 @@ type FlowHandles = {
 }
 
 type McpNodeData =
-  | {
-      kind: "agent" | "app" | "connection"
-      label: string
-      handles: FlowHandles
-      serverURL?: string
-    }
-  | {
-      kind: "tool"
-      label: string
-      handles: FlowHandles
-      metrics: ToolMetrics
-    }
+  | { kind: "subject"; subject: LensSubject; label: string; handles: FlowHandles }
+  | { kind: "connection"; label: string; handles: FlowHandles; serverURL?: string }
+  | { kind: "tool"; label: string; handles: FlowHandles; metrics: ToolMetrics }
 
 type McpCanvasNode = FlowNode<McpNodeData, "mcp">
 type McpCanvasEdge = FlowEdge<Record<string, never>, "animated">
@@ -82,7 +74,7 @@ const mcpNodeTypes = {
  * McpGraph renders a subject, its selected connections and executed tools.
  */
 export function McpGraph({ graph, subject }: McpGraphProps) {
-  const rootID = subject.kind === "app" ? `app:${subject.clientID}` : `agent:${subject.name}`
+  const rootID = subject.kind !== "agent" ? `app:${subject.clientID}` : `agent:${subject.name}`
   const edgeCounts = React.useMemo(() => {
     return graph.edges.reduce(
       (counts, edge) => {
@@ -126,7 +118,8 @@ export function McpGraph({ graph, subject }: McpGraphProps) {
     return applyLayout(graph, [
       {
         data: {
-          kind: subject.kind,
+          kind: "subject",
+          subject,
           label: subject.name,
           handles: {
             source: (edgeCounts.source.get(rootID) ?? 0) > 0,
@@ -311,11 +304,15 @@ function McpNodeCircle({ data }: FlowNodeProps<McpCanvasNode>) {
   const serverURL = data.kind === "connection" ? data.serverURL : undefined
   let icon: React.ReactNode
   switch (data.kind) {
-    case "agent":
-      icon = <BotIcon className="size-8" />
-      break
-    case "app":
-      icon = <AppWindowIcon className="size-8" />
+    case "subject":
+      icon = (
+        <LensSourceIcon
+          kind={
+            data.subject.kind === "external-agent" ? data.subject.providerKind : data.subject.kind
+          }
+          className="size-8"
+        />
+      )
       break
     case "connection":
       icon = renderMcpServerIcon(
@@ -329,7 +326,7 @@ function McpNodeCircle({ data }: FlowNodeProps<McpCanvasNode>) {
       break
   }
   const tone =
-    data.kind === "agent" || data.kind === "app"
+    data.kind === "subject"
       ? "border-primary/30 bg-background text-primary dark:bg-accent"
       : "border-border bg-background text-foreground dark:bg-accent"
   const rootClassName =

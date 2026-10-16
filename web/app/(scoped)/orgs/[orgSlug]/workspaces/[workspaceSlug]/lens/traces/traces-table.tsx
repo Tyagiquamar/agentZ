@@ -125,6 +125,9 @@ const columns: ColumnDef<TraceListItem>[] = [
     header: "Tokens",
     cell: ({ row }) => {
       const trace = row.original
+      if (trace.inputTokens === null || trace.outputTokens === null) {
+        return <div aria-hidden="true" className="h-1.5 rounded-full bg-muted" />
+      }
       const outputWidth = trace.totalTokens === 0 ? 0 : trace.tokenRatio * 100
       const inputWidth = trace.totalTokens === 0 ? 0 : 100 - outputWidth
 
@@ -646,7 +649,7 @@ function SpanDetailViewer({
     <TraceInspectorDetail
       title={title}
       started={span?.startLabel ?? trace?.startedDate}
-      duration={span?.duration ?? trace?.duration}
+      duration={span ? span.duration : trace?.duration}
       tokens={span?.totalTokens ?? undefined}
     >
       {span &&
@@ -718,18 +721,16 @@ function SpanJSONSections({
     ["kind", span.kind],
     ["status_code", span.statusCode],
     ["operation", span.operationLabel],
-    ["input_tokens", span.inputTokens === null ? "Unknown" : String(span.inputTokens)],
-    [
-      "cached_input_tokens",
-      span.cachedInputTokens === null ? "Unknown" : String(span.cachedInputTokens),
-    ],
-    [
-      "cached_write_tokens",
-      span.cachedWriteTokens === null ? "Unknown" : String(span.cachedWriteTokens),
-    ],
-    ["output_tokens", span.outputTokens === null ? "Unknown" : String(span.outputTokens)],
-    ["cost_usd", span.costUSD === null ? "Unknown" : String(span.costUSD)],
   ]
+  const usage = [
+    ["input_tokens", span.inputTokens],
+    ["cached_input_tokens", span.cachedInputTokens],
+    ["cached_write_tokens", span.cachedWriteTokens],
+    ["output_tokens", span.outputTokens],
+  ] as const
+  for (const [name, value] of usage) {
+    if (value !== null) rows.push([name, String(value)])
+  }
   if (span.subject.kind === "agent") {
     rows.push(
       ["session.id", span.subject.sessionId],
@@ -746,15 +747,9 @@ function SpanJSONSections({
       ) : null}
       {detail?.payload.map((section) =>
         section.empty ? null : (
-          <TraceContentPanel key={section.key} title={section.label} code={section.json} />
+          <TraceContentPanel key={section.key} title={section.label} {...section.content} />
         )
       )}
-      {detail?.resourceAttributes && !detail.resourceAttributes.empty ? (
-        <TraceContentPanel title="Resource attributes" code={detail.resourceAttributes.json} />
-      ) : null}
-      {detail?.spanAttributes && !detail.spanAttributes.empty ? (
-        <TraceContentPanel title="Span attributes" code={detail.spanAttributes.json} />
-      ) : null}
       <JSONPanel title="Usage" rows={rows} />
     </div>
   )

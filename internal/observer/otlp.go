@@ -210,8 +210,24 @@ func appOperationFromOTLPSpan(sp *tracepb.Span, resourceAttrs map[string]*common
 		ErrorMessage:       cmp.Or(attrs[attrErrorMessage].GetStringValue(), sp.GetStatus().GetMessage()),
 		Model:              cmp.Or(attrs[attrGenAIResponseModel].GetStringValue(), attrs[attrGenAIRequestModel].GetStringValue()),
 		ToolName:           attrs[attrGenAIToolName].GetStringValue(),
-		SessionID:          attrs[attrMCPSessionID].GetStringValue(),
 		ResourceAttributes: jsonObject(attrsForStorage(resourceAttrs)),
+	}
+	switch kind := attrs["agentz.agent_kind"].GetStringValue(); kind {
+	case "claude", "codex":
+		operation.AgentKind = kind
+		// Native IDs are opaque labels. Ignore invalid optional labels without
+		// rejecting an otherwise valid gateway observation.
+		labels := map[string]*string{
+			attrSessionID:         &operation.SessionID,
+			"agentz.turn_id":      &operation.TurnID,
+			"gen_ai.tool.call.id": &operation.ToolCallID,
+		}
+		for key, target := range labels {
+			value := attrs[key].GetStringValue()
+			if len(value) <= 8192 {
+				*target = value
+			}
+		}
 	}
 	identities := []string{
 		operation.OrganizationID, operation.WorkspaceID, operation.ClientID,

@@ -197,12 +197,12 @@ func (installed *installation) claude(ctx context.Context, command *cli.Command,
 		if runtime.GOOS == "windows" {
 			name = strings.ToUpper(name)
 		}
-		return name == "CLAUDE_CONFIG_DIR" || name == "CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY" ||
+		return name == "CLAUDE_CONFIG_DIR" || name == "CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY" || name == "CLAUDE_CODE_GATEWAY_HINT_HEADERS" ||
 			strings.HasPrefix(name, "ANTHROPIC_") || name == "CLAUDE_CODE_OAUTH_TOKEN" ||
 			name == "CLAUDE_CODE_USE_BEDROCK" || name == "CLAUDE_CODE_USE_VERTEX" ||
 			name == "CLAUDE_CODE_USE_FOUNDRY" || name == "CLAUDE_CODE_USE_MANTLE"
 	})
-	child.Env = append(child.Env, "CLAUDE_CONFIG_DIR="+profile, "CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1")
+	child.Env = append(child.Env, "CLAUDE_CONFIG_DIR="+profile, "CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1", "CLAUDE_CODE_GATEWAY_HINT_HEADERS=1")
 	if err := child.Run(); err != nil {
 		if exit, ok := errors.AsType[*exec.ExitError](err); ok {
 			return cli.Exit("Claude exited", exit.ExitCode())

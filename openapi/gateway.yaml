@@ -1079,18 +1079,12 @@ components:
       properties:
         payload:
           $ref: '#/components/schemas/AppPayload'
-        resource_attributes:
-          type: string
         span:
           $ref: '#/components/schemas/AppSpan'
-        span_attributes:
-          type: string
         tool_error:
           type: string
       required:
       - span
-      - resource_attributes
-      - span_attributes
       - payload
       - tool_error
       type: object
@@ -1111,6 +1105,18 @@ components:
       - output_messages
       - tool_arguments
       - tool_result
+      type: object
+    AppSession:
+      additionalProperties: false
+      properties:
+        last_seen:
+          format: date-time
+          type: string
+        session_id:
+          type: string
+      required:
+      - session_id
+      - last_seen
       type: object
     AppSpan:
       additionalProperties: false
@@ -1133,10 +1139,12 @@ components:
         duration_ms:
           format: double
           minimum: 0
+          nullable: true
           type: number
         duration_ns:
           format: int64
           minimum: 0
+          nullable: true
           type: integer
         end_time:
           format: date-time
@@ -4845,6 +4853,11 @@ components:
     LensApp:
       additionalProperties: false
       properties:
+        agent_kind:
+          enum:
+          - claude
+          - codex
+          type: string
         client_id:
           type: string
         name:
@@ -4888,6 +4901,22 @@ components:
       required:
       - agents
       - next_page_token
+      type: object
+    ListAppSessionsResponse:
+      additionalProperties: false
+      properties:
+        has_next_page:
+          type: boolean
+        next_page_token:
+          type: string
+        sessions:
+          items:
+            $ref: '#/components/schemas/AppSession'
+          type: array
+      required:
+      - sessions
+      - next_page_token
+      - has_next_page
       type: object
     ListAppSpansResponse:
       additionalProperties: false
@@ -25368,18 +25397,7 @@ components:
       - ingested_at
       type: object
     SpanDetail:
-      allOf:
-      - $ref: '#/components/schemas/Span'
-      - additionalProperties: false
-        properties:
-          resource_attributes:
-            $ref: '#/components/schemas/JSONValue'
-          span_attributes:
-            $ref: '#/components/schemas/JSONValue'
-        required:
-        - resource_attributes
-        - span_attributes
-        type: object
+      $ref: '#/components/schemas/Span'
     SpanDetailResponse:
       additionalProperties: false
       properties:
@@ -29638,6 +29656,7 @@ paths:
       - $ref: '#/components/parameters/AgentNamePath'
       - $ref: '#/components/parameters/FromDateQuery'
       - $ref: '#/components/parameters/ToDateQuery'
+      - $ref: '#/components/parameters/SessionIDQuery'
       responses:
         "200":
           content:
@@ -29868,6 +29887,7 @@ paths:
           type: string
       - $ref: '#/components/parameters/FromDateQuery'
       - $ref: '#/components/parameters/ToDateQuery'
+      - $ref: '#/components/parameters/SessionIDQuery'
       responses:
         "200":
           content:
@@ -29927,6 +29947,40 @@ paths:
       summary: Get an app operation and its captured content
       tags:
       - lens
+  /api/lens/apps/{clientID}/sessions:
+    get:
+      operationId: listAppSessions
+      parameters:
+      - in: path
+        name: clientID
+        required: true
+        schema:
+          minLength: 1
+          type: string
+      - $ref: '#/components/parameters/LimitQuery'
+      - $ref: '#/components/parameters/PageTokenQuery'
+      - $ref: '#/components/parameters/SessionIDQuery'
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListAppSessionsResponse'
+          description: Observed sessions, ordered by last activity and native session ID.
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "500":
+          $ref: '#/components/responses/InternalError'
+      security:
+      - GatewayBearer:
+        - observability.read
+      summary: List observed native sessions for a registered external agent
+      tags:
+      - lens
   /api/lens/apps/{clientID}/traces:
     get:
       description: Groups attributed inference and MCP tool operations by trace ID. Apps do not require an Agent or an OpenCode session.
@@ -29942,6 +29996,7 @@ paths:
       - $ref: '#/components/parameters/PageTokenQuery'
       - $ref: '#/components/parameters/StartedAfterQuery'
       - $ref: '#/components/parameters/StartedBeforeQuery'
+      - $ref: '#/components/parameters/SessionIDQuery'
       responses:
         "200":
           content:
@@ -30014,6 +30069,7 @@ paths:
           type: string
       - $ref: '#/components/parameters/StartedAfterQuery'
       - $ref: '#/components/parameters/StartedBeforeQuery'
+      - $ref: '#/components/parameters/SessionIDQuery'
       responses:
         "200":
           content:

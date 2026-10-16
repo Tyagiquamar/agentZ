@@ -74,7 +74,6 @@ type UseOpencodeChatResult = {
   questions: QuestionRequest[]
   questionRequest?: QuestionRequest
   session?: Session
-  sessionCost: number
   sessionStatus?: SessionStatus
   reload: () => void
   reconnectStream: () => void
@@ -1056,10 +1055,6 @@ export function useOpencodeChat(
     reconnectStream,
     reload,
     session: session.data ?? undefined,
-    sessionCost: messages.reduce(
-      (total, m) => (m.role === "assistant" ? total + m.cost : total),
-      0
-    ),
     sessionStatus,
     streamError,
     textByPart,

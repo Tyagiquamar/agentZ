@@ -18,7 +18,7 @@ var (
 	ErrBatchAlreadyClosed = errors.New("batch already closed")
 )
 
-const insertAppOperation = `-- name: InsertAppOperation :batchexec
+const insertAppOperation = `-- name: InsertAppOperation :batchone
 WITH operation AS (
   INSERT INTO observer_app_operations (
     organization_id,
@@ -47,6 +47,9 @@ WITH operation AS (
     model,
     tool_name,
     session_id,
+    turn_id,
+    agent_kind,
+    tool_call_id,
     input_tokens,
     output_tokens,
     reasoning_tokens,
@@ -56,6 +59,11 @@ WITH operation AS (
     resource_attributes,
     span_attributes
   ) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
     $6,
     $7,
     $8,
@@ -87,15 +95,94 @@ WITH operation AS (
     $34,
     $35,
     $36,
-    $37,
-    $38,
-    $39
+    $37
   )
   ON CONFLICT (organization_id, workspace_id, client_id, trace_id, span_id, start_time) DO NOTHING
+  RETURNING id, organization_id, workspace_id, client_id, app_name, grant_id, user_id, resource_kind, resource_namespace, resource_name, resource_uid, target_id, trace_id, span_id, parent_span_id, start_time, end_time, duration_ns, name, span_class, operation_name, status_code, error_type, error_message, model, tool_name, session_id, input_tokens, output_tokens, reasoning_tokens, cached_input_tokens, cached_write_tokens, cost_usd, resource_attributes, span_attributes, ingested_at, agent_kind, turn_id, tool_call_id, run_id, source_operation_id, result_id, membership_inferred
+), run AS (
+  INSERT INTO observer_app_operations (
+    organization_id, workspace_id, client_id, app_name, grant_id, user_id,
+    resource_kind, resource_namespace, resource_name, resource_uid, target_id,
+    trace_id, span_id, start_time, end_time, duration_ns, name, span_class, operation_name,
+    status_code, session_id, turn_id, agent_kind
+  )
+  SELECT organization_id, workspace_id, client_id, app_name, grant_id, user_id,
+    'turn', resource_namespace, resource_name, resource_uid, target_id,
+    uuid_send(gen_random_uuid()), substring(uuid_send(gen_random_uuid()) from 1 for 8),
+    start_time, end_time, duration_ns, 'Agent turn', 'session', 'invoke_agent', status_code,
+    session_id, turn_id, agent_kind
+  FROM operation
+  WHERE agent_kind IN ('claude', 'codex') AND session_id <> '' AND turn_id <> ''
+  ON CONFLICT (organization_id, workspace_id, client_id, user_id, session_id, turn_id) WHERE resource_kind = 'turn'
+  DO UPDATE SET
+    start_time = LEAST(observer_app_operations.start_time, EXCLUDED.start_time),
+    end_time = GREATEST(observer_app_operations.end_time, EXCLUDED.end_time),
+    duration_ns = (EXTRACT(EPOCH FROM GREATEST(observer_app_operations.end_time, EXCLUDED.end_time)
+      - LEAST(observer_app_operations.start_time, EXCLUDED.start_time)) * 1000000000)::bigint,
+    status_code = CASE WHEN observer_app_operations.status_code = 'ERROR' THEN 'ERROR' ELSE EXCLUDED.status_code END,
+    ingested_at = now()
   RETURNING id
+), output_calls AS MATERIALIZED (
+  SELECT DISTINCT ON (item.value->>'id') item.value->>'id' AS call_id,
+    item.value->>'name' AS name, item.value->'arguments' AS arguments
+  FROM operation op
+  CROSS JOIN LATERAL jsonb_path_query($38::jsonb, '$.tool_calls[*]') WITH ORDINALITY AS item(value, ordinal)
+  WHERE op.resource_kind = 'inference' AND op.agent_kind IN ('claude', 'codex')
+    AND op.session_id <> '' AND op.turn_id <> ''
+    AND item.value->>'id' <> '' AND item.value->>'name' <> ''
+  ORDER BY item.value->>'id', item.ordinal
+), tools AS (
+  INSERT INTO observer_app_operations (
+    organization_id, workspace_id, client_id, app_name, grant_id, user_id,
+    resource_kind, resource_namespace, resource_name, resource_uid, target_id,
+    trace_id, span_id, start_time, end_time, duration_ns, name, span_class, operation_name,
+    status_code, tool_name, session_id, turn_id, agent_kind, tool_call_id, source_operation_id
+  )
+  SELECT op.organization_id, op.workspace_id, op.client_id, op.app_name, op.grant_id, op.user_id,
+    'tool', op.resource_namespace, op.resource_name, op.resource_uid, op.target_id,
+    op.trace_id, substring(uuid_send(gen_random_uuid()) from 1 for 8), op.end_time, op.end_time, 0,
+    call.name, 'tool', 'execute_tool', 'UNSET', call.name, op.session_id, op.turn_id,
+    op.agent_kind, call.call_id, op.id
+  FROM operation op CROSS JOIN output_calls call
+  ON CONFLICT (organization_id, workspace_id, client_id, user_id, session_id, turn_id, tool_call_id)
+    WHERE resource_kind = 'tool' DO NOTHING
+  RETURNING id, tool_call_id
+), tool_payloads AS (
+  INSERT INTO observer_app_operation_payloads (operation_id, tool_arguments)
+  SELECT tools.id, COALESCE(call.arguments, 'null'::jsonb) FROM tools JOIN output_calls call ON call.call_id = tools.tool_call_id
+), input_results AS MATERIALIZED (
+  SELECT block.value->>'tool_use_id' AS call_id,
+    COALESCE(block.value->'is_error' = 'true'::jsonb, false) AS is_error, block.ordinal, 'messages'::text AS protocol
+  FROM jsonb_path_query($39::jsonb,
+    '$.messages[*] ? (@.role == "user").content[*] ? (@.type == "tool_result")') WITH ORDINALITY block(value, ordinal)
+  WHERE block.value ? 'content'
+  UNION ALL
+  SELECT block.value->>'call_id', false, block.ordinal, 'responses'::text
+  FROM jsonb_path_query($39::jsonb,
+    '$.input[*] ? (@.type == "function_call_output" || @.type == "custom_tool_call_output")') WITH ORDINALITY block(value, ordinal)
+  WHERE block.value ? 'output'
+  UNION ALL
+  SELECT block.value->>'tool_call_id', false, block.ordinal, 'chat'::text
+  FROM jsonb_path_query($39::jsonb,
+    '$.messages[*] ? (@.role == "tool")') WITH ORDINALITY block(value, ordinal)
+  WHERE block.value ? 'content'
+), results AS (
+  INSERT INTO observer_app_tool_results (
+    organization_id, workspace_id, client_id, user_id, session_id, source_turn_id, tool_call_id,
+    source_operation_id, source_start_time, source_ordinal, protocol, is_error
+  )
+  SELECT op.organization_id, op.workspace_id, op.client_id, op.user_id, op.session_id, op.turn_id, input.call_id,
+    op.id, op.start_time, input.ordinal, input.protocol, input.is_error
+  FROM operation op CROSS JOIN input_results input
+  WHERE op.resource_kind = 'inference' AND op.agent_kind IN ('claude', 'codex')
+    AND op.session_id <> '' AND op.turn_id <> '' AND input.call_id <> ''
+  ON CONFLICT (source_operation_id, protocol, source_ordinal) DO NOTHING
+), payload AS (
+  INSERT INTO observer_app_operation_payloads (operation_id, input_messages, output_messages, tool_arguments, tool_result, tool_error)
+  SELECT id, $39, $38, $40, $41, $42
+  FROM operation
 )
-INSERT INTO observer_app_operation_payloads (operation_id, input_messages, output_messages, tool_arguments, tool_result, tool_error)
-SELECT id, $1, $2, $3, $4, $5 FROM operation
+SELECT COALESCE((SELECT id FROM operation), 0)::bigint AS id
 `
 
 type InsertAppOperationBatchResults struct {
@@ -105,11 +192,6 @@ type InsertAppOperationBatchResults struct {
 }
 
 type InsertAppOperationParams struct {
-	InputMessages      []byte        `json:"input_messages"`
-	OutputMessages     []byte        `json:"output_messages"`
-	ToolArguments      []byte        `json:"tool_arguments"`
-	ToolResult         []byte        `json:"tool_result"`
-	ToolError          []byte        `json:"tool_error"`
 	OrganizationID     string        `json:"organization_id"`
 	WorkspaceID        string        `json:"workspace_id"`
 	ClientID           string        `json:"client_id"`
@@ -136,6 +218,9 @@ type InsertAppOperationParams struct {
 	Model              string        `json:"model"`
 	ToolName           string        `json:"tool_name"`
 	SessionID          string        `json:"session_id"`
+	TurnID             string        `json:"turn_id"`
+	AgentKind          string        `json:"agent_kind"`
+	ToolCallID         string        `json:"tool_call_id"`
 	InputTokens        pgtype.Int8   `json:"input_tokens"`
 	OutputTokens       pgtype.Int8   `json:"output_tokens"`
 	ReasoningTokens    pgtype.Int8   `json:"reasoning_tokens"`
@@ -144,17 +229,17 @@ type InsertAppOperationParams struct {
 	CostUsd            pgtype.Float8 `json:"cost_usd"`
 	ResourceAttributes []byte        `json:"resource_attributes"`
 	SpanAttributes     []byte        `json:"span_attributes"`
+	OutputMessages     []byte        `json:"output_messages"`
+	InputMessages      []byte        `json:"input_messages"`
+	ToolArguments      []byte        `json:"tool_arguments"`
+	ToolResult         []byte        `json:"tool_result"`
+	ToolError          []byte        `json:"tool_error"`
 }
 
 func (q *Queries) InsertAppOperation(ctx context.Context, arg []InsertAppOperationParams) *InsertAppOperationBatchResults {
 	batch := &pgx.Batch{}
 	for _, a := range arg {
 		vals := []interface{}{
-			a.InputMessages,
-			a.OutputMessages,
-			a.ToolArguments,
-			a.ToolResult,
-			a.ToolError,
 			a.OrganizationID,
 			a.WorkspaceID,
 			a.ClientID,
@@ -181,6 +266,9 @@ func (q *Queries) InsertAppOperation(ctx context.Context, arg []InsertAppOperati
 			a.Model,
 			a.ToolName,
 			a.SessionID,
+			a.TurnID,
+			a.AgentKind,
+			a.ToolCallID,
 			a.InputTokens,
 			a.OutputTokens,
 			a.ReasoningTokens,
@@ -189,6 +277,11 @@ func (q *Queries) InsertAppOperation(ctx context.Context, arg []InsertAppOperati
 			a.CostUsd,
 			a.ResourceAttributes,
 			a.SpanAttributes,
+			a.OutputMessages,
+			a.InputMessages,
+			a.ToolArguments,
+			a.ToolResult,
+			a.ToolError,
 		}
 		batch.Queue(insertAppOperation, vals...)
 	}
@@ -196,18 +289,20 @@ func (q *Queries) InsertAppOperation(ctx context.Context, arg []InsertAppOperati
 	return &InsertAppOperationBatchResults{br, len(arg), false}
 }
 
-func (b *InsertAppOperationBatchResults) Exec(f func(int, error)) {
+func (b *InsertAppOperationBatchResults) QueryRow(f func(int, int64, error)) {
 	defer b.br.Close()
 	for t := 0; t < b.tot; t++ {
+		var id int64
 		if b.closed {
 			if f != nil {
-				f(t, ErrBatchAlreadyClosed)
+				f(t, id, ErrBatchAlreadyClosed)
 			}
 			continue
 		}
-		_, err := b.br.Exec()
+		row := b.br.QueryRow()
+		err := row.Scan(&id)
 		if f != nil {
-			f(t, err)
+			f(t, id, err)
 		}
 	}
 }

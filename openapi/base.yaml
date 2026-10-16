@@ -70,6 +70,40 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /api/lens/apps/{clientID}/sessions:
+    get:
+      operationId: listAppSessions
+      tags:
+      - lens
+      summary: List observed native sessions for a registered external agent
+      parameters:
+      - name: clientID
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+      - $ref: '#/components/parameters/LimitQuery'
+      - $ref: '#/components/parameters/PageTokenQuery'
+      - $ref: '#/components/parameters/SessionIDQuery'
+      security:
+      - GatewayBearer:
+        - observability.read
+      responses:
+        '200':
+          description: Observed sessions, ordered by last activity and native session ID.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListAppSessionsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /api/lens/apps/{clientID}/traces:
     get:
       operationId: listAppTraces
@@ -88,6 +122,7 @@ paths:
       - $ref: '#/components/parameters/PageTokenQuery'
       - $ref: '#/components/parameters/StartedAfterQuery'
       - $ref: '#/components/parameters/StartedBeforeQuery'
+      - $ref: '#/components/parameters/SessionIDQuery'
       security:
       - GatewayBearer:
         - observability.read
@@ -122,6 +157,7 @@ paths:
           minLength: 1
       - $ref: '#/components/parameters/StartedAfterQuery'
       - $ref: '#/components/parameters/StartedBeforeQuery'
+      - $ref: '#/components/parameters/SessionIDQuery'
       security:
       - GatewayBearer:
         - observability.read
@@ -231,6 +267,7 @@ paths:
           minLength: 1
       - $ref: '#/components/parameters/FromDateQuery'
       - $ref: '#/components/parameters/ToDateQuery'
+      - $ref: '#/components/parameters/SessionIDQuery'
       security:
       - GatewayBearer:
         - observability.read
@@ -2675,6 +2712,7 @@ paths:
       - $ref: '#/components/parameters/AgentNamePath'
       - $ref: '#/components/parameters/FromDateQuery'
       - $ref: '#/components/parameters/ToDateQuery'
+      - $ref: '#/components/parameters/SessionIDQuery'
       responses:
         '200':
           description: Graph-ready MCP observability for an agent.
@@ -5294,6 +5332,9 @@ components:
           type: string
         name:
           type: string
+        agent_kind:
+          type: string
+          enum: [claude, codex]
       required:
       - client_id
       - name
@@ -5307,6 +5348,34 @@ components:
             $ref: '#/components/schemas/LensApp'
       required:
       - apps
+    AppSession:
+      type: object
+      additionalProperties: false
+      properties:
+        session_id:
+          type: string
+        last_seen:
+          type: string
+          format: date-time
+      required:
+      - session_id
+      - last_seen
+    ListAppSessionsResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        sessions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AppSession'
+        next_page_token:
+          type: string
+        has_next_page:
+          type: boolean
+      required:
+      - sessions
+      - next_page_token
+      - has_next_page
     AppTrace:
       type: object
       additionalProperties: false
@@ -5416,10 +5485,12 @@ components:
           type: string
           format: date-time
         duration_ns:
+          nullable: true
           type: integer
           format: int64
           minimum: 0
         duration_ms:
+          nullable: true
           type: number
           format: double
           minimum: 0
@@ -5571,18 +5642,12 @@ components:
       properties:
         span:
           $ref: '#/components/schemas/AppSpan'
-        resource_attributes:
-          type: string
-        span_attributes:
-          type: string
         payload:
           $ref: '#/components/schemas/AppPayload'
         tool_error:
           type: string
       required:
       - span
-      - resource_attributes
-      - span_attributes
       - payload
       - tool_error
     AppTraceChartPoint:
@@ -8600,18 +8665,7 @@ components:
       - ingested_at
 
     SpanDetail:
-      allOf:
-      - $ref: '#/components/schemas/Span'
-      - type: object
-        additionalProperties: false
-        properties:
-          resource_attributes:
-            $ref: '#/components/schemas/JSONValue'
-          span_attributes:
-            $ref: '#/components/schemas/JSONValue'
-        required:
-        - resource_attributes
-        - span_attributes
+      $ref: '#/components/schemas/Span'
 
     SpanPayload:
       type: object

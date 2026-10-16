@@ -5,10 +5,22 @@ import * as z from "zod"
 export const zLensApp = z.object({
   client_id: z.string(),
   name: z.string(),
+  agent_kind: z.enum(["claude", "codex"]).optional(),
 })
 
 export const zListLensAppsResponse = z.object({
   apps: z.array(zLensApp),
+})
+
+export const zAppSession = z.object({
+  session_id: z.string(),
+  last_seen: z.iso.datetime({ offset: true }),
+})
+
+export const zListAppSessionsResponse = z.object({
+  sessions: z.array(zAppSession),
+  next_page_token: z.string(),
+  has_next_page: z.boolean(),
 })
 
 /**
@@ -303,10 +315,14 @@ export const zAppSpan = z.object({
   parent_span_id: zOptionalSpanId,
   start_time: z.iso.datetime({ offset: true }),
   end_time: z.iso.datetime({ offset: true }),
-  duration_ns: z.coerce.bigint().gte(BigInt(0)).max(BigInt("9223372036854775807"), {
-    error: "Invalid value: Expected int64 to be <= 9223372036854775807",
-  }),
-  duration_ms: z.number().gte(0),
+  duration_ns: z.coerce
+    .bigint()
+    .gte(BigInt(0))
+    .max(BigInt("9223372036854775807"), {
+      error: "Invalid value: Expected int64 to be <= 9223372036854775807",
+    })
+    .nullable(),
+  duration_ms: z.number().gte(0).nullable(),
   name: z.string(),
   span_class: z.string(),
   operation_name: z.string(),
@@ -379,8 +395,6 @@ export const zListAppSpansResponse = z.object({
  */
 export const zAppOperationResponse = z.object({
   span: zAppSpan,
-  resource_attributes: z.string(),
-  span_attributes: z.string(),
   payload: zAppPayload,
   tool_error: z.string(),
 })
@@ -1354,6 +1368,8 @@ export const zListSpansResponse = z.object({
   next_page_token: z.string(),
 })
 
+export const zSpanDetail = zSpan
+
 export const zMcpGraphAgent = z.object({
   name: zAgentName,
 })
@@ -1670,13 +1686,6 @@ export const zWorkflow = z.object({
   updated_at: z.iso.datetime({ offset: true }),
 })
 
-export const zSpanDetail = zSpan.and(
-  z.object({
-    resource_attributes: zJsonValue,
-    span_attributes: zJsonValue,
-  })
-)
-
 export const zSpanPayload = z.object({
   input_messages: zJsonValue,
   output_messages: zJsonValue,
@@ -1685,7 +1694,7 @@ export const zSpanPayload = z.object({
 })
 
 export const zSpanDetailResponse = z.object({
-  span: zSpanDetail,
+  span: zSpan,
   payload: zSpanPayload,
 })
 
@@ -4032,6 +4041,21 @@ export const zIdempotencyKeyHeader = z.string().min(1).max(128)
  */
 export const zListLensAppsResponse2 = zListLensAppsResponse
 
+export const zListAppSessionsPath = z.object({
+  clientID: z.string().min(1),
+})
+
+export const zListAppSessionsQuery = z.object({
+  limit: z.int().gte(1).lte(200).optional().default(50),
+  page_token: z.string().min(1).optional(),
+  session_id: z.string().min(1).optional(),
+})
+
+/**
+ * Observed sessions, ordered by last activity and native session ID.
+ */
+export const zListAppSessionsResponse2 = zListAppSessionsResponse
+
 export const zListAppTracesPath = z.object({
   clientID: z.string().min(1),
 })
@@ -4041,6 +4065,7 @@ export const zListAppTracesQuery = z.object({
   page_token: z.string().min(1).optional(),
   started_after: z.iso.datetime({ offset: true }).optional(),
   started_before: z.iso.datetime({ offset: true }).optional(),
+  session_id: z.string().min(1).optional(),
 })
 
 /**
@@ -4055,6 +4080,7 @@ export const zGetAppTraceChartPath = z.object({
 export const zGetAppTraceChartQuery = z.object({
   started_after: z.iso.datetime({ offset: true }).optional(),
   started_before: z.iso.datetime({ offset: true }).optional(),
+  session_id: z.string().min(1).optional(),
 })
 
 /**
@@ -4096,6 +4122,7 @@ export const zGetAppMcpGraphPath = z.object({
 export const zGetAppMcpGraphQuery = z.object({
   from: z.iso.date(),
   to: z.iso.date(),
+  session_id: z.string().min(1).optional(),
 })
 
 /**
@@ -5166,6 +5193,7 @@ export const zGetMcpGraphPath = z.object({
 export const zGetMcpGraphQuery = z.object({
   from: z.iso.date(),
   to: z.iso.date(),
+  session_id: z.string().min(1).optional(),
 })
 
 /**

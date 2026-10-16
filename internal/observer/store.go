@@ -1,8 +1,11 @@
 package observer
 
 import (
+	"cmp"
 	"context"
+	"encoding/json"
 	"fmt"
+	"slices"
 
 	observerdb "github.com/accuknox/agentz/internal/observer/db"
 	"github.com/jackc/pgx/v5"
@@ -99,14 +102,8 @@ func (s *dbStore) insertBatch(ctx context.Context, b batch) error {
 	}
 
 	if len(b.apps) > 0 {
-		var batchErr error
-		q.InsertAppOperation(ctx, b.apps).Exec(func(_ int, err error) {
-			if batchErr == nil {
-				batchErr = err
-			}
-		})
-		if batchErr != nil {
-			return fmt.Errorf("insert app operations: %w", batchErr)
+		if err := insertAppOperationBatch(ctx, q, b.apps); err != nil {
+			return err
 		}
 	}
 
@@ -289,5 +286,155 @@ func insertTraceEventBatch(ctx context.Context, tx pgx.Tx, traces []traceSpanEve
 		return fmt.Errorf("upsert trace session summaries: %w", batchErr)
 	}
 
+	return nil
+}
+
+// appInvocation is the authenticated scope of a model-visible invocation. Session
+// is deliberately absent because Claude MCP requests do not supply it.
+type appInvocation struct {
+	OrganizationID string `json:"organization_id"`
+	WorkspaceID    string `json:"workspace_id"`
+	ClientID       string `json:"client_id"`
+	UserID         string `json:"user_id"`
+	CallID         string `json:"call_id"`
+}
+
+type appWireItem struct {
+	Type       string          `json:"type"`
+	Role       string          `json:"role"`
+	ID         string          `json:"id"`
+	CallID     string          `json:"call_id"`
+	ToolCallID string          `json:"tool_call_id"`
+	ToolUseID  string          `json:"tool_use_id"`
+	Content    json.RawMessage `json:"content"`
+}
+
+type appWireExchange struct {
+	ToolCalls []appWireItem   `json:"tool_calls"`
+	Messages  []appWireItem   `json:"messages"`
+	Input     json.RawMessage `json:"input"`
+}
+
+func insertAppOperationBatch(ctx context.Context, q *observerdb.Queries, operations []observerdb.InsertAppOperationParams) error {
+	invocations := make([]appInvocation, 0)
+	lockKeys := make([]string, 0)
+	seen := make(map[appInvocation]bool)
+	for _, op := range operations {
+		if op.AgentKind == "" {
+			continue
+		}
+		ids := []string{op.ToolCallID}
+		var output appWireExchange
+		if json.Unmarshal(op.OutputMessages, &output) == nil {
+			for _, call := range output.ToolCalls {
+				ids = append(ids, call.ID)
+			}
+		}
+		var input appWireExchange
+		if json.Unmarshal(op.InputMessages, &input) == nil {
+			for _, message := range input.Messages {
+				if message.Role == "tool" {
+					ids = append(ids, message.ToolCallID)
+					continue
+				}
+				if message.Role != "user" || len(message.Content) == 0 || message.Content[0] != '[' {
+					continue
+				}
+				var blocks []appWireItem
+				if json.Unmarshal(message.Content, &blocks) != nil {
+					continue
+				}
+				for _, block := range blocks {
+					if block.Type == "tool_result" {
+						ids = append(ids, block.ToolUseID)
+					}
+				}
+			}
+			// Responses accepts either text or an array of input items.
+			if len(input.Input) > 0 && input.Input[0] == '[' {
+				var items []appWireItem
+				if json.Unmarshal(input.Input, &items) == nil {
+					for _, item := range items {
+						if item.Type == "function_call_output" || item.Type == "custom_tool_call_output" {
+							ids = append(ids, item.CallID)
+						}
+					}
+				}
+			}
+		}
+		for _, id := range ids {
+			if id == "" {
+				continue
+			}
+			invocation := appInvocation{
+				OrganizationID: op.OrganizationID, WorkspaceID: op.WorkspaceID, ClientID: op.ClientID,
+				UserID: op.UserID, CallID: id,
+			}
+			if seen[invocation] {
+				continue
+			}
+			seen[invocation] = true
+			invocations = append(invocations, invocation)
+			key, err := json.Marshal(invocation)
+			if err != nil {
+				return fmt.Errorf("encode invocation lock key: %w", err)
+			}
+			lockKeys = append(lockKeys, string(key))
+		}
+	}
+	// Every writer takes the same ordered transaction locks before inserting any
+	// affected observations. Repair statements then see the preceding commit.
+	slices.Sort(lockKeys)
+	if len(lockKeys) > 0 {
+		if err := q.LockAppInvocationKeys(ctx, lockKeys); err != nil {
+			return fmt.Errorf("lock app invocations: %w", err)
+		}
+	}
+	// Root upserts follow the same order even when batches have no invocation IDs.
+	slices.SortStableFunc(operations, func(a, b observerdb.InsertAppOperationParams) int {
+		return cmp.Or(cmp.Compare(a.OrganizationID, b.OrganizationID), cmp.Compare(a.WorkspaceID, b.WorkspaceID),
+			cmp.Compare(a.ClientID, b.ClientID), cmp.Compare(a.UserID, b.UserID),
+			cmp.Compare(a.SessionID, b.SessionID), cmp.Compare(a.TurnID, b.TurnID))
+	})
+	ids := make([]int64, 0, len(operations))
+	var batchErr error
+	q.InsertAppOperation(ctx, operations).QueryRow(func(_ int, id int64, err error) {
+		if batchErr == nil {
+			batchErr = err
+		}
+		if id != 0 {
+			ids = append(ids, id)
+		}
+	})
+	if batchErr != nil {
+		return fmt.Errorf("insert app operations: %w", batchErr)
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	if err := q.AssignAppRuns(ctx, ids); err != nil {
+		return fmt.Errorf("assign app turns: %w", err)
+	}
+	if err := q.AssignAppToolRuns(ctx, ids); err != nil {
+		return fmt.Errorf("assign emitted tools: %w", err)
+	}
+	if len(invocations) == 0 {
+		return nil
+	}
+	keys, err := json.Marshal(invocations)
+	if err != nil {
+		return fmt.Errorf("encode app invocations: %w", err)
+	}
+	if err := q.RefreshAppRunCorrelations(ctx, keys); err != nil {
+		return fmt.Errorf("correlate app MCP calls: %w", err)
+	}
+	if err := q.RefreshAppToolResults(ctx, keys); err != nil {
+		return fmt.Errorf("correlate app tool results: %w", err)
+	}
+	params := observerdb.RefreshAppRunStatusesParams{OperationIds: ids, Invocations: keys}
+	err = q.RefreshAppRunStatuses(ctx, params)
+	if err != nil {
+		return fmt.Errorf("refresh app turn status: %w", err)
+	}
 	return nil
 }

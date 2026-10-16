@@ -156,7 +156,8 @@ func (s *Service) reconcileDelegations(ctx context.Context) error {
 		if err != nil {
 			continue
 		}
-		if err := s.projectDelegation(ctx, row, projected.AppName, selection, resources); err != nil {
+		err = s.projectDelegation(ctx, row, projected.AppName, projected.AgentKind, selection, resources)
+		if err != nil {
 			slog.ErrorContext(ctx, "project delegation", slog.String("grant", row.ID), slog.Any("error", err))
 		}
 	}
@@ -192,7 +193,7 @@ func (s *Service) reconcileDelegations(ctx context.Context) error {
 	return s.queries.GatewayPruneDelegationTransactions(ctx)
 }
 
-func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.DelegationGrant, appName string, selection gatewayapi.DelegationCatalog, resources *delegationResources) error {
+func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.DelegationGrant, appName, agentKind string, selection gatewayapi.DelegationCatalog, resources *delegationResources) error {
 	var objects []ctrlclient.Object
 	ownerEgress := make(map[string][]networkpolicy.Target)
 	var aggregationEgress []ciliumapi.EgressRule
@@ -248,7 +249,7 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 			gwv1.PathMatchPathPrefix,
 		)
 		objects = append(objects, backend, route, delegationTelemetry(
-			grant, appName, route, selected.WorkspaceId,
+			grant, appName, agentKind, route, selected.WorkspaceId,
 			"inference", selected.Provider, selected.Uid, selected.Id,
 		))
 		// Keep the owner route intact through the shared private ingress. Only the
@@ -372,7 +373,7 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 			path := "/delegations/" + grant.ID + "/mcp/" + selected.Id
 			route := delegationRoute(selected.Namespace, mcp.GatewayName, innerName, path, gwv1.PathMatchExact)
 			objects = append(objects, inner, policy, route, delegationTelemetry(
-				grant, appName, route, selected.WorkspaceId,
+				grant, appName, agentKind, route, selected.WorkspaceId,
 				"mcp", selected.Connection, selected.Uid, selected.Id,
 			))
 			host := mcp.GatewayName + "." + selected.Namespace + ".svc.cluster.local"
@@ -577,9 +578,9 @@ func delegationRoute(namespace, gateway, name, path string, matchType gwv1.PathM
 	}
 }
 
-func delegationTelemetry(grant gatewaydb.DelegationGrant, appName string, route *gwv1.HTTPRoute, workspaceID, kind, resourceName, uid, targetID string) *agw.AgentgatewayPolicy {
+func delegationTelemetry(grant gatewaydb.DelegationGrant, appName, agentKind string, route *gwv1.HTTPRoute, workspaceID, kind, resourceName, uid, targetID string) *agw.AgentgatewayPolicy {
 	identity := map[string]string{
-		"client_id": grant.ClientID, "app_name": appName,
+		"client_id": grant.ClientID, "app_name": appName, "agent_kind": agentKind,
 		"grant_id": grant.ID, "user_id": grant.UserID,
 		"organization_id": grant.OrganizationID.String, "workspace_id": workspaceID,
 		"resource_kind": kind, "resource_namespace": route.Namespace,

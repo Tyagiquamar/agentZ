@@ -7,10 +7,22 @@ export type ClientOptions = {
 export type LensApp = {
   client_id: string
   name: string
+  agent_kind?: "claude" | "codex"
 }
 
 export type ListLensAppsResponse = {
   apps: Array<LensApp>
+}
+
+export type AppSession = {
+  session_id: string
+  last_seen: string
+}
+
+export type ListAppSessionsResponse = {
+  sessions: Array<AppSession>
+  next_page_token: string
+  has_next_page: boolean
 }
 
 export type AppTrace = {
@@ -41,8 +53,8 @@ export type AppSpan = {
   parent_span_id: OptionalSpanId
   start_time: string
   end_time: string
-  duration_ns: number
-  duration_ms: number
+  duration_ns: number | null
+  duration_ms: number | null
   name: string
   span_class: string
   operation_name: string
@@ -93,8 +105,6 @@ export type AppPayload = {
  */
 export type AppOperationResponse = {
   span: AppSpan
-  resource_attributes: string
-  span_attributes: string
   payload: AppPayload
   tool_error: string
 }
@@ -1341,10 +1351,7 @@ export type Span = {
   ingested_at: string
 }
 
-export type SpanDetail = Span & {
-  resource_attributes: JsonValue
-  span_attributes: JsonValue
-}
+export type SpanDetail = Span
 
 export type SpanPayload = {
   input_messages: JsonValue
@@ -1387,7 +1394,7 @@ export type McpGraphEdge = {
 }
 
 export type SpanDetailResponse = {
-  span: SpanDetail
+  span: Span
   payload: SpanPayload
 }
 
@@ -3693,6 +3700,59 @@ export type ListLensAppsResponses = {
 
 export type ListLensAppsResponse2 = ListLensAppsResponses[keyof ListLensAppsResponses]
 
+export type ListAppSessionsData = {
+  body?: never
+  path: {
+    clientID: string
+  }
+  query?: {
+    /**
+     * Maximum number of items to return.
+     */
+    limit?: number
+    /**
+     * Opaque pagination token from a previous response.
+     */
+    page_token?: string
+    /**
+     * Optional root session ID.
+     */
+    session_id?: string
+  }
+  url: "/api/lens/apps/{clientID}/sessions"
+}
+
+export type ListAppSessionsErrors = {
+  /**
+   * Request validation failed.
+   */
+  400: Error
+  /**
+   * The authenticated principal lacks authority for this operation.
+   */
+  403: Error
+  /**
+   * Requested resource was not found. For tenant-gated APIs this can also mean the current tenant is not initialized and the error code is `tenant_not_found`.
+   *
+   */
+  404: Error
+  /**
+   * Unexpected server error.
+   */
+  500: Error
+}
+
+export type ListAppSessionsError = ListAppSessionsErrors[keyof ListAppSessionsErrors]
+
+export type ListAppSessionsResponses = {
+  /**
+   * Observed sessions, ordered by last activity and native session ID.
+   */
+  200: ListAppSessionsResponse
+}
+
+export type ListAppSessionsResponse2 = ListAppSessionsResponses[keyof ListAppSessionsResponses]
+
 export type ListAppTracesData = {
   body?: never
   path: {
@@ -3715,6 +3775,10 @@ export type ListAppTracesData = {
      * Inclusive upper bound for trace start time.
      */
     started_before?: string
+    /**
+     * Optional root session ID.
+     */
+    session_id?: string
   }
   url: "/api/lens/apps/{clientID}/traces"
 }
@@ -3764,6 +3828,10 @@ export type GetAppTraceChartData = {
      * Inclusive upper bound for trace start time.
      */
     started_before?: string
+    /**
+     * Optional root session ID.
+     */
+    session_id?: string
   }
   url: "/api/lens/apps/{clientID}/traces/chart"
 }
@@ -3904,6 +3972,10 @@ export type GetAppMcpGraphData = {
      * Inclusive upper bound for MCP tool activity date.
      */
     to: string
+    /**
+     * Optional root session ID.
+     */
+    session_id?: string
   }
   url: "/api/lens/apps/{clientID}/mcp/graph"
 }
@@ -8104,6 +8176,10 @@ export type GetMcpGraphData = {
      * Inclusive upper bound for MCP tool activity date.
      */
     to: string
+    /**
+     * Optional root session ID.
+     */
+    session_id?: string
   }
   url: "/api/lens/{agentName}/mcp/graph"
 }

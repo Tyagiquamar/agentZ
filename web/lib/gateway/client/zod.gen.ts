@@ -5,10 +5,22 @@ import * as z from "zod"
 export const zLensApp = z.object({
   client_id: z.string(),
   name: z.string(),
+  agent_kind: z.enum(["claude", "codex"]).optional(),
 })
 
 export const zListLensAppsResponse = z.object({
   apps: z.array(zLensApp),
+})
+
+export const zAppSession = z.object({
+  session_id: z.string(),
+  last_seen: z.iso.datetime(),
+})
+
+export const zListAppSessionsResponse = z.object({
+  sessions: z.array(zAppSession),
+  next_page_token: z.string(),
+  has_next_page: z.boolean(),
 })
 
 /**
@@ -303,10 +315,14 @@ export const zAppSpan = z.object({
   parent_span_id: zOptionalSpanId,
   start_time: z.iso.datetime(),
   end_time: z.iso.datetime(),
-  duration_ns: z.coerce.bigint().gte(BigInt(0)).max(BigInt("9223372036854775807"), {
-    error: "Invalid value: Expected int64 to be <= 9223372036854775807",
-  }),
-  duration_ms: z.number().gte(0),
+  duration_ns: z.coerce
+    .bigint()
+    .gte(BigInt(0))
+    .max(BigInt("9223372036854775807"), {
+      error: "Invalid value: Expected int64 to be <= 9223372036854775807",
+    })
+    .nullable(),
+  duration_ms: z.number().gte(0).nullable(),
   name: z.string(),
   span_class: z.string(),
   operation_name: z.string(),
@@ -379,8 +395,6 @@ export const zListAppSpansResponse = z.object({
  */
 export const zAppOperationResponse = z.object({
   span: zAppSpan,
-  resource_attributes: z.string(),
-  span_attributes: z.string(),
   payload: zAppPayload,
   tool_error: z.string(),
 })
@@ -1354,6 +1368,8 @@ export const zListSpansResponse = z.object({
   next_page_token: z.string(),
 })
 
+export const zSpanDetail = zSpan
+
 export const zMcpGraphAgent = z.object({
   name: zAgentName,
 })
@@ -1670,13 +1686,6 @@ export const zWorkflow = z.object({
   updated_at: z.iso.datetime(),
 })
 
-export const zSpanDetail = zSpan.and(
-  z.object({
-    resource_attributes: zJsonValue,
-    span_attributes: zJsonValue,
-  })
-)
-
 export const zSpanPayload = z.object({
   input_messages: zJsonValue,
   output_messages: zJsonValue,
@@ -1685,7 +1694,7 @@ export const zSpanPayload = z.object({
 })
 
 export const zSpanDetailResponse = z.object({
-  span: zSpanDetail,
+  span: zSpan,
   payload: zSpanPayload,
 })
 
@@ -4031,6 +4040,11 @@ export const zIdempotencyKeyHeader = z.string().min(1).max(128)
  * Workspace-scoped app telemetry.
  */
 export const zListLensAppsResponse2 = zListLensAppsResponse
+
+/**
+ * Observed sessions, ordered by last activity and native session ID.
+ */
+export const zListAppSessionsResponse2 = zListAppSessionsResponse
 
 /**
  * Workspace-scoped app telemetry.

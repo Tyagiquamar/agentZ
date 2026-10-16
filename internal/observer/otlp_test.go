@@ -97,7 +97,7 @@ func TestAppMCPFailureAndAttribution(t *testing.T) {
 }
 
 func BenchmarkAppOperationCapture(b *testing.B) {
-	for name, size := range map[string]int{"small": 1024, "large": 1 << 20} {
+	for name, size := range map[string]int{"small": 1024, "normal": 90_000, "large": 1 << 20} {
 		b.Run(name, func(b *testing.B) {
 			span := appSpanFixture(size)
 			b.ReportAllocs()
@@ -106,6 +106,47 @@ func BenchmarkAppOperationCapture(b *testing.B) {
 				if _, err := appOperationFromOTLPSpan(span, nil); err != nil {
 					b.Fatal(err)
 				}
+			}
+		})
+	}
+}
+
+func TestAppNativeIdentityRequiresRegistration(t *testing.T) {
+	for _, kind := range []string{"", "ordinary-app", "claude", "codex"} {
+		t.Run(kind, func(t *testing.T) {
+			span := appSpanFixture(0)
+			labels := map[string]string{
+				"agentz.agent_kind":   kind,
+				attrSessionID:         "native-conversation",
+				"agentz.turn_id":      "native-turn",
+				"gen_ai.tool.call.id": "native-call",
+				attrMCPSessionID:      "transport-session",
+			}
+			for key, value := range labels {
+				span.Attributes = append(span.Attributes, &commonpb.KeyValue{
+					Key: key, Value: &commonpb.AnyValue{Value: &commonpb.AnyValue_StringValue{StringValue: value}},
+				})
+			}
+			op, err := appOperationFromOTLPSpan(span, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			registered := kind == "claude" || kind == "codex"
+			if !registered {
+				if op.AgentKind != "" || op.SessionID != "" || op.TurnID != "" || op.ToolCallID != "" {
+					t.Fatal("unregistered metadata established native identity")
+				}
+				return
+			}
+			if op.AgentKind != kind || op.SessionID != "native-conversation" || op.TurnID != "native-turn" || op.ToolCallID != "native-call" {
+				t.Fatalf("native identity lost: %+v", op)
+			}
+			span.Attributes = append(span.Attributes, &commonpb.KeyValue{
+				Key: attrSessionID, Value: &commonpb.AnyValue{Value: &commonpb.AnyValue_IntValue{IntValue: 123}},
+			})
+			op, err = appOperationFromOTLPSpan(span, nil)
+			if err != nil || op.SessionID != "" || op.TurnID != "native-turn" {
+				t.Fatal("malformed optional metadata discarded observation or adopted transport session")
 			}
 		})
 	}

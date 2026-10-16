@@ -65,6 +65,7 @@ export default async function TracesPage({
 
   const resolved = resolveTracesSearchParams(searchParams)
   const workspaceId = workspace.workspace.id
+  const contentKey = JSON.stringify(await resolved)
   const scope = resolved.then((params) =>
     resolvePageSelection(workspace, "lens/traces", {
       agent_name: params.agentName,
@@ -88,10 +89,10 @@ export default async function TracesPage({
         >
           <Filters searchParams={resolved} scope={scope} />
         </Suspense>
-        <Suspense fallback={<EventsChartSkeleton />}>
+        <Suspense key={`chart:${contentKey}`} fallback={<EventsChartSkeleton />}>
           <Chart searchParams={resolved} workspaceId={workspaceId} scope={scope} />
         </Suspense>
-        <Suspense fallback={<TracesSkeleton />}>
+        <Suspense key={`traces:${contentKey}`} fallback={<TracesSkeleton />}>
           <Traces searchParams={resolved} workspaceId={workspaceId} scope={scope} />
         </Suspense>
       </div>
@@ -116,6 +117,9 @@ async function Filters({
     <>
       <RememberPageSelection selected={scope.selected} requested={scope.requested} />
       <LensFilters
+        workspaceId={scope.workspaceId}
+        defaultAppClientID={scope.defaultAppClientID}
+        sessionNextPageToken={scope.sessionNextPageToken}
         agents={scope.agents}
         apps={scope.apps}
         selectedAppClientID={scope.selected.app_client_id}
@@ -205,8 +209,8 @@ async function Traces({
   return (
     <TracesTable
       key={
-        subject.kind === "app"
-          ? `app:${subject.clientID}`
+        subject.kind !== "agent"
+          ? `app:${subject.clientID}:${subject.kind === "external-agent" ? (subject.sessionId ?? "") : ""}`
           : `agent:${subject.name}:${subject.sessionId}`
       }
       data={result.data}
@@ -263,7 +267,7 @@ function EmptyState({ message }: { message: string }) {
 function selectedTraceSubject(scope: ResolvedPageSelection): TraceSubject | undefined {
   const subject = scope.subject
   if (!subject) return
-  if (subject.kind === "app") return subject
+  if (subject.kind !== "agent") return subject
   const sessionId = scope.selected.session_id
   if (!sessionId) return
   return { ...subject, sessionId }

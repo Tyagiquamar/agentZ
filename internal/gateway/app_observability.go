@@ -24,9 +24,34 @@ type appObservabilityRequest struct {
 	apps []gatewayapi.LensApp
 }
 
+type appPageScope struct {
+	OrganizationID string    `json:"organization_id"`
+	WorkspaceID    string    `json:"workspace_id"`
+	ClientID       string    `json:"client_id"`
+	SessionID      string    `json:"session_id,omitempty"`
+	TraceID        string    `json:"trace_id,omitempty"`
+	Kind           string    `json:"kind"`
+	After          time.Time `json:"after"`
+	Before         time.Time `json:"before"`
+}
+
+type appSpanPageCursor struct {
+	Scope     appPageScope `json:"scope"`
+	StartTime time.Time    `json:"start_time"`
+	ID        int64        `json:"id"`
+	NonRoot   bool         `json:"non_root"`
+}
+
+type appSessionPageCursor struct {
+	Scope     appPageScope `json:"scope"`
+	LastSeen  time.Time    `json:"last_seen"`
+	SessionID string       `json:"session_id"`
+}
+
 type appTracePageCursor struct {
-	StartedAt time.Time `json:"started_at"`
-	TraceID   string    `json:"trace_id"`
+	Scope     appPageScope `json:"scope"`
+	StartedAt time.Time    `json:"started_at"`
+	TraceID   string       `json:"trace_id"`
 }
 
 func (s *Service) appObservability(w http.ResponseWriter, r *http.Request, clientID string) (appObservabilityRequest, bool) {
@@ -57,6 +82,9 @@ func (s *Service) appObservability(w http.ResponseWriter, r *http.Request, clien
 			return req, false
 		}
 		req.app = gatewayapi.LensApp{ClientId: row.ClientID, Name: row.Name}
+		if row.AgentKind != "" {
+			req.app.AgentKind = new(gatewayapi.LensAppAgentKind(row.AgentKind))
+		}
 		return req, true
 	}
 	rows, err := s.queries.GatewayListLensApps(r.Context(), gatewaydb.GatewayListLensAppsParams{
@@ -67,7 +95,11 @@ func (s *Service) appObservability(w http.ResponseWriter, r *http.Request, clien
 		return req, false
 	}
 	for _, row := range rows {
-		req.apps = append(req.apps, gatewayapi.LensApp{ClientId: row.ClientID, Name: row.Name})
+		app := gatewayapi.LensApp{ClientId: row.ClientID, Name: row.Name}
+		if row.AgentKind != "" {
+			app.AgentKind = new(gatewayapi.LensAppAgentKind(row.AgentKind))
+		}
+		req.apps = append(req.apps, app)
 	}
 	return req, true
 }
@@ -79,6 +111,60 @@ func (s *Service) ListLensApps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	apiutil.WriteJSON(w, http.StatusOK, gatewayapi.ListLensAppsResponse{Apps: req.apps})
+}
+
+// ListAppSessions lists native conversation IDs using workspace observability authorization.
+func (s *Service) ListAppSessions(w http.ResponseWriter, r *http.Request, clientID string, params gatewayapi.ListAppSessionsParams) {
+	req, ok := s.appObservability(w, r, clientID)
+	if !ok {
+		return
+	}
+	limit, ok := validLimit(w, r, params.Limit)
+	if !ok {
+		return
+	}
+	sessionID := ""
+	if params.SessionId != nil {
+		sessionID = *params.SessionId
+	}
+	cursor, set, ok := decodeCursorPageToken[appSessionPageCursor](w, r, params.PageToken)
+	if !ok {
+		return
+	}
+	scope := appPageScope{
+		OrganizationID: req.claims.OrganizationID,
+		WorkspaceID:    req.workspaceID,
+		ClientID:       clientID,
+		Kind:           "sessions",
+	}
+	if set && (cursor.Scope != scope || cursor.LastSeen.IsZero() || cursor.SessionID == "" || sessionID != "") {
+		writeInvalidPageToken(w, r, errBadRequest)
+		return
+	}
+	rows, err := s.queries.GatewayListAppSessions(r.Context(), gatewaydb.GatewayListAppSessionsParams{
+		OrganizationID: req.claims.OrganizationID, WorkspaceID: req.workspaceID, ClientID: clientID,
+		SessionID: sessionID, CursorSet: set, CursorLastSeen: cursor.LastSeen, CursorSessionID: cursor.SessionID,
+		PageSize: int32(limit + 1),
+	})
+	if err != nil {
+		apiutil.WriteInternalError(w, r, err)
+		return
+	}
+	result := gatewayapi.ListAppSessionsResponse{Sessions: []gatewayapi.AppSession{}}
+	for index, row := range rows {
+		if index == limit {
+			last := rows[index-1]
+			result.NextPageToken = encodeCursorPageToken(appSessionPageCursor{
+				Scope:     scope,
+				LastSeen:  last.LastSeen,
+				SessionID: last.SessionID,
+			})
+			result.HasNextPage = true
+			break
+		}
+		result.Sessions = append(result.Sessions, gatewayapi.AppSession{SessionId: row.SessionID, LastSeen: row.LastSeen})
+	}
+	apiutil.WriteJSON(w, http.StatusOK, result)
 }
 
 // ListAppTraces lists scoped app traces without requiring a runtime session.
@@ -117,9 +203,21 @@ func (s *Service) ListAppTraces(w http.ResponseWriter, r *http.Request, clientID
 		))
 		return
 	}
+	sessionID := ""
+	if params.SessionId != nil {
+		sessionID = *params.SessionId
+	}
+	scope := appPageScope{
+		OrganizationID: req.claims.OrganizationID, WorkspaceID: req.workspaceID, ClientID: clientID,
+		SessionID: sessionID, Kind: "traces", After: after, Before: before,
+	}
+	if set && cursor.Scope != scope {
+		writeInvalidPageToken(w, r, errBadRequest)
+		return
+	}
 	rows, err := s.queries.GatewayListAppTraces(r.Context(), gatewaydb.GatewayListAppTracesParams{
 		OrganizationID: req.claims.OrganizationID, WorkspaceID: req.workspaceID, ClientID: clientID,
-		StartedAfter: after, StartedBefore: before, PageSize: int32(limit + 1),
+		SessionID: sessionID, StartedAfter: after, StartedBefore: before, PageSize: int32(limit + 1),
 		CursorSet: set, CursorStartedAt: cursor.StartedAt, CursorTraceID: traceID,
 	})
 	if err != nil {
@@ -132,8 +230,8 @@ func (s *Service) ListAppTraces(w http.ResponseWriter, r *http.Request, clientID
 		if index == limit {
 			last := rows[index-1]
 			next = encodeCursorPageToken(appTracePageCursor{
-				StartedAt: last.StartedAt,
-				TraceID:   hex.EncodeToString(last.TraceID),
+				Scope: scope, StartedAt: last.StartedAt,
+				TraceID: hex.EncodeToString(last.TraceID),
 			})
 			break
 		}
@@ -184,9 +282,13 @@ func (s *Service) GetAppTraceChart(w http.ResponseWriter, r *http.Request, clien
 		))
 		return
 	}
+	sessionID := ""
+	if params.SessionId != nil {
+		sessionID = *params.SessionId
+	}
 	rows, err := s.queries.GatewayGetAppTraceChart(r.Context(), gatewaydb.GatewayGetAppTraceChartParams{
 		OrganizationID: req.claims.OrganizationID, WorkspaceID: req.workspaceID, ClientID: clientID,
-		StartedAfter: after, StartedBefore: before,
+		SessionID: sessionID, StartedAfter: after, StartedBefore: before,
 	})
 	if err != nil {
 		apiutil.WriteInternalError(w, r, err)
@@ -213,13 +315,24 @@ func (s *Service) ListAppSpans(w http.ResponseWriter, r *http.Request, clientID 
 	if !ok {
 		return
 	}
-	cursor, set, ok := decodeSpanPageToken(w, r, params.PageToken)
+	cursor, set, ok := decodeCursorPageToken[appSpanPageCursor](w, r, params.PageToken)
 	if !ok {
+		return
+	}
+	scope := appPageScope{
+		OrganizationID: req.claims.OrganizationID,
+		WorkspaceID:    req.workspaceID,
+		ClientID:       clientID,
+		TraceID:        traceID,
+		Kind:           "spans",
+	}
+	if set && (cursor.Scope != scope || cursor.StartTime.IsZero() || cursor.ID < 1) {
+		writeInvalidPageToken(w, r, errBadRequest)
 		return
 	}
 	rows, err := s.queries.GatewayListAppSpans(r.Context(), gatewaydb.GatewayListAppSpansParams{
 		OrganizationID: req.claims.OrganizationID, WorkspaceID: req.workspaceID, ClientID: clientID,
-		TraceID: trace, CursorSet: set, CursorStartTime: cursor.StartTime, CursorID: cursor.ID, PageSize: int32(limit + 1),
+		TraceID: trace, CursorSet: set, CursorNonRoot: cursor.NonRoot, CursorStartTime: cursor.StartTime, CursorID: cursor.ID, PageSize: int32(limit + 1),
 	})
 	if err != nil {
 		apiutil.WriteInternalError(w, r, err)
@@ -229,11 +342,16 @@ func (s *Service) ListAppSpans(w http.ResponseWriter, r *http.Request, clientID 
 	var next string
 	for index, row := range rows {
 		if index == limit {
-			last := rows[index-1].ObserverAppOperation
-			next = encodeCursorPageToken(spanPageCursor{StartTime: last.StartTime, ID: last.ID})
+			last := rows[index-1].ObserverAppSpan
+			next = encodeCursorPageToken(appSpanPageCursor{
+				Scope:     scope,
+				NonRoot:   last.ResourceKind != "turn",
+				StartTime: last.StartTime,
+				ID:        last.ID,
+			})
 			break
 		}
-		spans = append(spans, appSpan(row.ObserverAppOperation))
+		spans = append(spans, appSpan(row.ObserverAppSpan))
 	}
 	apiutil.WriteJSON(w, http.StatusOK, gatewayapi.ListAppSpansResponse{Spans: spans, NextPageToken: next})
 }
@@ -251,16 +369,14 @@ func (s *Service) GetAppOperation(w http.ResponseWriter, r *http.Request, client
 		apiutil.WriteError(w, r, mapGatewayStoreError("get app operation", err))
 		return
 	}
-	op, payload := row.ObserverAppOperation, row.ObserverAppOperationPayload
+	op := row.ObserverAppSpan
 	result := gatewayapi.AppOperationResponse{Span: appSpan(op)}
 	payloads := map[*string][]byte{
-		&result.ResourceAttributes:     op.ResourceAttributes,
-		&result.SpanAttributes:         op.SpanAttributes,
-		&result.Payload.InputMessages:  payload.InputMessages,
-		&result.Payload.OutputMessages: payload.OutputMessages,
-		&result.Payload.ToolArguments:  payload.ToolArguments,
-		&result.Payload.ToolResult:     payload.ToolResult,
-		&result.ToolError:              payload.ToolError,
+		&result.Payload.InputMessages:  row.InputMessages,
+		&result.Payload.OutputMessages: row.OutputMessages,
+		&result.Payload.ToolArguments:  row.ToolArguments,
+		&result.Payload.ToolResult:     row.ToolResult,
+		&result.ToolError:              row.ToolError,
 	}
 	for target, raw := range payloads {
 		var formatted bytes.Buffer
@@ -273,16 +389,20 @@ func (s *Service) GetAppOperation(w http.ResponseWriter, r *http.Request, client
 	apiutil.WriteJSON(w, http.StatusOK, result)
 }
 
-func appSpan(row gatewaydb.ObserverAppOperation) gatewayapi.AppSpan {
+func appSpan(row gatewaydb.ObserverAppSpan) gatewayapi.AppSpan {
 	span := gatewayapi.AppSpan{
 		Id: row.ID, TraceId: hex.EncodeToString(row.TraceID), SpanId: hex.EncodeToString(row.SpanID),
 		ParentSpanId: hex.EncodeToString(row.ParentSpanID), StartTime: row.StartTime, EndTime: row.EndTime,
-		IngestedAt: row.IngestedAt, DurationNs: row.DurationNs, DurationMs: float64(row.DurationNs) / float64(time.Millisecond),
-		Name: row.Name, SpanClass: row.SpanClass, OperationName: row.OperationName, Kind: "SERVER",
+		IngestedAt: row.IngestedAt,
+		Name:       row.Name, SpanClass: row.SpanClass, OperationName: row.OperationName, Kind: "SERVER",
 		StatusCode: row.StatusCode, ErrorType: row.ErrorType, ErrorMessage: row.ErrorMessage,
 		Model: row.Model, ToolName: row.ToolName, SessionId: row.SessionID,
 		GrantId: row.GrantID, UserId: row.UserID, ResourceKind: row.ResourceKind,
 		ResourceNamespace: row.ResourceNamespace, ResourceName: row.ResourceName, ResourceUid: row.ResourceUid, TargetId: row.TargetID,
+	}
+	if row.ResourceKind != "tool" {
+		span.DurationNs = &row.DurationNs
+		span.DurationMs = new(float64(row.DurationNs) / float64(time.Millisecond))
 	}
 	if row.InputTokens.Valid {
 		span.InputTokens = &row.InputTokens.Int64
@@ -316,9 +436,13 @@ func (s *Service) GetAppMCPGraph(w http.ResponseWriter, r *http.Request, clientI
 		apiutil.WriteError(w, r, apiutil.NewError(http.StatusBadRequest, "invalid_request", "from must not exceed to", errBadRequest))
 		return
 	}
+	sessionID := ""
+	if params.SessionId != nil {
+		sessionID = *params.SessionId
+	}
 	rows, err := s.queries.GatewayGetAppMCPGraph(r.Context(), gatewaydb.GatewayGetAppMCPGraphParams{
 		OrganizationID: req.claims.OrganizationID, WorkspaceID: req.workspaceID, ClientID: clientID,
-		StartTimeAfter: after, StartTimeBefore: before,
+		SessionID: sessionID, StartTimeAfter: after, StartTimeBefore: before,
 	})
 	if err != nil {
 		apiutil.WriteInternalError(w, r, err)

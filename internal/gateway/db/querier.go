@@ -98,6 +98,7 @@ type Querier interface {
 	GatewayListAgentShares(ctx context.Context, arg GatewayListAgentSharesParams) ([]AgentShare, error)
 	GatewayListAgents(ctx context.Context, arg GatewayListAgentsParams) ([]Agent, error)
 	GatewayListAgentsByName(ctx context.Context, arg GatewayListAgentsByNameParams) ([]Agent, error)
+	GatewayListAppSessions(ctx context.Context, arg GatewayListAppSessionsParams) ([]GatewayListAppSessionsRow, error)
 	GatewayListAppSpans(ctx context.Context, arg GatewayListAppSpansParams) ([]GatewayListAppSpansRow, error)
 	GatewayListAppTraces(ctx context.Context, arg GatewayListAppTracesParams) ([]GatewayListAppTracesRow, error)
 	GatewayListChatInputs(ctx context.Context, arg GatewayListChatInputsParams) ([]ChatInput, error)

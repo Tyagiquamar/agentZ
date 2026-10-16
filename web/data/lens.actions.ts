@@ -1,11 +1,15 @@
 "use server"
 
+import { z } from "zod"
+
 import {
   getMcpGraph,
   getAppMcpGraph,
   getAppOperation,
   getAppTraceChart,
   listAppSpans,
+  listAppSessions,
+  type ListAppSessionsData,
   listAppTraces,
   type AppSpan,
   type AppTrace,
@@ -30,6 +34,7 @@ import {
   type ListTraceSessionsData,
   type Span,
   type AppPayload,
+  type JsonValue,
   type TraceSession,
   type WorkspaceType,
 } from "@/lib/gateway/client"
@@ -64,6 +69,7 @@ import { createAgentOpencodeClient } from "@/lib/opencode/server-client"
 
 const maxChartPoints = 25
 const chartSourceLimit = 100
+const toolTextPart = z.strictObject({ type: z.enum(["text", "input_text"]), text: z.string() })
 type DayjsDate = ReturnType<typeof dayjs>
 type AggregatedTelemetryEvent = {
   last_seen: string
@@ -77,8 +83,15 @@ export async function listTracesAction(
   const client = getGatewayServerClient(workspaceId)
   let traces: (TraceSession | AppTrace)[]
   let nextPageToken: string
-  if (subject.kind === "app") {
-    const result = await listAppTraces({ path: { clientID: subject.clientID }, query, client })
+  if (subject.kind !== "agent") {
+    const result = await listAppTraces({
+      path: { clientID: subject.clientID },
+      query: {
+        ...query,
+        session_id: subject.kind === "external-agent" ? subject.sessionId : undefined,
+      },
+      client,
+    })
     if (result.error) return { data: undefined, error: result.error }
     traces = result.data.traces
     nextPageToken = result.data.next_page_token
@@ -109,8 +122,15 @@ export async function getTraceChartAction(
   workspaceId: string
 ): Promise<EventsChartActionResponse> {
   const client = getGatewayServerClient(workspaceId)
-  if (subject.kind === "app") {
-    const result = await getAppTraceChart({ path: { clientID: subject.clientID }, query, client })
+  if (subject.kind !== "agent") {
+    const result = await getAppTraceChart({
+      path: { clientID: subject.clientID },
+      query: {
+        ...query,
+        session_id: subject.kind === "external-agent" ? subject.sessionId : undefined,
+      },
+      client,
+    })
     if (result.error) return { data: undefined, error: result.error }
     return {
       data: {
@@ -136,6 +156,20 @@ export async function getTraceChartAction(
     },
     error: undefined,
   }
+}
+
+export async function listAppSessionsAction(
+  clientID: string,
+  workspaceId: string,
+  query?: ListAppSessionsData["query"]
+) {
+  const result = await listAppSessions({
+    path: { clientID },
+    query,
+    client: getGatewayServerClient(workspaceId),
+  })
+  if (result.error) return { data: undefined, error: result.error }
+  return { data: result.data, error: undefined }
 }
 
 export async function listTraceSessionFilterAction(
@@ -187,7 +221,7 @@ export async function listSpansAction(
   const subject = path.subject
   let spans: SpanListItem[]
   let nextPageToken: string
-  if (subject.kind === "app") {
+  if (subject.kind !== "agent") {
     const result = await listAppSpans({
       path: { clientID: subject.clientID, traceID: path.traceID },
       query,
@@ -218,10 +252,8 @@ export async function getSpanDetailAction(
   let span: Span | AppSpan
   let payload: AppPayload
   let toolError = "null"
-  let resourceAttributes: string
-  let spanAttributes: string
   let finishReason: string | undefined
-  if (subject.kind === "app") {
+  if (subject.kind !== "agent") {
     const result = await getAppOperation({
       path: { clientID: subject.clientID, operationID: path.operationID },
       client,
@@ -230,8 +262,6 @@ export async function getSpanDetailAction(
     span = result.data.span
     payload = result.data.payload
     toolError = result.data.tool_error
-    resourceAttributes = result.data.resource_attributes
-    spanAttributes = result.data.span_attributes
   } else {
     const result = await getSpanDetail({
       path: {
@@ -250,8 +280,6 @@ export async function getSpanDetailAction(
       tool_arguments: JSON.stringify(result.data.payload.tool_arguments, null, 2),
       tool_result: JSON.stringify(result.data.payload.tool_result, null, 2),
     }
-    resourceAttributes = JSON.stringify(result.data.span.resource_attributes, null, 2)
-    spanAttributes = JSON.stringify(result.data.span.span_attributes, null, 2)
     finishReason = result.data.span.llm_finish_reason
   }
   return {
@@ -261,7 +289,7 @@ export async function getSpanDetailAction(
         subject,
         llmFinishReason: finishReason,
         offsetPercent: 0,
-        durationMs: span.duration_ns / 1_000_000,
+        durationMs: span.duration_ns === null ? null : span.duration_ns / 1_000_000,
         durationPercent: 100,
         depth: span.parent_span_id ? 1 : 0,
       }),
@@ -272,12 +300,6 @@ export async function getSpanDetailAction(
         payloadSection("tool_result", "Tool result", payload.tool_result),
         payloadSection("tool_error", "Tool error", toolError),
       ],
-      resourceAttributes: payloadSection(
-        "resource_attributes",
-        "Resource attributes",
-        resourceAttributes
-      ),
-      spanAttributes: payloadSection("span_attributes", "Span attributes", spanAttributes),
     },
     error: undefined,
   }
@@ -290,8 +312,15 @@ export async function getMcpGraphAction(
 ): Promise<McpGraphActionResponse> {
   const client = getGatewayServerClient(workspaceId)
   const result =
-    subject.kind === "app"
-      ? await getAppMcpGraph({ path: { clientID: subject.clientID }, query, client })
+    subject.kind !== "agent"
+      ? await getAppMcpGraph({
+          path: { clientID: subject.clientID },
+          query: {
+            ...query,
+            session_id: subject.kind === "external-agent" ? subject.sessionId : undefined,
+          },
+          client,
+        })
       : await getMcpGraph({ path: { agentName: subject.name }, query, client })
   if (result.error) return { data: undefined, error: result.error }
   return { data: result.data, error: undefined }
@@ -743,7 +772,7 @@ function spanListItems<T extends Span | AppSpan>(
 
   return spans.map((span) => {
     const startMs = dayjs(span.start_time).valueOf()
-    const durationMs = span.duration_ns / 1_000_000
+    const durationMs = span.duration_ns === null ? null : span.duration_ns / 1_000_000
     const offsetMs = Math.max(startMs - traceStartMs, 0)
 
     return spanListItem({
@@ -752,7 +781,7 @@ function spanListItems<T extends Span | AppSpan>(
       llmFinishReason: finishReason(span),
       offsetPercent: percent(offsetMs, traceDurationMs),
       durationMs,
-      durationPercent: percent(durationMs, traceDurationMs),
+      durationPercent: durationMs === null ? 0 : percent(durationMs, traceDurationMs),
       depth: depths.get(span.span_id) ?? 0,
     })
   })
@@ -771,7 +800,7 @@ function spanListItem({
   subject: TraceSubject
   llmFinishReason?: string
   offsetPercent: number
-  durationMs: number
+  durationMs: number | null
   durationPercent: number
   depth: number
 }): SpanListItem {
@@ -792,7 +821,7 @@ function spanListItem({
     parentSpanId: span.parent_span_id,
     startLabel,
     endLabel,
-    duration: formatDurationMs(durationMs),
+    duration: durationMs === null ? undefined : formatDurationMs(durationMs),
     durationMs,
     displayName: displayName(span),
     operationLabel: operationLabel(span),
@@ -809,19 +838,29 @@ function spanListItem({
     cachedWriteTokens: span.cached_write_tokens,
     outputTokens: span.output_tokens,
     totalTokens,
-    costUSD: span.cost_usd,
     offsetPercent,
-    durationPercent: Math.max(durationPercent, durationMs > 0 ? 0.5 : 0),
+    durationPercent: Math.max(durationPercent, durationMs !== null && durationMs > 0 ? 0.5 : 0),
   }
 }
 
 function payloadSection(key: string, label: string, json: string): SpanDetailPayloadSection {
-  return {
-    key,
-    label,
-    json,
-    empty: json === "null" || json === "[]" || json === "{}" || json === '""',
+  let content: SpanDetailPayloadSection["content"] = { code: json }
+  if (key === "tool_arguments" || key === "tool_result") {
+    // Decode the protocol's scalar/text-block forms once. Structured payloads
+    // keep the original JSON bytes, including exact integer digits.
+    const value: JsonValue = JSON.parse(json)
+    if (typeof value === "string") content = { text: value }
+    if (key === "tool_result" && Array.isArray(value) && value.length > 0) {
+      const parts: string[] = []
+      for (const part of value) {
+        const text = toolTextPart.safeParse(part)
+        if (!text.success) break
+        parts.push(text.data.text)
+      }
+      if (parts.length === value.length) content = { text: parts.join("\n\n") }
+    }
   }
+  return { key, label, content, empty: json === "null" || json === "[]" || json === "{}" }
 }
 
 function processTelemetryEventItem(event: ProcessObservabilityEvent): RuntimeTelemetryEventItem {

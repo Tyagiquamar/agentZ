@@ -1,3 +1,4 @@
+import type { LensApp } from "@/lib/gateway/client"
 import type {
   Agent,
   Sandbox,
@@ -33,12 +34,19 @@ export type AgentSessionListItem = {
 }
 
 export type LensSubject =
-  | { kind: "agent"; name: string }
+  | { kind: "agent"; name: string; sessionId?: string }
   | { kind: "app"; clientID: string; name: string }
+  | {
+      kind: "external-agent"
+      clientID: string
+      name: string
+      providerKind: NonNullable<LensApp["agent_kind"]>
+      sessionId?: string
+    }
 
 export type TraceSubject =
   | { kind: "agent"; name: string; sessionId: string }
-  | Extract<LensSubject, { kind: "app" }>
+  | Extract<LensSubject, { kind: "app" | "external-agent" }>
 
 export type TraceListItem = {
   subject: TraceSubject
@@ -223,8 +231,8 @@ export type SpanListItem = {
   parentSpanId: string
   startLabel: string
   endLabel: string
-  duration: string
-  durationMs: number
+  duration: string | undefined
+  durationMs: number | null
   displayName: string
   operationLabel: string
   spanClass: string
@@ -240,7 +248,6 @@ export type SpanListItem = {
   cachedWriteTokens: number | null
   outputTokens: number | null
   totalTokens: number | null
-  costUSD: number | null
   offsetPercent: number
   durationPercent: number
 }
@@ -264,15 +271,13 @@ export type ListSpansActionResponse =
 export type SpanDetailPayloadSection = {
   key: string
   label: string
-  json: string
+  content: { code: string } | { text: string }
   empty: boolean
 }
 
 export type SpanDetailActionData = {
   span: SpanListItem
   payload: SpanDetailPayloadSection[]
-  resourceAttributes: SpanDetailPayloadSection
-  spanAttributes: SpanDetailPayloadSection
 }
 
 export type SpanDetailActionResponse =

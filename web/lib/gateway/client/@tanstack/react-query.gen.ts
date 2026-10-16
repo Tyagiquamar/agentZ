@@ -85,6 +85,7 @@ import {
   listAgentShares,
   listAgentTools,
   listAgentWorkflowSchedules,
+  listAppSessions,
   listAppSpans,
   listAppTraces,
   listChatInputs,
@@ -391,6 +392,9 @@ import type {
   ListAgentWorkflowSchedulesData,
   ListAgentWorkflowSchedulesError,
   ListAgentWorkflowSchedulesResponse,
+  ListAppSessionsData,
+  ListAppSessionsError,
+  ListAppSessionsResponse2,
   ListAppSpansData,
   ListAppSpansError,
   ListAppSpansResponse2,
@@ -685,6 +689,31 @@ export const listLensAppsOptions = (options?: Options<ListLensAppsData>) =>
       return data
     },
     queryKey: listLensAppsQueryKey(options),
+  })
+
+export const listAppSessionsQueryKey = (options: Options<ListAppSessionsData>) =>
+  createQueryKey("listAppSessions", options)
+
+/**
+ * List observed native sessions for a registered external agent
+ */
+export const listAppSessionsOptions = (options: Options<ListAppSessionsData>) =>
+  queryOptions<
+    ListAppSessionsResponse2,
+    ListAppSessionsError,
+    ListAppSessionsResponse2,
+    ReturnType<typeof listAppSessionsQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await listAppSessions({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      })
+      return data
+    },
+    queryKey: listAppSessionsQueryKey(options),
   })
 
 export const listAppTracesQueryKey = (options: Options<ListAppTracesData>) =>

@@ -1715,25 +1715,35 @@ func (q *Queries) GatewayGetAgentShare(ctx context.Context, arg GatewayGetAgentS
 }
 
 const gatewayGetAppMCPGraph = `-- name: GatewayGetAppMCPGraph :many
-SELECT resource_uid, resource_name, resource_namespace, tool_name,
- AVG(duration_ns::double precision / 1000000)::double precision AS avg_latency_ms,
- COUNT(*) FILTER (WHERE status_code <> 'ERROR')::bigint AS success_count,
- COUNT(*) FILTER (WHERE status_code = 'ERROR')::bigint AS failed_count,
- COALESCE((
-  SELECT MAX(history.start_time) FROM observer_app_operations history
-  WHERE history.organization_id = $1
-    AND history.workspace_id = $2 AND history.client_id = $3
-    AND history.span_class = 'tool' AND history.resource_uid = op.resource_uid
-    AND history.tool_name = op.tool_name
- ), MAX(op.start_time))::timestamptz AS last_called_at
-FROM observer_app_operations op
-WHERE op.organization_id = $1
-  AND op.workspace_id = $2
-  AND op.client_id = $3
- AND op.span_class = 'tool' AND op.start_time >= $4
- AND op.start_time < $5
-GROUP BY resource_uid, resource_name, resource_namespace, tool_name
-ORDER BY resource_namespace, resource_name, tool_name
+WITH selected AS (
+ SELECT op.resource_uid, op.resource_name, op.resource_namespace, op.tool_name, op.duration_ns, op.status_code, op.start_time FROM observer_app_operations op
+ WHERE op.organization_id = $1 AND op.workspace_id = $2
+   AND op.client_id = $3 AND op.resource_kind = 'mcp'
+   AND op.start_time >= $4 AND op.start_time < $5
+   AND $6::text = ''
+ UNION ALL
+ SELECT op.resource_uid, op.resource_name, op.resource_namespace, op.tool_name, op.duration_ns, op.status_code, op.start_time FROM observer_app_operations op
+ WHERE op.organization_id = $1 AND op.workspace_id = $2
+   AND op.client_id = $3 AND op.resource_kind = 'mcp'
+   AND op.start_time >= $4 AND op.start_time < $5
+   AND $6::text <> '' AND op.session_id = $6
+ UNION ALL
+ SELECT op.resource_uid, op.resource_name, op.resource_namespace, op.tool_name, op.duration_ns, op.status_code, op.start_time FROM observer_app_operations run JOIN observer_app_operations op ON op.run_id = run.id
+ WHERE run.organization_id = $1 AND run.workspace_id = $2
+   AND run.client_id = $3 AND run.resource_kind = 'turn'
+   AND run.session_id = $6 AND $6::text <> ''
+   AND op.organization_id = $1 AND op.workspace_id = $2
+   AND op.client_id = $3 AND op.resource_kind = 'mcp' AND op.session_id = ''
+   AND op.start_time >= $4 AND op.start_time < $5
+)
+SELECT op.resource_uid, op.resource_name, op.resource_namespace, op.tool_name,
+ AVG(op.duration_ns::double precision / 1000000)::double precision AS avg_latency_ms,
+ COUNT(*) FILTER (WHERE op.status_code <> 'ERROR')::bigint AS success_count,
+ COUNT(*) FILTER (WHERE op.status_code = 'ERROR')::bigint AS failed_count,
+ MAX(op.start_time)::timestamptz AS last_called_at
+FROM selected op
+GROUP BY op.resource_uid, op.resource_name, op.resource_namespace, op.tool_name
+ORDER BY op.resource_namespace, op.resource_name, op.tool_name
 `
 
 type GatewayGetAppMCPGraphParams struct {
@@ -1742,6 +1752,7 @@ type GatewayGetAppMCPGraphParams struct {
 	ClientID        string    `json:"client_id"`
 	StartTimeAfter  time.Time `json:"start_time_after"`
 	StartTimeBefore time.Time `json:"start_time_before"`
+	SessionID       string    `json:"session_id"`
 }
 
 type GatewayGetAppMCPGraphRow struct {
@@ -1762,6 +1773,7 @@ func (q *Queries) GatewayGetAppMCPGraph(ctx context.Context, arg GatewayGetAppMC
 		arg.ClientID,
 		arg.StartTimeAfter,
 		arg.StartTimeBefore,
+		arg.SessionID,
 	)
 	if err != nil {
 		return nil, err
@@ -1791,11 +1803,27 @@ func (q *Queries) GatewayGetAppMCPGraph(ctx context.Context, arg GatewayGetAppMC
 }
 
 const gatewayGetAppOperation = `-- name: GatewayGetAppOperation :one
-SELECT op.id, op.organization_id, op.workspace_id, op.client_id, op.app_name, op.grant_id, op.user_id, op.resource_kind, op.resource_namespace, op.resource_name, op.resource_uid, op.target_id, op.trace_id, op.span_id, op.parent_span_id, op.start_time, op.end_time, op.duration_ns, op.name, op.span_class, op.operation_name, op.status_code, op.error_type, op.error_message, op.model, op.tool_name, op.session_id, op.input_tokens, op.output_tokens, op.reasoning_tokens, op.cached_input_tokens, op.cached_write_tokens, op.cost_usd, op.resource_attributes, op.span_attributes, op.ingested_at, payload.operation_id, payload.input_messages, payload.output_messages, payload.tool_arguments, payload.tool_result, payload.tool_error
-FROM observer_app_operations op JOIN observer_app_operation_payloads payload ON payload.operation_id = op.id
-WHERE op.organization_id = $1
-  AND op.workspace_id = $2
-  AND op.client_id = $3 AND op.id = $4
+SELECT span.id, span.organization_id, span.workspace_id, span.client_id, span.app_name, span.grant_id, span.user_id, span.resource_kind, span.resource_namespace, span.resource_name, span.resource_uid, span.target_id, span.trace_id, span.span_id, span.parent_span_id, span.start_time, span.end_time, span.duration_ns, span.name, span.span_class, span.operation_name, span.status_code, span.error_type, span.error_message, span.model, span.tool_name, span.session_id, span.input_tokens, span.output_tokens, span.reasoning_tokens, span.cached_input_tokens, span.cached_write_tokens, span.cost_usd, span.ingested_at, span.agent_kind, span.turn_id, span.tool_call_id, span.run_id, span.source_operation_id, span.result_id, span.visible,
+ COALESCE(payload.input_messages, 'null'::jsonb)::jsonb AS input_messages,
+ COALESCE(payload.output_messages, 'null'::jsonb)::jsonb AS output_messages,
+ COALESCE(payload.tool_arguments, 'null'::jsonb)::jsonb AS tool_arguments,
+ CASE WHEN span.resource_kind = 'tool' THEN COALESCE(
+   CASE result.protocol
+     WHEN 'messages' THEN (jsonb_path_query_array(result_payload.input_messages,
+       '$.messages[*] ? (@.role == "user").content[*] ? (@.type == "tool_result")') -> (result.source_ordinal - 1)::int) -> 'content'
+     WHEN 'responses' THEN (jsonb_path_query_array(result_payload.input_messages,
+       '$.input[*] ? (@.type == "function_call_output" || @.type == "custom_tool_call_output")') -> (result.source_ordinal - 1)::int) -> 'output'
+     WHEN 'chat' THEN (jsonb_path_query_array(result_payload.input_messages,
+       '$.messages[*] ? (@.role == "tool")') -> (result.source_ordinal - 1)::int) -> 'content'
+   END, 'null'::jsonb)
+   ELSE COALESCE(payload.tool_result, 'null'::jsonb) END::jsonb AS tool_result,
+ COALESCE(payload.tool_error, 'null'::jsonb)::jsonb AS tool_error
+FROM observer_app_spans span
+LEFT JOIN observer_app_operation_payloads payload ON payload.operation_id = span.id
+LEFT JOIN observer_app_tool_results result ON result.id = span.result_id
+LEFT JOIN observer_app_operation_payloads result_payload ON result_payload.operation_id = result.source_operation_id
+WHERE span.organization_id = $1 AND span.workspace_id = $2
+  AND span.client_id = $3 AND span.id = $4
 `
 
 type GatewayGetAppOperationParams struct {
@@ -1806,8 +1834,12 @@ type GatewayGetAppOperationParams struct {
 }
 
 type GatewayGetAppOperationRow struct {
-	ObserverAppOperation        ObserverAppOperation        `json:"observer_app_operation"`
-	ObserverAppOperationPayload ObserverAppOperationPayload `json:"observer_app_operation_payload"`
+	ObserverAppSpan ObserverAppSpan `json:"observer_app_span"`
+	InputMessages   []byte          `json:"input_messages"`
+	OutputMessages  []byte          `json:"output_messages"`
+	ToolArguments   []byte          `json:"tool_arguments"`
+	ToolResult      []byte          `json:"tool_result"`
+	ToolError       []byte          `json:"tool_error"`
 }
 
 func (q *Queries) GatewayGetAppOperation(ctx context.Context, arg GatewayGetAppOperationParams) (GatewayGetAppOperationRow, error) {
@@ -1819,73 +1851,84 @@ func (q *Queries) GatewayGetAppOperation(ctx context.Context, arg GatewayGetAppO
 	)
 	var i GatewayGetAppOperationRow
 	err := row.Scan(
-		&i.ObserverAppOperation.ID,
-		&i.ObserverAppOperation.OrganizationID,
-		&i.ObserverAppOperation.WorkspaceID,
-		&i.ObserverAppOperation.ClientID,
-		&i.ObserverAppOperation.AppName,
-		&i.ObserverAppOperation.GrantID,
-		&i.ObserverAppOperation.UserID,
-		&i.ObserverAppOperation.ResourceKind,
-		&i.ObserverAppOperation.ResourceNamespace,
-		&i.ObserverAppOperation.ResourceName,
-		&i.ObserverAppOperation.ResourceUid,
-		&i.ObserverAppOperation.TargetID,
-		&i.ObserverAppOperation.TraceID,
-		&i.ObserverAppOperation.SpanID,
-		&i.ObserverAppOperation.ParentSpanID,
-		&i.ObserverAppOperation.StartTime,
-		&i.ObserverAppOperation.EndTime,
-		&i.ObserverAppOperation.DurationNs,
-		&i.ObserverAppOperation.Name,
-		&i.ObserverAppOperation.SpanClass,
-		&i.ObserverAppOperation.OperationName,
-		&i.ObserverAppOperation.StatusCode,
-		&i.ObserverAppOperation.ErrorType,
-		&i.ObserverAppOperation.ErrorMessage,
-		&i.ObserverAppOperation.Model,
-		&i.ObserverAppOperation.ToolName,
-		&i.ObserverAppOperation.SessionID,
-		&i.ObserverAppOperation.InputTokens,
-		&i.ObserverAppOperation.OutputTokens,
-		&i.ObserverAppOperation.ReasoningTokens,
-		&i.ObserverAppOperation.CachedInputTokens,
-		&i.ObserverAppOperation.CachedWriteTokens,
-		&i.ObserverAppOperation.CostUsd,
-		&i.ObserverAppOperation.ResourceAttributes,
-		&i.ObserverAppOperation.SpanAttributes,
-		&i.ObserverAppOperation.IngestedAt,
-		&i.ObserverAppOperationPayload.OperationID,
-		&i.ObserverAppOperationPayload.InputMessages,
-		&i.ObserverAppOperationPayload.OutputMessages,
-		&i.ObserverAppOperationPayload.ToolArguments,
-		&i.ObserverAppOperationPayload.ToolResult,
-		&i.ObserverAppOperationPayload.ToolError,
+		&i.ObserverAppSpan.ID,
+		&i.ObserverAppSpan.OrganizationID,
+		&i.ObserverAppSpan.WorkspaceID,
+		&i.ObserverAppSpan.ClientID,
+		&i.ObserverAppSpan.AppName,
+		&i.ObserverAppSpan.GrantID,
+		&i.ObserverAppSpan.UserID,
+		&i.ObserverAppSpan.ResourceKind,
+		&i.ObserverAppSpan.ResourceNamespace,
+		&i.ObserverAppSpan.ResourceName,
+		&i.ObserverAppSpan.ResourceUid,
+		&i.ObserverAppSpan.TargetID,
+		&i.ObserverAppSpan.TraceID,
+		&i.ObserverAppSpan.SpanID,
+		&i.ObserverAppSpan.ParentSpanID,
+		&i.ObserverAppSpan.StartTime,
+		&i.ObserverAppSpan.EndTime,
+		&i.ObserverAppSpan.DurationNs,
+		&i.ObserverAppSpan.Name,
+		&i.ObserverAppSpan.SpanClass,
+		&i.ObserverAppSpan.OperationName,
+		&i.ObserverAppSpan.StatusCode,
+		&i.ObserverAppSpan.ErrorType,
+		&i.ObserverAppSpan.ErrorMessage,
+		&i.ObserverAppSpan.Model,
+		&i.ObserverAppSpan.ToolName,
+		&i.ObserverAppSpan.SessionID,
+		&i.ObserverAppSpan.InputTokens,
+		&i.ObserverAppSpan.OutputTokens,
+		&i.ObserverAppSpan.ReasoningTokens,
+		&i.ObserverAppSpan.CachedInputTokens,
+		&i.ObserverAppSpan.CachedWriteTokens,
+		&i.ObserverAppSpan.CostUsd,
+		&i.ObserverAppSpan.IngestedAt,
+		&i.ObserverAppSpan.AgentKind,
+		&i.ObserverAppSpan.TurnID,
+		&i.ObserverAppSpan.ToolCallID,
+		&i.ObserverAppSpan.RunID,
+		&i.ObserverAppSpan.SourceOperationID,
+		&i.ObserverAppSpan.ResultID,
+		&i.ObserverAppSpan.Visible,
+		&i.InputMessages,
+		&i.OutputMessages,
+		&i.ToolArguments,
+		&i.ToolResult,
+		&i.ToolError,
 	)
 	return i, err
 }
 
 const gatewayGetAppTraceChart = `-- name: GatewayGetAppTraceChart :many
-WITH traces AS (
- SELECT trace_id, MIN(start_time)::timestamptz AS started_at
+WITH identities AS (
+ SELECT op.id AS root_id, op.trace_id, op.start_time AS started_at
  FROM observer_app_operations op
- WHERE op.organization_id = $3
-   AND op.workspace_id = $4
-   AND op.client_id = $5
-  GROUP BY trace_id
+ WHERE op.organization_id = $1 AND op.workspace_id = $2
+   AND op.client_id = $3 AND op.resource_kind = 'turn'
+   AND ($4::text = '' OR op.session_id = $4)
+   AND op.start_time >= $5::timestamptz AND op.start_time <= $6::timestamptz
+ UNION ALL
+ SELECT NULL::bigint AS root_id, op.trace_id, MIN(op.start_time)::timestamptz AS started_at
+ FROM observer_app_operations op
+ WHERE op.organization_id = $1 AND op.workspace_id = $2
+   AND op.client_id = $3 AND op.run_id IS NULL AND op.resource_kind IN ('inference', 'mcp')
+ GROUP BY op.trace_id
+ HAVING MIN(op.start_time) >= $5::timestamptz AND MIN(op.start_time) <= $6::timestamptz
+   AND ($4::text = '' OR BOOL_OR(op.session_id = $4))
 )
 SELECT date_trunc('hour', started_at)::timestamptz AS time, COUNT(*)::bigint AS count
-FROM traces
-WHERE traces.started_at >= $1::timestamptz AND traces.started_at <= $2::timestamptz
-GROUP BY time ORDER BY time
+FROM identities GROUP BY time ORDER BY time
 `
 
 type GatewayGetAppTraceChartParams struct {
-	StartedAfter   time.Time `json:"started_after"`
-	StartedBefore  time.Time `json:"started_before"`
 	OrganizationID string    `json:"organization_id"`
 	WorkspaceID    string    `json:"workspace_id"`
 	ClientID       string    `json:"client_id"`
+	SessionID      string    `json:"session_id"`
+	StartedAfter   time.Time `json:"started_after"`
+	StartedBefore  time.Time `json:"started_before"`
 }
 
 type GatewayGetAppTraceChartRow struct {
@@ -1895,11 +1938,12 @@ type GatewayGetAppTraceChartRow struct {
 
 func (q *Queries) GatewayGetAppTraceChart(ctx context.Context, arg GatewayGetAppTraceChartParams) ([]GatewayGetAppTraceChartRow, error) {
 	rows, err := q.db.Query(ctx, gatewayGetAppTraceChart,
-		arg.StartedAfter,
-		arg.StartedBefore,
 		arg.OrganizationID,
 		arg.WorkspaceID,
 		arg.ClientID,
+		arg.SessionID,
+		arg.StartedAfter,
+		arg.StartedBefore,
 	)
 	if err != nil {
 		return nil, err
@@ -2240,25 +2284,33 @@ func (q *Queries) GatewayGetExternalAgent(ctx context.Context, clientID string) 
 }
 
 const gatewayGetLensApp = `-- name: GatewayGetLensApp :one
-WITH history AS (
- SELECT app_name AS name FROM observer_app_operations op
- WHERE op.organization_id = $2
-   AND op.workspace_id = $3 AND op.client_id = $1
- ORDER BY start_time DESC, id DESC LIMIT 1
-), subject AS (
- SELECT name FROM history
+WITH subjects AS (
+ SELECT op.client_id, op.app_name AS name, op.agent_kind, MAX(op.start_time) AS last_seen
+ FROM observer_app_operations op
+ WHERE op.client_id = $1 AND op.organization_id = $2 AND op.workspace_id = $3
+ GROUP BY op.client_id, op.app_name, op.agent_kind
  UNION ALL
- SELECT COALESCE(c.name, c.client_id)::text FROM delegation_grants g
- JOIN oauth_clients c ON c.client_id = g.client_id
- WHERE g.organization_id = $2 AND g.client_id = $1
+ SELECT g.client_id, COALESCE(c.name, c.client_id)::text, COALESCE(e.kind::text, ''), now()
+ FROM delegation_grants g JOIN oauth_clients c ON c.client_id = g.client_id
+ LEFT JOIN external_agents e ON e.client_id = g.client_id AND e.organization_id = g.organization_id
+   AND e.workspace_id = $3
+ WHERE g.client_id = $1 AND g.organization_id = $2
    AND g.approved_at IS NOT NULL AND g.revoked_at IS NULL AND c.disabled IS NOT TRUE
    AND EXISTS (
     SELECT 1 FROM jsonb_array_elements((g.selection->'models') || (g.selection->'mcp')) AS selected
     WHERE selected->>'workspace_id' = $3
    )
+ UNION ALL
+ SELECT e.client_id, COALESCE(c.name, e.client_id)::text, e.kind::text, now()
+ FROM external_agents e LEFT JOIN oauth_clients c ON c.client_id = e.client_id
+ WHERE e.client_id = $1 AND e.organization_id = $2 AND e.workspace_id = $3
+), latest AS (
+ SELECT DISTINCT ON (client_id) client_id, name FROM subjects ORDER BY client_id, last_seen DESC, name
+), kinds AS (
+ SELECT client_id, MAX(NULLIF(agent_kind, ''))::text AS agent_kind FROM subjects GROUP BY client_id
 )
-SELECT $1::text AS client_id, COALESCE(c.name, subject.name)::text AS name
-FROM subject LEFT JOIN oauth_clients c ON c.client_id = $1
+SELECT latest.client_id, COALESCE(c.name, latest.name)::text AS name, COALESCE(kinds.agent_kind, '')::text AS agent_kind
+FROM latest JOIN kinds ON kinds.client_id = latest.client_id LEFT JOIN oauth_clients c ON c.client_id = latest.client_id
 LIMIT 1
 `
 
@@ -2269,14 +2321,15 @@ type GatewayGetLensAppParams struct {
 }
 
 type GatewayGetLensAppRow struct {
-	ClientID string `json:"client_id"`
-	Name     string `json:"name"`
+	ClientID  string `json:"client_id"`
+	Name      string `json:"name"`
+	AgentKind string `json:"agent_kind"`
 }
 
 func (q *Queries) GatewayGetLensApp(ctx context.Context, arg GatewayGetLensAppParams) (GatewayGetLensAppRow, error) {
 	row := q.db.QueryRow(ctx, gatewayGetLensApp, arg.ClientID, arg.OrganizationID, arg.WorkspaceID)
 	var i GatewayGetLensAppRow
-	err := row.Scan(&i.ClientID, &i.Name)
+	err := row.Scan(&i.ClientID, &i.Name, &i.AgentKind)
 	return i, err
 }
 
@@ -2288,12 +2341,14 @@ WITH range_rows AS (
     inv.tool_name,
     AVG(CAST(inv.duration_ns AS DOUBLE PRECISION) / 1000000.0) AS avg_latency_ms,
     COUNT(*) FILTER (WHERE NOT inv.failed)::BIGINT AS success_count,
-    COUNT(*) FILTER (WHERE inv.failed)::BIGINT AS failed_count
+    COUNT(*) FILTER (WHERE inv.failed)::BIGINT AS failed_count,
+    MAX(inv.start_time)::timestamptz AS last_called_at
   FROM observer_mcp_tool_invocations inv
   WHERE inv.tenant_namespace = $1
     AND inv.agent_name = $2
-    AND inv.start_time >= $3
-    AND inv.start_time < $4
+    AND ($3::text = '' OR inv.session_id = $3)
+    AND inv.start_time >= $4
+    AND inv.start_time < $5
   GROUP BY
     inv.agent_name,
     inv.mcp_connection_name,
@@ -2306,13 +2361,8 @@ SELECT
   range_rows.avg_latency_ms,
   range_rows.success_count,
   range_rows.failed_count,
-  observer_mcp_tool_last_called.last_called_at
+  range_rows.last_called_at
 FROM range_rows
-LEFT JOIN observer_mcp_tool_last_called
-  ON observer_mcp_tool_last_called.tenant_namespace = $1
-  AND observer_mcp_tool_last_called.agent_name = range_rows.agent_name
-  AND observer_mcp_tool_last_called.mcp_connection_name = range_rows.mcp_connection_name
-  AND observer_mcp_tool_last_called.tool_name = range_rows.tool_name
 ORDER BY
   range_rows.mcp_connection_name ASC,
   range_rows.tool_name ASC
@@ -2321,24 +2371,26 @@ ORDER BY
 type GatewayGetMCPGraphParams struct {
 	TenantNamespace string    `json:"tenant_namespace"`
 	AgentName       string    `json:"agent_name"`
+	SessionID       string    `json:"session_id"`
 	StartTimeAfter  time.Time `json:"start_time_after"`
 	StartTimeBefore time.Time `json:"start_time_before"`
 }
 
 type GatewayGetMCPGraphRow struct {
-	AgentName         string             `json:"agent_name"`
-	McpConnectionName string             `json:"mcp_connection_name"`
-	ToolName          string             `json:"tool_name"`
-	AvgLatencyMs      float64            `json:"avg_latency_ms"`
-	SuccessCount      int64              `json:"success_count"`
-	FailedCount       int64              `json:"failed_count"`
-	LastCalledAt      pgtype.Timestamptz `json:"last_called_at"`
+	AgentName         string    `json:"agent_name"`
+	McpConnectionName string    `json:"mcp_connection_name"`
+	ToolName          string    `json:"tool_name"`
+	AvgLatencyMs      float64   `json:"avg_latency_ms"`
+	SuccessCount      int64     `json:"success_count"`
+	FailedCount       int64     `json:"failed_count"`
+	LastCalledAt      time.Time `json:"last_called_at"`
 }
 
 func (q *Queries) GatewayGetMCPGraph(ctx context.Context, arg GatewayGetMCPGraphParams) ([]GatewayGetMCPGraphRow, error) {
 	rows, err := q.db.Query(ctx, gatewayGetMCPGraph,
 		arg.TenantNamespace,
 		arg.AgentName,
+		arg.SessionID,
 		arg.StartTimeAfter,
 		arg.StartTimeBefore,
 	)
@@ -2395,8 +2447,6 @@ WITH span_row AS (
     cached_write_tokens,
     cost_usd,
     llm_finish_reason,
-    resource_attributes,
-    span_attributes,
     ingested_at
   FROM observer_trace_spans sp
   WHERE sp.tenant_namespace = $1
@@ -2432,8 +2482,6 @@ SELECT
   s.cached_write_tokens,
   s.cost_usd,
   s.llm_finish_reason,
-  s.resource_attributes,
-  s.span_attributes,
   s.ingested_at,
   COALESCE(p.input_messages, 'null'::jsonb) AS input_messages,
   COALESCE(p.output_messages, 'null'::jsonb) AS output_messages,
@@ -2455,37 +2503,35 @@ type GatewayGetSpanDetailParams struct {
 }
 
 type GatewayGetSpanDetailRow struct {
-	ID                 int64     `json:"id"`
-	AgentName          string    `json:"agent_name"`
-	SessionID          string    `json:"session_id"`
-	TraceID            []byte    `json:"trace_id"`
-	SpanID             []byte    `json:"span_id"`
-	ParentSpanID       []byte    `json:"parent_span_id"`
-	StartTime          time.Time `json:"start_time"`
-	EndTime            time.Time `json:"end_time"`
-	DurationNs         int64     `json:"duration_ns"`
-	Name               string    `json:"name"`
-	SpanClass          string    `json:"span_class"`
-	OperationName      string    `json:"operation_name"`
-	Kind               string    `json:"kind"`
-	StatusCode         string    `json:"status_code"`
-	ErrorType          string    `json:"error_type"`
-	ErrorMessage       string    `json:"error_message"`
-	Model              string    `json:"model"`
-	ToolName           string    `json:"tool_name"`
-	InputTokens        int64     `json:"input_tokens"`
-	OutputTokens       int64     `json:"output_tokens"`
-	CachedInputTokens  int64     `json:"cached_input_tokens"`
-	CachedWriteTokens  int64     `json:"cached_write_tokens"`
-	CostUsd            float64   `json:"cost_usd"`
-	LlmFinishReason    string    `json:"llm_finish_reason"`
-	ResourceAttributes []byte    `json:"resource_attributes"`
-	SpanAttributes     []byte    `json:"span_attributes"`
-	IngestedAt         time.Time `json:"ingested_at"`
-	InputMessages      []byte    `json:"input_messages"`
-	OutputMessages     []byte    `json:"output_messages"`
-	ToolArguments      []byte    `json:"tool_arguments"`
-	ToolResult         []byte    `json:"tool_result"`
+	ID                int64     `json:"id"`
+	AgentName         string    `json:"agent_name"`
+	SessionID         string    `json:"session_id"`
+	TraceID           []byte    `json:"trace_id"`
+	SpanID            []byte    `json:"span_id"`
+	ParentSpanID      []byte    `json:"parent_span_id"`
+	StartTime         time.Time `json:"start_time"`
+	EndTime           time.Time `json:"end_time"`
+	DurationNs        int64     `json:"duration_ns"`
+	Name              string    `json:"name"`
+	SpanClass         string    `json:"span_class"`
+	OperationName     string    `json:"operation_name"`
+	Kind              string    `json:"kind"`
+	StatusCode        string    `json:"status_code"`
+	ErrorType         string    `json:"error_type"`
+	ErrorMessage      string    `json:"error_message"`
+	Model             string    `json:"model"`
+	ToolName          string    `json:"tool_name"`
+	InputTokens       int64     `json:"input_tokens"`
+	OutputTokens      int64     `json:"output_tokens"`
+	CachedInputTokens int64     `json:"cached_input_tokens"`
+	CachedWriteTokens int64     `json:"cached_write_tokens"`
+	CostUsd           float64   `json:"cost_usd"`
+	LlmFinishReason   string    `json:"llm_finish_reason"`
+	IngestedAt        time.Time `json:"ingested_at"`
+	InputMessages     []byte    `json:"input_messages"`
+	OutputMessages    []byte    `json:"output_messages"`
+	ToolArguments     []byte    `json:"tool_arguments"`
+	ToolResult        []byte    `json:"tool_result"`
 }
 
 func (q *Queries) GatewayGetSpanDetail(ctx context.Context, arg GatewayGetSpanDetailParams) (GatewayGetSpanDetailRow, error) {
@@ -2522,8 +2568,6 @@ func (q *Queries) GatewayGetSpanDetail(ctx context.Context, arg GatewayGetSpanDe
 		&i.CachedWriteTokens,
 		&i.CostUsd,
 		&i.LlmFinishReason,
-		&i.ResourceAttributes,
-		&i.SpanAttributes,
 		&i.IngestedAt,
 		&i.InputMessages,
 		&i.OutputMessages,
@@ -3403,42 +3447,115 @@ func (q *Queries) GatewayListAgentsByName(ctx context.Context, arg GatewayListAg
 	return items, nil
 }
 
+const gatewayListAppSessions = `-- name: GatewayListAppSessions :many
+WITH sessions AS (
+ SELECT session_id, MAX(end_time)::timestamptz AS last_seen
+ FROM observer_app_operations
+ WHERE organization_id = $5 AND workspace_id = $6
+   AND client_id = $7 AND agent_kind IN ('claude', 'codex')
+   AND session_id <> '' AND run_id IS NULL AND resource_kind <> 'tool'
+   AND ($8::text = '' OR session_id = $8)
+ GROUP BY session_id
+)
+SELECT session_id, last_seen FROM sessions
+WHERE NOT $1::boolean
+  OR (last_seen, session_id) < ($2::timestamptz, $3::text)
+ORDER BY last_seen DESC, session_id DESC LIMIT $4
+`
+
+type GatewayListAppSessionsParams struct {
+	CursorSet       bool      `json:"cursor_set"`
+	CursorLastSeen  time.Time `json:"cursor_last_seen"`
+	CursorSessionID string    `json:"cursor_session_id"`
+	PageSize        int32     `json:"page_size"`
+	OrganizationID  string    `json:"organization_id"`
+	WorkspaceID     string    `json:"workspace_id"`
+	ClientID        string    `json:"client_id"`
+	SessionID       string    `json:"session_id"`
+}
+
+type GatewayListAppSessionsRow struct {
+	SessionID string    `json:"session_id"`
+	LastSeen  time.Time `json:"last_seen"`
+}
+
+func (q *Queries) GatewayListAppSessions(ctx context.Context, arg GatewayListAppSessionsParams) ([]GatewayListAppSessionsRow, error) {
+	rows, err := q.db.Query(ctx, gatewayListAppSessions,
+		arg.CursorSet,
+		arg.CursorLastSeen,
+		arg.CursorSessionID,
+		arg.PageSize,
+		arg.OrganizationID,
+		arg.WorkspaceID,
+		arg.ClientID,
+		arg.SessionID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GatewayListAppSessionsRow{}
+	for rows.Next() {
+		var i GatewayListAppSessionsRow
+		if err := rows.Scan(&i.SessionID, &i.LastSeen); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const gatewayListAppSpans = `-- name: GatewayListAppSpans :many
-SELECT op.id, op.organization_id, op.workspace_id, op.client_id, op.app_name, op.grant_id, op.user_id, op.resource_kind, op.resource_namespace, op.resource_name, op.resource_uid, op.target_id, op.trace_id, op.span_id, op.parent_span_id, op.start_time, op.end_time, op.duration_ns, op.name, op.span_class, op.operation_name, op.status_code, op.error_type, op.error_message, op.model, op.tool_name, op.session_id, op.input_tokens, op.output_tokens, op.reasoning_tokens, op.cached_input_tokens, op.cached_write_tokens, op.cost_usd, op.resource_attributes, op.span_attributes, op.ingested_at FROM observer_app_operations op
-WHERE op.organization_id = $1
-  AND op.workspace_id = $2
-  AND op.client_id = $3
- AND trace_id = $4
- AND (NOT $5::boolean
-  OR (start_time, id) > ($6::timestamptz, $7::bigint))
-ORDER BY start_time, id LIMIT $8
+WITH roots AS MATERIALIZED (
+ SELECT root.id FROM observer_app_operations root
+ WHERE root.organization_id = $6 AND root.workspace_id = $7
+   AND root.client_id = $8 AND root.trace_id = $9 AND root.resource_kind = 'turn'
+), candidates AS MATERIALIZED (
+ SELECT op.id FROM observer_app_operations op
+ WHERE op.organization_id = $6 AND op.workspace_id = $7
+   AND op.client_id = $8 AND op.run_id IS NULL AND op.trace_id = $9
+ UNION ALL
+ SELECT op.id FROM roots JOIN observer_app_operations op ON op.run_id = roots.id
+ WHERE op.organization_id = $6 AND op.workspace_id = $7
+   AND op.client_id = $8
+)
+SELECT span.id, span.organization_id, span.workspace_id, span.client_id, span.app_name, span.grant_id, span.user_id, span.resource_kind, span.resource_namespace, span.resource_name, span.resource_uid, span.target_id, span.trace_id, span.span_id, span.parent_span_id, span.start_time, span.end_time, span.duration_ns, span.name, span.span_class, span.operation_name, span.status_code, span.error_type, span.error_message, span.model, span.tool_name, span.session_id, span.input_tokens, span.output_tokens, span.reasoning_tokens, span.cached_input_tokens, span.cached_write_tokens, span.cost_usd, span.ingested_at, span.agent_kind, span.turn_id, span.tool_call_id, span.run_id, span.source_operation_id, span.result_id, span.visible FROM candidates JOIN observer_app_spans span ON span.id = candidates.id
+WHERE span.visible AND (NOT $1::boolean
+  OR (span.resource_kind <> 'turn', span.start_time, span.id)
+    > ($2::boolean, $3::timestamptz, $4::bigint))
+ORDER BY span.resource_kind <> 'turn', span.start_time, span.id LIMIT $5
 `
 
 type GatewayListAppSpansParams struct {
+	CursorSet       bool      `json:"cursor_set"`
+	CursorNonRoot   bool      `json:"cursor_non_root"`
+	CursorStartTime time.Time `json:"cursor_start_time"`
+	CursorID        int64     `json:"cursor_id"`
+	PageSize        int32     `json:"page_size"`
 	OrganizationID  string    `json:"organization_id"`
 	WorkspaceID     string    `json:"workspace_id"`
 	ClientID        string    `json:"client_id"`
 	TraceID         []byte    `json:"trace_id"`
-	CursorSet       bool      `json:"cursor_set"`
-	CursorStartTime time.Time `json:"cursor_start_time"`
-	CursorID        int64     `json:"cursor_id"`
-	PageSize        int32     `json:"page_size"`
 }
 
 type GatewayListAppSpansRow struct {
-	ObserverAppOperation ObserverAppOperation `json:"observer_app_operation"`
+	ObserverAppSpan ObserverAppSpan `json:"observer_app_span"`
 }
 
 func (q *Queries) GatewayListAppSpans(ctx context.Context, arg GatewayListAppSpansParams) ([]GatewayListAppSpansRow, error) {
 	rows, err := q.db.Query(ctx, gatewayListAppSpans,
+		arg.CursorSet,
+		arg.CursorNonRoot,
+		arg.CursorStartTime,
+		arg.CursorID,
+		arg.PageSize,
 		arg.OrganizationID,
 		arg.WorkspaceID,
 		arg.ClientID,
 		arg.TraceID,
-		arg.CursorSet,
-		arg.CursorStartTime,
-		arg.CursorID,
-		arg.PageSize,
 	)
 	if err != nil {
 		return nil, err
@@ -3448,42 +3565,47 @@ func (q *Queries) GatewayListAppSpans(ctx context.Context, arg GatewayListAppSpa
 	for rows.Next() {
 		var i GatewayListAppSpansRow
 		if err := rows.Scan(
-			&i.ObserverAppOperation.ID,
-			&i.ObserverAppOperation.OrganizationID,
-			&i.ObserverAppOperation.WorkspaceID,
-			&i.ObserverAppOperation.ClientID,
-			&i.ObserverAppOperation.AppName,
-			&i.ObserverAppOperation.GrantID,
-			&i.ObserverAppOperation.UserID,
-			&i.ObserverAppOperation.ResourceKind,
-			&i.ObserverAppOperation.ResourceNamespace,
-			&i.ObserverAppOperation.ResourceName,
-			&i.ObserverAppOperation.ResourceUid,
-			&i.ObserverAppOperation.TargetID,
-			&i.ObserverAppOperation.TraceID,
-			&i.ObserverAppOperation.SpanID,
-			&i.ObserverAppOperation.ParentSpanID,
-			&i.ObserverAppOperation.StartTime,
-			&i.ObserverAppOperation.EndTime,
-			&i.ObserverAppOperation.DurationNs,
-			&i.ObserverAppOperation.Name,
-			&i.ObserverAppOperation.SpanClass,
-			&i.ObserverAppOperation.OperationName,
-			&i.ObserverAppOperation.StatusCode,
-			&i.ObserverAppOperation.ErrorType,
-			&i.ObserverAppOperation.ErrorMessage,
-			&i.ObserverAppOperation.Model,
-			&i.ObserverAppOperation.ToolName,
-			&i.ObserverAppOperation.SessionID,
-			&i.ObserverAppOperation.InputTokens,
-			&i.ObserverAppOperation.OutputTokens,
-			&i.ObserverAppOperation.ReasoningTokens,
-			&i.ObserverAppOperation.CachedInputTokens,
-			&i.ObserverAppOperation.CachedWriteTokens,
-			&i.ObserverAppOperation.CostUsd,
-			&i.ObserverAppOperation.ResourceAttributes,
-			&i.ObserverAppOperation.SpanAttributes,
-			&i.ObserverAppOperation.IngestedAt,
+			&i.ObserverAppSpan.ID,
+			&i.ObserverAppSpan.OrganizationID,
+			&i.ObserverAppSpan.WorkspaceID,
+			&i.ObserverAppSpan.ClientID,
+			&i.ObserverAppSpan.AppName,
+			&i.ObserverAppSpan.GrantID,
+			&i.ObserverAppSpan.UserID,
+			&i.ObserverAppSpan.ResourceKind,
+			&i.ObserverAppSpan.ResourceNamespace,
+			&i.ObserverAppSpan.ResourceName,
+			&i.ObserverAppSpan.ResourceUid,
+			&i.ObserverAppSpan.TargetID,
+			&i.ObserverAppSpan.TraceID,
+			&i.ObserverAppSpan.SpanID,
+			&i.ObserverAppSpan.ParentSpanID,
+			&i.ObserverAppSpan.StartTime,
+			&i.ObserverAppSpan.EndTime,
+			&i.ObserverAppSpan.DurationNs,
+			&i.ObserverAppSpan.Name,
+			&i.ObserverAppSpan.SpanClass,
+			&i.ObserverAppSpan.OperationName,
+			&i.ObserverAppSpan.StatusCode,
+			&i.ObserverAppSpan.ErrorType,
+			&i.ObserverAppSpan.ErrorMessage,
+			&i.ObserverAppSpan.Model,
+			&i.ObserverAppSpan.ToolName,
+			&i.ObserverAppSpan.SessionID,
+			&i.ObserverAppSpan.InputTokens,
+			&i.ObserverAppSpan.OutputTokens,
+			&i.ObserverAppSpan.ReasoningTokens,
+			&i.ObserverAppSpan.CachedInputTokens,
+			&i.ObserverAppSpan.CachedWriteTokens,
+			&i.ObserverAppSpan.CostUsd,
+			&i.ObserverAppSpan.IngestedAt,
+			&i.ObserverAppSpan.AgentKind,
+			&i.ObserverAppSpan.TurnID,
+			&i.ObserverAppSpan.ToolCallID,
+			&i.ObserverAppSpan.RunID,
+			&i.ObserverAppSpan.SourceOperationID,
+			&i.ObserverAppSpan.ResultID,
+			&i.ObserverAppSpan.Visible,
 		); err != nil {
 			return nil, err
 		}
@@ -3496,51 +3618,76 @@ func (q *Queries) GatewayListAppSpans(ctx context.Context, arg GatewayListAppSpa
 }
 
 const gatewayListAppTraces = `-- name: GatewayListAppTraces :many
-WITH traces AS (
-SELECT trace_id, MIN(start_time)::timestamptz AS started_at,
- MAX(end_time)::timestamptz AS ended_at,
- (ARRAY_AGG(span_id ORDER BY start_time, id))[1]::bytea AS root_span_id,
- (EXTRACT(EPOCH FROM MAX(end_time) - MIN(start_time)) * 1000000000)::bigint AS duration_ns,
- COUNT(*)::bigint AS span_count,
- COUNT(*) FILTER (WHERE status_code = 'ERROR')::bigint AS error_count,
- COUNT(*) FILTER (WHERE span_class = 'tool')::bigint AS tool_count,
- COUNT(*) FILTER (WHERE span_class = 'llm')::bigint AS model_count,
- COALESCE(SUM(input_tokens), 0)::bigint AS input_tokens,
- COUNT(input_tokens) > 0 AND COUNT(input_tokens) = COUNT(*) FILTER (WHERE span_class = 'llm') AS input_tokens_known,
- COALESCE(SUM(output_tokens), 0)::bigint AS output_tokens,
- COUNT(output_tokens) > 0 AND COUNT(output_tokens) = COUNT(*) FILTER (WHERE span_class = 'llm') AS output_tokens_known,
- COALESCE(SUM(cached_input_tokens), 0)::bigint AS cached_input_tokens,
- COUNT(cached_input_tokens) > 0 AND COUNT(cached_input_tokens) = COUNT(*) FILTER (WHERE span_class = 'llm') AS cached_input_tokens_known,
- COALESCE(SUM(cached_write_tokens), 0)::bigint AS cached_write_tokens,
- COUNT(cached_write_tokens) > 0 AND COUNT(cached_write_tokens) = COUNT(*) FILTER (WHERE span_class = 'llm') AS cached_write_tokens_known,
- COALESCE(SUM(cost_usd), 0)::double precision AS cost_usd,
- COUNT(cost_usd) > 0 AND COUNT(cost_usd) = COUNT(*) FILTER (WHERE span_class = 'llm') AS cost_usd_known,
- CASE WHEN BOOL_OR(status_code = 'ERROR') THEN 'ERROR' ELSE 'OK' END::text AS status_code,
- MAX(ingested_at)::timestamptz AS updated_at
-FROM observer_app_operations op
-WHERE op.organization_id = $7
-  AND op.workspace_id = $8
-  AND op.client_id = $9
-GROUP BY trace_id
+WITH identities AS (
+ SELECT op.id AS root_id, op.trace_id, op.start_time AS started_at
+ FROM observer_app_operations op
+ WHERE op.organization_id = $1 AND op.workspace_id = $2
+   AND op.client_id = $3 AND op.resource_kind = 'turn'
+   AND ($4::text = '' OR op.session_id = $4)
+   AND op.start_time >= $5::timestamptz AND op.start_time <= $6::timestamptz
+ UNION ALL
+ SELECT NULL::bigint AS root_id, op.trace_id, MIN(op.start_time)::timestamptz AS started_at
+ FROM observer_app_operations op
+ WHERE op.organization_id = $1 AND op.workspace_id = $2
+   AND op.client_id = $3 AND op.run_id IS NULL AND op.resource_kind IN ('inference', 'mcp')
+ GROUP BY op.trace_id
+ HAVING MIN(op.start_time) >= $5::timestamptz AND MIN(op.start_time) <= $6::timestamptz
+   AND ($4::text = '' OR BOOL_OR(op.session_id = $4))
+), candidates AS MATERIALIZED (
+ SELECT root_id, trace_id, started_at FROM identities
+ WHERE NOT $7::boolean
+   OR (started_at, trace_id) < ($8::timestamptz, $9::bytea)
+ ORDER BY started_at DESC, trace_id DESC LIMIT $10
+), members AS MATERIALIZED (
+ SELECT candidate.trace_id AS logical_trace_id, candidate.started_at, op.id
+ FROM candidates candidate JOIN observer_app_operations op
+   ON op.organization_id = $1 AND op.workspace_id = $2
+   AND op.client_id = $3
+   AND (op.run_id = candidate.root_id OR op.id = candidate.root_id
+     OR (candidate.root_id IS NULL AND op.run_id IS NULL AND op.trace_id = candidate.trace_id))
 )
-SELECT trace_id, started_at, ended_at, root_span_id, duration_ns, span_count, error_count, tool_count, model_count, input_tokens, input_tokens_known, output_tokens, output_tokens_known, cached_input_tokens, cached_input_tokens_known, cached_write_tokens, cached_write_tokens_known, cost_usd, cost_usd_known, status_code, updated_at FROM traces
-WHERE traces.started_at >= $1::timestamptz AND traces.started_at <= $2::timestamptz
- AND (NOT $3::boolean
- OR (started_at, trace_id) < ($4::timestamptz, $5::bytea))
-ORDER BY started_at DESC, trace_id DESC
-LIMIT $6
+SELECT members.logical_trace_id AS trace_id, members.started_at,
+ MAX(span.end_time)::timestamptz AS ended_at,
+ (ARRAY_AGG(span.span_id ORDER BY span.resource_kind <> 'turn', span.start_time, span.id))[1]::bytea AS root_span_id,
+ (EXTRACT(EPOCH FROM MAX(span.end_time) - members.started_at) * 1000000000)::bigint AS duration_ns,
+ COUNT(*)::bigint AS span_count,
+ COUNT(*) FILTER (WHERE span.resource_kind <> 'turn' AND span.status_code = 'ERROR')::bigint AS error_count,
+ COUNT(*) FILTER (WHERE span.span_class = 'tool')::bigint AS tool_count,
+ COUNT(*) FILTER (WHERE span.span_class = 'llm')::bigint AS model_count,
+ COALESCE(SUM(span.input_tokens) FILTER (WHERE span.span_class = 'llm'), 0)::bigint AS input_tokens,
+ COUNT(span.input_tokens) FILTER (WHERE span.span_class = 'llm') > 0
+   AND COUNT(span.input_tokens) FILTER (WHERE span.span_class = 'llm') = COUNT(*) FILTER (WHERE span.span_class = 'llm') AS input_tokens_known,
+ COALESCE(SUM(span.output_tokens) FILTER (WHERE span.span_class = 'llm'), 0)::bigint AS output_tokens,
+ COUNT(span.output_tokens) FILTER (WHERE span.span_class = 'llm') > 0
+   AND COUNT(span.output_tokens) FILTER (WHERE span.span_class = 'llm') = COUNT(*) FILTER (WHERE span.span_class = 'llm') AS output_tokens_known,
+ COALESCE(SUM(span.cached_input_tokens) FILTER (WHERE span.span_class = 'llm'), 0)::bigint AS cached_input_tokens,
+ COUNT(span.cached_input_tokens) FILTER (WHERE span.span_class = 'llm') > 0
+   AND COUNT(span.cached_input_tokens) FILTER (WHERE span.span_class = 'llm') = COUNT(*) FILTER (WHERE span.span_class = 'llm') AS cached_input_tokens_known,
+ COALESCE(SUM(span.cached_write_tokens) FILTER (WHERE span.span_class = 'llm'), 0)::bigint AS cached_write_tokens,
+ COUNT(span.cached_write_tokens) FILTER (WHERE span.span_class = 'llm') > 0
+   AND COUNT(span.cached_write_tokens) FILTER (WHERE span.span_class = 'llm') = COUNT(*) FILTER (WHERE span.span_class = 'llm') AS cached_write_tokens_known,
+ COALESCE(SUM(span.cost_usd) FILTER (WHERE span.span_class = 'llm'), 0)::double precision AS cost_usd,
+ COUNT(span.cost_usd) FILTER (WHERE span.span_class = 'llm') > 0
+   AND COUNT(span.cost_usd) FILTER (WHERE span.span_class = 'llm') = COUNT(*) FILTER (WHERE span.span_class = 'llm') AS cost_usd_known,
+ CASE WHEN BOOL_OR(span.status_code = 'ERROR') THEN 'ERROR' ELSE 'OK' END::text AS status_code,
+ MAX(span.ingested_at)::timestamptz AS updated_at
+FROM members JOIN observer_app_spans span ON span.id = members.id
+WHERE span.visible
+GROUP BY members.logical_trace_id, members.started_at
+ORDER BY members.started_at DESC, members.logical_trace_id DESC
 `
 
 type GatewayListAppTracesParams struct {
+	OrganizationID  string    `json:"organization_id"`
+	WorkspaceID     string    `json:"workspace_id"`
+	ClientID        string    `json:"client_id"`
+	SessionID       string    `json:"session_id"`
 	StartedAfter    time.Time `json:"started_after"`
 	StartedBefore   time.Time `json:"started_before"`
 	CursorSet       bool      `json:"cursor_set"`
 	CursorStartedAt time.Time `json:"cursor_started_at"`
 	CursorTraceID   []byte    `json:"cursor_trace_id"`
 	PageSize        int32     `json:"page_size"`
-	OrganizationID  string    `json:"organization_id"`
-	WorkspaceID     string    `json:"workspace_id"`
-	ClientID        string    `json:"client_id"`
 }
 
 type GatewayListAppTracesRow struct {
@@ -3569,15 +3716,16 @@ type GatewayListAppTracesRow struct {
 
 func (q *Queries) GatewayListAppTraces(ctx context.Context, arg GatewayListAppTracesParams) ([]GatewayListAppTracesRow, error) {
 	rows, err := q.db.Query(ctx, gatewayListAppTraces,
+		arg.OrganizationID,
+		arg.WorkspaceID,
+		arg.ClientID,
+		arg.SessionID,
 		arg.StartedAfter,
 		arg.StartedBefore,
 		arg.CursorSet,
 		arg.CursorStartedAt,
 		arg.CursorTraceID,
 		arg.PageSize,
-		arg.OrganizationID,
-		arg.WorkspaceID,
-		arg.ClientID,
 	)
 	if err != nil {
 		return nil, err
@@ -4228,9 +4376,12 @@ func (q *Queries) GatewayListCodingWorktrees(ctx context.Context, arg GatewayLis
 }
 
 const gatewayListDelegationGrants = `-- name: GatewayListDelegationGrants :many
-SELECT g.id, g.client_id, g.user_id, g.organization_id, g.scopes, g.resources, g.selection, g.created_at, g.approved_at, g.revoked_at, COALESCE(c.name, c.client_id)::text AS app_name
+SELECT g.id, g.client_id, g.user_id, g.organization_id, g.scopes, g.resources, g.selection, g.created_at, g.approved_at, g.revoked_at, COALESCE(c.name, c.client_id)::text AS app_name,
+ COALESCE(e.kind::text, '')::text AS agent_kind
 FROM delegation_grants g
 JOIN oauth_clients c ON c.client_id = g.client_id AND c.disabled IS NOT TRUE AND g.scopes <@ c.scopes
+LEFT JOIN external_agents e ON e.client_id = g.client_id
+  AND e.organization_id = g.organization_id AND e.user_id = g.user_id
 WHERE g.approved_at IS NOT NULL AND g.revoked_at IS NULL
   AND (
     (g.selection->'models' = '[]'::jsonb AND g.selection->'mcp' = '[]'::jsonb)
@@ -4246,6 +4397,7 @@ WHERE g.approved_at IS NOT NULL AND g.revoked_at IS NULL
 type GatewayListDelegationGrantsRow struct {
 	DelegationGrant DelegationGrant `json:"delegation_grant"`
 	AppName         string          `json:"app_name"`
+	AgentKind       string          `json:"agent_kind"`
 }
 
 func (q *Queries) GatewayListDelegationGrants(ctx context.Context) ([]GatewayListDelegationGrantsRow, error) {
@@ -4269,6 +4421,7 @@ func (q *Queries) GatewayListDelegationGrants(ctx context.Context) ([]GatewayLis
 			&i.DelegationGrant.ApprovedAt,
 			&i.DelegationGrant.RevokedAt,
 			&i.AppName,
+			&i.AgentKind,
 		); err != nil {
 			return nil, err
 		}
@@ -4879,24 +5032,32 @@ func (q *Queries) GatewayListFileEventsAggregated(ctx context.Context, arg Gatew
 
 const gatewayListLensApps = `-- name: GatewayListLensApps :many
 WITH subjects AS (
- SELECT client_id, app_name AS name, MAX(start_time) AS last_seen
+ SELECT op.client_id, op.app_name AS name, op.agent_kind, MAX(op.start_time) AS last_seen
  FROM observer_app_operations op
  WHERE op.organization_id = $1 AND op.workspace_id = $2
- GROUP BY client_id, app_name
+ GROUP BY op.client_id, op.app_name, op.agent_kind
  UNION ALL
- SELECT g.client_id, COALESCE(c.name, c.client_id)::text AS name, now() AS last_seen
+ SELECT g.client_id, COALESCE(c.name, c.client_id)::text, COALESCE(e.kind::text, ''), now()
  FROM delegation_grants g JOIN oauth_clients c ON c.client_id = g.client_id
+ LEFT JOIN external_agents e ON e.client_id = g.client_id AND e.organization_id = g.organization_id
+   AND e.workspace_id = $2
  WHERE g.organization_id = $1
    AND g.approved_at IS NOT NULL AND g.revoked_at IS NULL AND c.disabled IS NOT TRUE
    AND EXISTS (
     SELECT 1 FROM jsonb_array_elements((g.selection->'models') || (g.selection->'mcp')) AS selected
     WHERE selected->>'workspace_id' = $2
    )
+ UNION ALL
+ SELECT e.client_id, COALESCE(c.name, e.client_id)::text, e.kind::text, now()
+ FROM external_agents e LEFT JOIN oauth_clients c ON c.client_id = e.client_id
+ WHERE e.organization_id = $1 AND e.workspace_id = $2
 ), latest AS (
- SELECT DISTINCT ON (client_id) client_id, name FROM subjects ORDER BY client_id, last_seen DESC
+ SELECT DISTINCT ON (client_id) client_id, name FROM subjects ORDER BY client_id, last_seen DESC, name
+), kinds AS (
+ SELECT client_id, MAX(NULLIF(agent_kind, ''))::text AS agent_kind FROM subjects GROUP BY client_id
 )
-SELECT latest.client_id, COALESCE(c.name, latest.name)::text AS name
-FROM latest LEFT JOIN oauth_clients c ON c.client_id = latest.client_id
+SELECT latest.client_id, COALESCE(c.name, latest.name)::text AS name, COALESCE(kinds.agent_kind, '')::text AS agent_kind
+FROM latest JOIN kinds ON kinds.client_id = latest.client_id LEFT JOIN oauth_clients c ON c.client_id = latest.client_id
 ORDER BY COALESCE(c.name, latest.name), latest.client_id
 `
 
@@ -4906,8 +5067,9 @@ type GatewayListLensAppsParams struct {
 }
 
 type GatewayListLensAppsRow struct {
-	ClientID string `json:"client_id"`
-	Name     string `json:"name"`
+	ClientID  string `json:"client_id"`
+	Name      string `json:"name"`
+	AgentKind string `json:"agent_kind"`
 }
 
 func (q *Queries) GatewayListLensApps(ctx context.Context, arg GatewayListLensAppsParams) ([]GatewayListLensAppsRow, error) {
@@ -4919,7 +5081,7 @@ func (q *Queries) GatewayListLensApps(ctx context.Context, arg GatewayListLensAp
 	items := []GatewayListLensAppsRow{}
 	for rows.Next() {
 		var i GatewayListLensAppsRow
-		if err := rows.Scan(&i.ClientID, &i.Name); err != nil {
+		if err := rows.Scan(&i.ClientID, &i.Name, &i.AgentKind); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

@@ -140,7 +140,6 @@ import {
   ContextCacheUsage,
   ContextContent,
   ContextContentBody,
-  ContextContentFooter,
   ContextContentHeader,
   ContextInputUsage,
   ContextOutputUsage,
@@ -581,7 +580,6 @@ function ChatInner({
     reconnectStream,
     reload,
     session,
-    sessionCost,
     sessionStatus,
     streamError,
     textByPart,
@@ -838,7 +836,7 @@ function ChatInner({
     selectedReasoningLevel === DEFAULT_REASONING_LEVEL ? undefined : selectedReasoningLevel
 
   // Reverted turns are dropped on the next prompt, so exclude them from the
-  // context/cost indicator.
+  // context usage indicator.
   const revertMessageID = session?.revert?.messageID
   const contextMessages = revertMessageID
     ? messages.filter((message) => message.id < revertMessageID)
@@ -1620,7 +1618,6 @@ function ChatInner({
                         contextUsage.maxTokens > 0 ? (
                           <Context
                             maxTokens={contextUsage.maxTokens}
-                            totalCostUSD={sessionCost}
                             usage={contextUsage.usage}
                             usedTokens={contextUsage.usedTokens}
                           >
@@ -1633,7 +1630,6 @@ function ChatInner({
                                 <ContextReasoningUsage />
                                 <ContextCacheUsage />
                               </ContextContentBody>
-                              <ContextContentFooter />
                             </ContextContent>
                           </Context>
                         ) : null}
@@ -1742,7 +1738,6 @@ function ChatInner({
                                   <div className="px-1.5 py-1.5">
                                     <Context
                                       maxTokens={contextUsage.maxTokens}
-                                      totalCostUSD={sessionCost}
                                       usage={contextUsage.usage}
                                       usedTokens={contextUsage.usedTokens}
                                     >
@@ -1753,7 +1748,6 @@ function ChatInner({
                                         <ContextReasoningUsage />
                                         <ContextCacheUsage />
                                       </ContextContentBody>
-                                      <ContextContentFooter className="mt-2 rounded-md px-2 py-1.5" />
                                     </Context>
                                   </div>
                                 </DropdownMenuGroup>

@@ -236,6 +236,9 @@ import type {
   ListAgentWorkflowSchedulesData,
   ListAgentWorkflowSchedulesErrors,
   ListAgentWorkflowSchedulesResponses,
+  ListAppSessionsData,
+  ListAppSessionsErrors,
+  ListAppSessionsResponses,
   ListAppSpansData,
   ListAppSpansErrors,
   ListAppSpansResponses,
@@ -531,6 +534,18 @@ export const listLensApps = <ThrowOnError extends boolean = false>(
   (options?.client ?? client).get<ListLensAppsResponses, ListLensAppsErrors, ThrowOnError>({
     security: [{ scheme: "bearer", type: "http" }],
     url: "/api/lens/apps",
+    ...options,
+  })
+
+/**
+ * List observed native sessions for a registered external agent
+ */
+export const listAppSessions = <ThrowOnError extends boolean = false>(
+  options: Options<ListAppSessionsData, ThrowOnError>
+) =>
+  (options.client ?? client).get<ListAppSessionsResponses, ListAppSessionsErrors, ThrowOnError>({
+    security: [{ scheme: "bearer", type: "http" }],
+    url: "/api/lens/apps/{clientID}/sessions",
     ...options,
   })
 
