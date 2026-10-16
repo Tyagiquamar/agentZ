@@ -196,8 +196,11 @@ export async function resolvePageSelection(
       workspaceId,
       workspace.workspace.type
     )
-    if (result.error) return { ...state, error: result.error }
-    state.sessions = result.data
+    if (result.error && page !== "lens/mcp") return { ...state, error: result.error }
+    state.sessions = result.data ?? []
+    if (result.error && children.session_id) {
+      state.sessions.push({ sessionId: children.session_id, title: children.session_id })
+    }
     state.selected.session_id = (
       state.sessions.find((session) => session.sessionId === children.session_id) ??
       state.sessions[0]

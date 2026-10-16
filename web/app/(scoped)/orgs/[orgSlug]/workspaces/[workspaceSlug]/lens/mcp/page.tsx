@@ -136,10 +136,6 @@ async function Graph({
     return <ErrorPanel message={scope.error.message} />
   }
 
-  if (scope.subject?.kind === "agent" && !scope.selected.session_id) {
-    return <EmptyState message="No sessions for this agent" />
-  }
-
   if (!scope.subject) {
     return <EmptyState message="No agents or apps available" />
   }

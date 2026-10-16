@@ -129,7 +129,7 @@ WITH operation AS (
   CROSS JOIN LATERAL jsonb_path_query($38::jsonb, '$.tool_calls[*]') WITH ORDINALITY AS item(value, ordinal)
   WHERE op.resource_kind = 'inference' AND op.agent_kind IN ('claude', 'codex')
     AND op.session_id <> '' AND op.turn_id <> ''
-    AND item.value->>'id' <> '' AND item.value->>'name' <> ''
+    AND octet_length(item.value->>'id') BETWEEN 1 AND 512 AND item.value->>'name' <> ''
   ORDER BY item.value->>'id', item.ordinal
 ), tools AS (
   INSERT INTO observer_app_operations (
@@ -175,7 +175,7 @@ WITH operation AS (
     op.id, op.start_time, input.ordinal, input.protocol, input.is_error
   FROM operation op CROSS JOIN input_results input
   WHERE op.resource_kind = 'inference' AND op.agent_kind IN ('claude', 'codex')
-    AND op.session_id <> '' AND op.turn_id <> '' AND input.call_id <> ''
+    AND op.session_id <> '' AND op.turn_id <> '' AND octet_length(input.call_id) BETWEEN 1 AND 512
   ON CONFLICT (source_operation_id, protocol, source_ordinal) DO NOTHING
 ), payload AS (
   INSERT INTO observer_app_operation_payloads (operation_id, input_messages, output_messages, tool_arguments, tool_result, tool_error)

@@ -215,8 +215,9 @@ func appOperationFromOTLPSpan(sp *tracepb.Span, resourceAttrs map[string]*common
 	switch kind := attrs["agentz.agent_kind"].GetStringValue(); kind {
 	case "claude", "codex":
 		operation.AgentKind = kind
-		// Native IDs are opaque labels. Ignore invalid optional labels without
-		// rejecting an otherwise valid gateway observation.
+		// Composite B-tree keys include session, turn and call IDs together.
+		// Bound each to 512 bytes, as for payload IDs in InsertAppOperation,
+		// and retain observations without unusable optional labels.
 		labels := map[string]*string{
 			attrSessionID:         &operation.SessionID,
 			"agentz.turn_id":      &operation.TurnID,
@@ -224,7 +225,7 @@ func appOperationFromOTLPSpan(sp *tracepb.Span, resourceAttrs map[string]*common
 		}
 		for key, target := range labels {
 			value := attrs[key].GetStringValue()
-			if len(value) <= 8192 {
+			if len(value) <= 512 {
 				*target = value
 			}
 		}

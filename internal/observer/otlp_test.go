@@ -151,3 +151,39 @@ func TestAppNativeIdentityRequiresRegistration(t *testing.T) {
 		})
 	}
 }
+
+func TestAppNativeOversizedIdentifiers(t *testing.T) {
+	for _, key := range []string{attrSessionID, "agentz.turn_id", "gen_ai.tool.call.id"} {
+		t.Run(key, func(t *testing.T) {
+			span := appSpanFixture(0)
+			labels := map[string]string{
+				"agentz.agent_kind":   "codex",
+				attrSessionID:         "conversation",
+				"agentz.turn_id":      "turn",
+				"gen_ai.tool.call.id": "call",
+			}
+			labels[key] = strings.Repeat("λ", 257)
+			for name, value := range labels {
+				span.Attributes = append(span.Attributes, &commonpb.KeyValue{
+					Key: name, Value: &commonpb.AnyValue{Value: &commonpb.AnyValue_StringValue{StringValue: value}},
+				})
+			}
+			op, err := appOperationFromOTLPSpan(span, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := map[string]string{
+				attrSessionID: op.SessionID, "agentz.turn_id": op.TurnID, "gen_ai.tool.call.id": op.ToolCallID,
+			}
+			labels[key] = ""
+			for name, value := range got {
+				if value != labels[name] {
+					t.Errorf("%s = %q, want %q", name, value, labels[name])
+				}
+			}
+			if op.AgentKind != "codex" || !bytes.Contains(op.InputMessages, []byte("messages")) {
+				t.Fatal("oversized optional metadata discarded identity or content")
+			}
+		})
+	}
+}
