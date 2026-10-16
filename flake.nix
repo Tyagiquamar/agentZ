@@ -12,6 +12,7 @@
           pkgs = import nixpkgs { inherit system; };
           oapiCodegen = nixpkgs-oapi-codegen.legacyPackages.${system}.oapi-codegen;
           otel = pkgs.callPackage ./opencode/plugin-otel/default.nix { };
+          agentgateway = pkgs.callPackage ./hack/agentgateway/default.nix { };
           cli = pkgs.buildGo127Module {
             pname = "agentz";
             version = "0.1.0";
@@ -106,6 +107,22 @@
         {
           formatter = pkgs.nixpkgs-fmt;
           packages = rec {
+            inherit agentgateway;
+            agentgatewayImage = pkgs.dockerTools.buildLayeredImage {
+              name = "public.ecr.aws/k9v9d5v2/agentz/agentgateway";
+              tag = "latest";
+              contents = [ agentgateway pkgs.cacert ];
+              extraCommands = "mkdir -m 1777 tmp";
+              config = {
+                User = "65532";
+                WorkingDir = "/";
+                Entrypoint = [ "${agentgateway}/bin/agentgateway" ];
+                Env = [
+                  "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+                  "AGENTGATEWAY_ENV=container"
+                ];
+              };
+            };
             opencodePluginOtel = otel;
             opencodeConfigDir = cfg;
             opencodeAgentRuntime = pkgs.buildEnv {

@@ -1,5 +1,5 @@
 diff --git a/crates/agentgateway/src/cel/mod.rs b/crates/agentgateway/src/cel/mod.rs
-index 396c93f6..a0a64c54 100644
+index 396c93f..a0a64c5 100644
 --- a/crates/agentgateway/src/cel/mod.rs
 +++ b/crates/agentgateway/src/cel/mod.rs
 @@ -252,6 +252,21 @@ impl ContextBuilder {
@@ -35,79 +35,8 @@ index 396c93f6..a0a64c54 100644
  	pub fn needs_llm(&self) -> bool {
  		self.any_has(Attributes::Llm)
  	}
-diff --git a/crates/agentgateway/src/cel/tests.rs b/crates/agentgateway/src/cel/tests.rs
-index 6d2d0d09..bfa4cca1 100644
---- a/crates/agentgateway/src/cel/tests.rs
-+++ b/crates/agentgateway/src/cel/tests.rs
-@@ -166,6 +166,66 @@ async fn log_only_request_body_records_without_buffering() {
- 	);
- }
- 
-+#[tokio::test]
-+async fn rejected_request_body_capture_respects_interest_and_limit() {
-+	for (expression, limit, expected) in [
-+		("request.body", 5, Some("hello")),
-+		("request.body", 4, Some("")),
-+		("request.method", 5, None),
-+	] {
-+		let exp = Expression::new_strict(expression).unwrap();
-+		let mut cb = ContextBuilder::new();
-+		cb.register_log_expression(&exp);
-+		let mut req = ::http::Request::builder()
-+			.method(Method::POST)
-+			.uri("http://example.com")
-+			.body(Body::from_stream(tokio_stream::iter([Ok::<
-+				_,
-+				std::convert::Infallible,
-+			>("hello")])))
-+			.unwrap();
-+		req.extensions_mut().insert(crate::http::BufferLimit::new(limit));
-+		cb.maybe_buffer_request_body(&mut req).await;
-+		assert!(req.body().inspection().is_none());
-+		cb.maybe_capture_failed_request_body(&mut req).await;
-+		if limit == 4 {
-+			assert!(matches!(
-+				req.body().inspection(),
-+				Some(crate::http::BodyInspection::Partial(bytes)) if bytes.as_ref() == b"hell"
-+			));
-+		}
-+		if expression == "request.method" {
-+			assert!(req.body().inspection().is_none());
-+		} else {
-+			let snapshot = cb.maybe_snapshot_request(&mut req, false).unwrap();
-+			let exec = Executor::new_logger(Some(&snapshot), None, None, None, None, None, None);
-+			if limit == 4 {
-+				assert!(exec.eval(&Expression::new_strict("json(request.body)").unwrap()).is_err());
-+			}
-+			let captured = exec
-+				.eval(&exp)
-+				.ok()
-+				.and_then(|value| helpers::value_as_byte_or_json(value).ok());
-+			assert_eq!(captured.as_deref(), expected.map(str::as_bytes));
-+		}
-+	}
-+}
-+
-+#[tokio::test(start_paused = true)]
-+async fn rejected_request_capture_respects_route_deadline() {
-+	let exp = Expression::new_strict("request.body").unwrap();
-+	let mut cb = ContextBuilder::new();
-+	cb.register_log_expression(&exp);
-+	let mut req = ::http::Request::builder()
-+		.body(Body::from_stream(tokio_stream::pending::<Result<String, std::convert::Infallible>>()))
-+		.unwrap();
-+	let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(1);
-+	req.extensions_mut().insert(crate::http::filters::RequestDeadline(deadline.into_std()));
-+	cb.maybe_capture_failed_request_body(&mut req).await;
-+	assert_eq!(tokio::time::Instant::now(), deadline);
-+	assert!(req.body().inspection().is_none());
-+}
-+
- #[tokio::test]
- async fn request_body_expression_buffers_before_log() {
- 	let exp = Expression::new_strict("request.body").unwrap();
 diff --git a/crates/agentgateway/src/cel/types.rs b/crates/agentgateway/src/cel/types.rs
-index 2df39060..6d5f31f4 100644
+index 2df3906..6d5f31f 100644
 --- a/crates/agentgateway/src/cel/types.rs
 +++ b/crates/agentgateway/src/cel/types.rs
 @@ -1475,6 +1475,10 @@ impl GuardrailInfo {
@@ -149,7 +78,7 @@ index 2df39060..6d5f31f4 100644
  			provider_total_tokens: Some(150),
  			service_tier: Some("default".into()),
 diff --git a/crates/agentgateway/src/cel/types_test.rs b/crates/agentgateway/src/cel/types_test.rs
-index 68fab4cf..c6565a10 100644
+index 68fab4c..c6565a1 100644
 --- a/crates/agentgateway/src/cel/types_test.rs
 +++ b/crates/agentgateway/src/cel/types_test.rs
 @@ -116,6 +116,8 @@ fn build_test_request() -> crate::http::Request {
@@ -162,7 +91,7 @@ index 68fab4cf..c6565a10 100644
  		request_model: "gpt-4".into(),
  		response_model: Some("gpt-4-turbo".into()),
 diff --git a/crates/agentgateway/src/http/transformation_cel.rs b/crates/agentgateway/src/http/transformation_cel.rs
-index 2e8ffdcb..a21e0428 100644
+index 2e8ffdc..a21e042 100644
 --- a/crates/agentgateway/src/http/transformation_cel.rs
 +++ b/crates/agentgateway/src/http/transformation_cel.rs
 @@ -147,6 +147,12 @@ fn json_to_header_value(v: &serde_json::Value) -> Option<HeaderValue> {
@@ -211,128 +140,8 @@ index 2e8ffdcb..a21e0428 100644
  		if let Some(expr) = &cfg.replace {
  			match eval_headers(&r, expr, request) {
  				Ok(headers) => {
-diff --git a/crates/agentgateway/src/http/transformation_cel_tests.rs b/crates/agentgateway/src/http/transformation_cel_tests.rs
-index 46a9c513..c453beb9 100644
---- a/crates/agentgateway/src/http/transformation_cel_tests.rs
-+++ b/crates/agentgateway/src/http/transformation_cel_tests.rs
-@@ -434,6 +434,33 @@ fn test_transformation_metadata() {
- 	assert_eq!(md.0.get("isGet").unwrap(), &serde_json::Value::Bool(true));
- }
- 
-+#[tokio::test]
-+async fn request_metadata_capture_does_not_apply_wire_transformations() {
-+	let mut req = ::http::Request::builder()
-+		.method("POST")
-+		.uri("https://example.com/original")
-+		.header("x-original", "retain")
-+		.body(crate::http::Body::from("original body"))
-+		.unwrap();
-+	let xfm: Transformation = serde_json::from_value(serde_json::json!({
-+		"request": {
-+			"replace": r#"{"x-replaced": "replacement"}"#,
-+			"set": {"x-injected": r#""injected""#},
-+			"remove": ["x-original"],
-+			"body": r#""replacement body""#,
-+			"metadata": {"originalPath": "request.path", "trusted": r#"{"id": "trusted-id"}"#}
-+		}
-+	})).unwrap();
-+	xfm.apply_request_metadata(&mut req);
-+	let metadata = req.extensions().get::<TransformationMetadata>().unwrap();
-+	assert_eq!(metadata.0["originalPath"], "/original");
-+	assert_eq!(metadata.0["trusted"], serde_json::json!({"id": "trusted-id"}));
-+	assert_eq!(req.headers().len(), 1);
-+	assert_eq!(req.headers()["x-original"], "retain");
-+	let body = http::read_body_with_limit(req.into_body(), 100).await.unwrap();
-+	assert_eq!(body, "original body");
-+}
-+
- #[test]
- fn test_response_transformation_metadata_available_to_headers() {
- 	let mut req = ::http::Request::builder()
-diff --git a/crates/agentgateway/src/mcp/mcp_tests.rs b/crates/agentgateway/src/mcp/mcp_tests.rs
-index 65f5b830..76d95ceb 100644
---- a/crates/agentgateway/src/mcp/mcp_tests.rs
-+++ b/crates/agentgateway/src/mcp/mcp_tests.rs
-@@ -8857,3 +8857,77 @@ async fn modern_multi_target_resolve_propagates_meta() {
- 		assert_eq!(&probe["params"]["_meta"][key], value, "{key}");
- 	}
- }
-+
-+#[test]
-+fn generated_errors_preserve_typed_payload_and_wire_body() {
-+	use rmcp::model::{ErrorCode, ErrorData, ServerJsonRpcMessage, ServerResult};
-+
-+	let errors = [
-+		crate::mcp::Error::Authorization(RequestId::Number(1), "tool".into(), "denied".into()),
-+		crate::mcp::Error::McpGuardrails {
-+			request_id: RequestId::Number(2),
-+			rej: ErrorData::new(
-+				ErrorCode::INTERNAL_ERROR,
-+				"guardrail failed",
-+				Some(serde_json::json!({"nested": {"detail": "retained"}})),
-+			),
-+			was_tool_call: true,
-+			downstream_modern: false,
-+		},
-+		crate::mcp::Error::RateLimited {
-+			request_id: RequestId::Number(3),
-+			status: Some(crate::http::localratelimit::RateLimitStatus {
-+				limit: 5,
-+				remaining: 0,
-+				reset_seconds: 10,
-+			}),
-+			message: None,
-+			headers: Box::default(),
-+			was_tool_call: false,
-+			downstream_modern: false,
-+		},
-+		crate::mcp::Error::RateLimited {
-+			request_id: RequestId::Number(4),
-+			status: None,
-+			message: None,
-+			headers: Box::default(),
-+			was_tool_call: true,
-+			downstream_modern: false,
-+		},
-+	];
-+	for (index, error) in errors.into_iter().enumerate() {
-+		let message = error.jsonrpc_error_message().unwrap();
-+		let body: serde_json::Value =
-+			serde_json::from_str(&error.jsonrpc_error_body().unwrap()).unwrap();
-+		assert_eq!(serde_json::to_value(&message).unwrap(), body);
-+		let mut info = crate::mcp::MCPInfo::default();
-+		info.set_tool("target".into(), "tool".into());
-+		match message {
-+			ServerJsonRpcMessage::Error(error) => {
-+				info.capture_error(&error.error);
-+				assert_eq!(
-+					info.tool.as_ref().unwrap().error.as_ref().unwrap(),
-+					&body["error"]
-+				);
-+				if index == 1 {
-+					assert_eq!(body["error"]["data"]["nested"]["detail"], "retained");
-+				}
-+				if index == 2 {
-+					assert_eq!(body["error"]["data"]["retryAfterSeconds"], 10);
-+				}
-+			},
-+			ServerJsonRpcMessage::Response(response) => {
-+				let ServerResult::CallToolResult(result) = response.result else {
-+					panic!("expected tool result")
-+				};
-+				info.capture_call_result(&result);
-+				assert_eq!(
-+					info.tool.as_ref().unwrap().result.as_ref().unwrap(),
-+					&body["result"]
-+				);
-+				assert_eq!(body["result"]["isError"], true);
-+			},
-+			_ => panic!("expected terminal response"),
-+		}
-+	}
-+}
 diff --git a/crates/agentgateway/src/mcp/mod.rs b/crates/agentgateway/src/mcp/mod.rs
-index c5927f8f..4a43e764 100644
+index c5927f8..4a43e76 100644
 --- a/crates/agentgateway/src/mcp/mod.rs
 +++ b/crates/agentgateway/src/mcp/mod.rs
 @@ -24,11 +24,11 @@ pub use rbac::{McpAuthorization, McpAuthorizationSet, ResourceId, ResourceType};
@@ -434,7 +243,7 @@ index c5927f8f..4a43e764 100644
  }
  
 diff --git a/crates/agentgateway/src/parse/websocket.rs b/crates/agentgateway/src/parse/websocket.rs
-index 904c2f40..242ef52a 100644
+index 904c2f4..242ef52 100644
 --- a/crates/agentgateway/src/parse/websocket.rs
 +++ b/crates/agentgateway/src/parse/websocket.rs
 @@ -77,6 +77,9 @@ impl<IO> Parser<IO> {
@@ -458,10 +267,10 @@ index 904c2f40..242ef52a 100644
  												pages: None,
  												reasoning_tokens: None,
 diff --git a/crates/agentgateway/src/proxy/httpproxy.rs b/crates/agentgateway/src/proxy/httpproxy.rs
-index 13de18af..c058486a 100644
+index 13de18a..73d6f8f 100644
 --- a/crates/agentgateway/src/proxy/httpproxy.rs
 +++ b/crates/agentgateway/src/proxy/httpproxy.rs
-@@ -1075,6 +1075,20 @@ impl HTTPProxy {
+@@ -1075,6 +1075,24 @@ impl HTTPProxy {
  		)
  		.await;
  		let route_retry = mcp::maybe_convert_mcp_error(route_retry, request_protocol, &mut req).await;
@@ -471,7 +280,11 @@ index 13de18af..c058486a 100644
 +				response.status().is_client_error() || response.status().is_server_error()
 +			},
 +		}) {
-+			log.cel.ctx().maybe_capture_failed_request_body(&mut req).await;
++			log
++				.cel
++				.ctx()
++				.maybe_capture_failed_request_body(&mut req)
++				.await;
 +			if response_policies.transformation.is_empty()
 +				&& log.cel.ctx().needs_metadata()
 +				&& let Some(transformation) = route_policies.transformation.select("transformation", &req)
@@ -482,7 +295,7 @@ index 13de18af..c058486a 100644
  		let route_retry = route_retry.snapshot_on_err(log, &mut req)?;
  		dtrace::snapshot!(Request, "route policies", &req);
  		// With no explicit retry policy, Substrate only retries stale actor assignments.
-@@ -3744,6 +3758,19 @@ pub(crate) fn resolve_response(
+@@ -3744,6 +3762,19 @@ pub(crate) fn resolve_response(
  	log: &mut RequestLog,
  	is_grpc_request: bool,
  ) -> (Response, ProxyResponseReason) {
@@ -503,7 +316,7 @@ index 13de18af..c058486a 100644
  		Ok(_) => ProxyResponseReason::Upstream,
  		Err(failure) => failure.as_reason(),
 diff --git a/crates/agentgateway/src/proxy/mod.rs b/crates/agentgateway/src/proxy/mod.rs
-index 77acc38f..4b664e90 100644
+index 77acc38..4b664e9 100644
 --- a/crates/agentgateway/src/proxy/mod.rs
 +++ b/crates/agentgateway/src/proxy/mod.rs
 @@ -317,6 +317,7 @@ fn classify_ai_request(error: &llm::AIError) -> AIErrorClassification {
@@ -523,7 +336,7 @@ index 77acc38f..4b664e90 100644
  		| llm::AIError::InvalidResponse(_)
  		| llm::AIError::ResponseTooLarge
 diff --git a/crates/agentgateway/src/store/policy.rs b/crates/agentgateway/src/store/policy.rs
-index 10f2f00d..02904067 100644
+index 10f2f00..0290406 100644
 --- a/crates/agentgateway/src/store/policy.rs
 +++ b/crates/agentgateway/src/store/policy.rs
 @@ -395,6 +395,9 @@ impl<T> Default for ResponsePolicy<T> {
@@ -537,7 +350,7 @@ index 10f2f00d..02904067 100644
  		Self { inner }
  	}
 diff --git a/crates/agentgateway/src/telemetry/log.rs b/crates/agentgateway/src/telemetry/log.rs
-index 8120a958..a10462bb 100644
+index 8120a95..a10462b 100644
 --- a/crates/agentgateway/src/telemetry/log.rs
 +++ b/crates/agentgateway/src/telemetry/log.rs
 @@ -1991,6 +1991,20 @@ impl Drop for DropOnLog {
@@ -562,7 +375,7 @@ index 8120a958..a10462bb 100644
  				("reason", reason.display()),
  				("duration", Some(dur.as_str().into())),
 diff --git a/crates/agentgateway/src/telemetry/trc.rs b/crates/agentgateway/src/telemetry/trc.rs
-index 5b974c16..6c0138b5 100644
+index 5b974c1..6c0138b 100644
 --- a/crates/agentgateway/src/telemetry/trc.rs
 +++ b/crates/agentgateway/src/telemetry/trc.rs
 @@ -336,6 +336,12 @@ impl Tracer {
@@ -579,7 +392,7 @@ index 5b974c16..6c0138b5 100644
  		(
  			request
 diff --git a/crates/llm/src/conversion/bedrock.rs b/crates/llm/src/conversion/bedrock.rs
-index 2895b0a7..592f5309 100644
+index 2895b0a..592f530 100644
 --- a/crates/llm/src/conversion/bedrock.rs
 +++ b/crates/llm/src/conversion/bedrock.rs
 @@ -1196,6 +1196,7 @@ pub mod from_completions {
@@ -728,7 +541,7 @@ index 2895b0a7..592f5309 100644
  					sequence_number += 1;
  					return vec![(
 diff --git a/crates/llm/src/conversion/completions.rs b/crates/llm/src/conversion/completions.rs
-index c9ce0633..2bb4b501 100644
+index c9ce063..fde6efe 100644
 --- a/crates/llm/src/conversion/completions.rs
 +++ b/crates/llm/src/conversion/completions.rs
 @@ -5,10 +5,18 @@ use agent_http::Body;
@@ -741,7 +554,7 @@ index c9ce0633..2bb4b501 100644
  
 +#[derive(serde::Deserialize)]
 +#[serde(untagged)]
-+pub(crate) enum CapturedEvent {
++pub(crate) enum CapturedStreamEvent {
 +	Error {
 +		error: types::completions::typed::ChatCompletionError,
 +	},
@@ -759,7 +572,7 @@ index c9ce0633..2bb4b501 100644
  			response: anthropic,
  			provider_usage,
  		}))
-@@ -574,17 +583,37 @@ pub mod from_messages {
+@@ -574,17 +583,38 @@ pub mod from_messages {
  			}
  		}
  
@@ -781,85 +594,72 @@ index c9ce0633..2bb4b501 100644
 +
  		let mut state = StreamState::default();
  
--		crate::parse::sse::json_transform_multi::<
+ 		crate::parse::sse::json_transform_multi::<
 -			completions::StreamResponse,
--			messages::MessagesStreamEvent,
--			_,
--		>(b, buffer_limit, move |evt| {
-+		crate::parse::sse::json_transform_multi::<super::CapturedEvent, messages::MessagesStreamEvent, _>(
-+			b,
-+			buffer_limit,
-+			move |evt| {
++			super::CapturedStreamEvent,
+ 			messages::MessagesStreamEvent,
+ 			_,
+ 		>(b, buffer_limit, move |evt| {
  			let mut events: Vec<(&'static str, messages::MessagesStreamEvent)> = Vec::new();
  			match evt {
 -				SseJsonEvent::Eof | SseJsonEvent::Error => return events,
-+					SseJsonEvent::Eof | SseJsonEvent::Error => {
-+						record_partial_tools(&state, &log, log_content.tool_calls);
-+						log.fail("stream_error", "stream interrupted before terminal event");
-+						return events;
-+					},
++				SseJsonEvent::Eof | SseJsonEvent::Error => {
++					record_partial_tools(&state, &log, log_content.tool_calls);
++					log.fail("stream_error", "stream interrupted before terminal event");
++					return events;
++				},
  				SseJsonEvent::Done => {
-+						log.update(|r| r.response.stream_complete = true);
++					log.update(|r| r.response.stream_complete = true);
  					flush_message_end(&mut state, &mut events, &log, true, log_content.tool_calls);
  					return events;
  				},
-@@ -595,7 +624,22 @@ pub mod from_messages {
+@@ -595,7 +625,22 @@ pub mod from_messages {
  					);
  					return events;
  				},
 -				SseJsonEvent::Data(Ok(f)) => {
-+					SseJsonEvent::Data(Ok(super::CapturedEvent::Error { error })) => {
-+						record_partial_tools(&state, &log, log_content.tool_calls);
-+						let kind = error
-+							.r#type
-+							.or_else(|| {
-+								error
-+									.code
-+									.as_ref()
-+									.and_then(|v| v.as_str())
-+									.map(str::to_owned)
-+							})
-+							.unwrap_or_else(|| "provider_error".to_string());
-+						log.fail(kind, error.message);
-+						return events;
-+					},
-+					SseJsonEvent::Data(Ok(super::CapturedEvent::Chunk(f))) => {
++				SseJsonEvent::Data(Ok(super::CapturedStreamEvent::Error { error })) => {
++					record_partial_tools(&state, &log, log_content.tool_calls);
++					let kind = error
++						.r#type
++						.or_else(|| {
++							error
++								.code
++								.as_ref()
++								.and_then(|v| v.as_str())
++								.map(str::to_owned)
++						})
++						.unwrap_or_else(|| "provider_error".to_string());
++					log.fail(kind, error.message);
++					return events;
++				},
++				SseJsonEvent::Data(Ok(super::CapturedStreamEvent::Chunk(f))) => {
  					if !state.sent_message_start {
  						state.sent_message_start = true;
  						push_event(
-@@ -662,6 +706,14 @@ pub mod from_messages {
+@@ -662,6 +707,14 @@ pub mod from_messages {
  							state.thinking_signature = Some(signature.to_string());
  						}
  						if let Some(content) = choice.delta.content.as_deref().filter(|s| !s.is_empty()) {
-+								if log_content.completion {
-+									log.update(|r| {
-+										r.response
-+											.completion
-+											.get_or_insert_with(|| vec![String::new()])[0]
-+											.push_str(content)
-+									});
-+								}
++							if log_content.completion {
++								log.update(|r| {
++									r.response
++										.completion
++										.get_or_insert_with(|| vec![String::new()])[0]
++										.push_str(content)
++								});
++							}
  							let index = open_text_block(&mut state, &mut events);
  							maybe_set_first_token(&mut state, &log);
  							push_event(
-@@ -733,6 +785,7 @@ pub mod from_messages {
+@@ -733,6 +786,7 @@ pub mod from_messages {
  						}
  
  						if let Some(finish_reason) = &choice.finish_reason {
-+								log.update(|r| r.response.stream_complete = true);
++							log.update(|r| r.response.stream_complete = true);
  							let mut stop_reason = match finish_reason {
  								completions::FinishReason::Stop => messages::StopReason::EndTurn,
  								completions::FinishReason::Length => messages::StopReason::MaxTokens,
-@@ -758,7 +811,8 @@ pub mod from_messages {
- 				},
- 			}
- 			events
--		})
-+			},
-+		)
- 	}
- 
- 	fn normalized_error_type(status: ::http::StatusCode, error_type: Option<&str>) -> &str {
 @@ -1349,131 +1403,176 @@ pub fn passthrough_stream(
  		arguments: String,
  	}
@@ -954,13 +754,13 @@ index c9ce0633..2bb4b501 100644
 -								let entry = pending.entry(chunk.index).or_default();
 -								if let Some(id) = &chunk.id {
 -									entry.id = Some(id.clone());
-+		parse::sse::json_passthrough::<CapturedEvent>(b, buffer_limit, move |f| {
++		parse::sse::json_passthrough::<CapturedStreamEvent>(b, buffer_limit, move |f| {
 +			if terminal {
 +				return;
 +			}
 +			let f = match f {
-+				Some(Ok(CapturedEvent::Chunk(chunk))) => chunk,
-+				Some(Ok(CapturedEvent::Error { error })) => {
++				Some(Ok(CapturedStreamEvent::Chunk(chunk))) => chunk,
++				Some(Ok(CapturedStreamEvent::Error { error })) => {
 +					let kind = error
 +						.code
 +						.as_ref()
@@ -1152,7 +952,7 @@ index c9ce0633..2bb4b501 100644
  	})
  }
 diff --git a/crates/llm/src/conversion/messages.rs b/crates/llm/src/conversion/messages.rs
-index 76685f5c..36eb4ded 100644
+index 76685f5..36eb4de 100644
 --- a/crates/llm/src/conversion/messages.rs
 +++ b/crates/llm/src/conversion/messages.rs
 @@ -539,6 +539,7 @@ pub mod from_completions {
@@ -1270,7 +1070,7 @@ index 76685f5c..36eb4ded 100644
  						r.response.output_messages = tool_calls.take_output_messages(None);
  					}
 diff --git a/crates/llm/src/conversion/mod.rs b/crates/llm/src/conversion/mod.rs
-index 613fb711..dbc6d76b 100644
+index 613fb71..dbc6d76 100644
 --- a/crates/llm/src/conversion/mod.rs
 +++ b/crates/llm/src/conversion/mod.rs
 @@ -19,6 +19,7 @@ struct ProviderUsage {
@@ -1293,10 +1093,18 @@ index 613fb711..dbc6d76b 100644
  	}
  
 diff --git a/crates/llm/src/conversion/openai_compat.rs b/crates/llm/src/conversion/openai_compat.rs
-index 7daf1735..84b8aecc 100644
+index 7daf173..861abec 100644
 --- a/crates/llm/src/conversion/openai_compat.rs
 +++ b/crates/llm/src/conversion/openai_compat.rs
-@@ -650,6 +650,8 @@ pub mod to_responses {
+@@ -496,6 +496,7 @@ pub mod to_responses {
+ 	use types::completions::typed as completions;
+ 	use types::responses::typed as responses;
+ 
++	use crate::conversion::completions::CapturedStreamEvent;
+ 	use crate::parse::sse::SseJsonEvent;
+ 	use crate::types::ResponseType;
+ 	use crate::{AIError, StreamingUsageGuard, json, logged_response_parsing, parse, types};
+@@ -650,6 +651,8 @@ pub mod to_responses {
  		let mut sent_created = false;
  		let mut sent_content_part = false;
  		let mut flushed = false;
@@ -1305,119 +1113,91 @@ index 7daf1735..84b8aecc 100644
  
  		let mut sequence_number: u64 = 0;
  		let response_id = format!("resp_{:016x}", rand::rng().random::<u64>());
-@@ -666,14 +668,81 @@ pub mod to_responses {
+@@ -666,14 +669,80 @@ pub mod to_responses {
  		let mut pending_stop_reason: Option<completions::FinishReason> = None;
  		let mut pending_usage: Option<completions::Usage> = None;
  
 -		parse::sse::json_transform_multi::<completions::StreamResponse, ResponseStreamEvent, _>(
--			b,
--			buffer_limit,
--			move |evt| {
-+		parse::sse::json_transform_multi::<
-+			crate::conversion::completions::CapturedEvent,
-+			ResponseStreamEvent,
-+			_,
-+		>(b, buffer_limit, move |evt| {
++		parse::sse::json_transform_multi::<CapturedStreamEvent, ResponseStreamEvent, _>(
+ 			b,
+ 			buffer_limit,
+ 			move |evt| {
  				let mut events: Vec<(&'static str, ResponseStreamEvent)> = Vec::new();
  
-+			if terminal
-+				&& matches!(
-+					&evt,
-+					SseJsonEvent::Eof | SseJsonEvent::Error | SseJsonEvent::Data(Err(_))
-+				) {
-+				return events;
-+			}
-+			let evt = match evt {
-+				SseJsonEvent::Data(Ok(crate::conversion::completions::CapturedEvent::Chunk(chunk))) => {
-+					SseJsonEvent::Data(Ok(chunk))
-+				},
-+				SseJsonEvent::Data(Ok(crate::conversion::completions::CapturedEvent::Error { error })) => {
-+					pending_failure = Some((
-+						error
-+							.code
-+							.as_ref()
-+							.and_then(|c| c.as_str())
-+							.or(error.r#type.as_deref())
-+							.unwrap_or("provider_error")
-+							.to_string(),
-+						error.message,
-+					));
-+					terminal = true;
-+					SseJsonEvent::Error
-+				},
-+				SseJsonEvent::Data(Err(error)) => {
-+					pending_failure = Some(("stream_error".to_string(), error.to_string()));
-+					terminal = true;
-+					SseJsonEvent::Error
-+				},
-+				SseJsonEvent::Eof | SseJsonEvent::Error => {
-+					pending_failure = Some((
-+						"stream_error".to_string(),
-+						"stream interrupted before terminal event".to_string(),
-+					));
-+					terminal = true;
-+					SseJsonEvent::Error
-+				},
-+				SseJsonEvent::Done => {
-+					log.update(|r| r.response.stream_complete = true);
-+					terminal = true;
-+					SseJsonEvent::Done
-+				},
-+			};
++				if terminal
++					&& matches!(
++						&evt,
++						SseJsonEvent::Eof | SseJsonEvent::Error | SseJsonEvent::Data(Err(_))
++					) {
++					return events;
++				}
++				let evt = match evt {
++					SseJsonEvent::Data(Ok(CapturedStreamEvent::Chunk(chunk))) => {
++						SseJsonEvent::Data(Ok(chunk))
++					},
++					SseJsonEvent::Data(Ok(CapturedStreamEvent::Error { error })) => {
++						pending_failure = Some((
++							error
++								.code
++								.as_ref()
++								.and_then(|c| c.as_str())
++								.or(error.r#type.as_deref())
++								.unwrap_or("provider_error")
++								.to_string(),
++							error.message,
++						));
++						terminal = true;
++						SseJsonEvent::Error
++					},
++					SseJsonEvent::Data(Err(error)) => {
++						pending_failure = Some(("stream_error".to_string(), error.to_string()));
++						terminal = true;
++						SseJsonEvent::Error
++					},
++					SseJsonEvent::Eof | SseJsonEvent::Error => {
++						pending_failure = Some((
++							"stream_error".to_string(),
++							"stream interrupted before terminal event".to_string(),
++						));
++						terminal = true;
++						SseJsonEvent::Error
++					},
++					SseJsonEvent::Done => {
++						log.update(|r| r.response.stream_complete = true);
++						terminal = true;
++						SseJsonEvent::Done
++					},
++				};
  				match evt {
 -					SseJsonEvent::Eof | SseJsonEvent::Error => return events,
-+				SseJsonEvent::Eof | SseJsonEvent::Error => {
-+					log.update(|r| {
-+						if let Some(c) = completion.take() {
-+							r.response.completion = Some(vec![c]);
-+						}
-+						let tool_parts = logged_tool_calls.as_mut().and_then(|pending| {
-+							crate::conversion::completions::finalize_streaming_tool_calls(
-+								pending
-+									.drain()
-+									.map(|(i, (id, name, args))| (i, id, name, args)),
-+							)
++					SseJsonEvent::Eof | SseJsonEvent::Error => {
++						log.update(|r| {
++							if let Some(c) = completion.take() {
++								r.response.completion = Some(vec![c]);
++							}
++							let tool_parts = logged_tool_calls.as_mut().and_then(|pending| {
++								crate::conversion::completions::finalize_streaming_tool_calls(
++									pending
++										.drain()
++										.map(|(i, (id, name, args))| (i, id, name, args)),
++								)
++							});
++							crate::conversion::completions::build_output_messages(
++								&mut r.response,
++								tool_parts,
++								None,
++							);
 +						});
-+						crate::conversion::completions::build_output_messages(
-+							&mut r.response,
-+							tool_parts,
-+							None,
-+						);
-+					});
-+					if let Some((kind, message)) = pending_failure.take() {
-+						log.fail(kind, message);
-+					}
-+					return events;
-+				},
++						if let Some((kind, message)) = pending_failure.take() {
++							log.fail(kind, message);
++						}
++						return events;
++					},
  					SseJsonEvent::Done => {
  						// Fall through to namespace restoration for the terminal events too.
  						if !flushed {
-@@ -707,9 +776,10 @@ pub mod to_responses {
- 					SseJsonEvent::Data(Ok(chunk)) => {
- 						if !sent_created {
- 							sent_created = true;
--							let response_builder = response_builder.insert(
--								types::responses::ResponseBuilder::new(response_id.clone(), chunk.model.clone()),
--							);
-+						let response_builder = response_builder.insert(types::responses::ResponseBuilder::new(
-+							response_id.clone(),
-+							chunk.model.clone(),
-+						));
- 
- 							sequence_number += 1;
- 							events.push(("event", response_builder.created_event(sequence_number)));
-@@ -933,8 +1003,7 @@ pub mod to_responses {
- 					}
- 				}
- 				events
--			},
--		)
-+		})
- 	}
- 
- 	fn usage_output_tokens(usage: &completions::Usage) -> u32 {
 diff --git a/crates/llm/src/conversion/responses.rs b/crates/llm/src/conversion/responses.rs
-index 24540d8c..90882e4f 100644
+index 24540d8..90882e4 100644
 --- a/crates/llm/src/conversion/responses.rs
 +++ b/crates/llm/src/conversion/responses.rs
 @@ -25,107 +25,297 @@ pub fn passthrough_stream(
@@ -1897,7 +1677,7 @@ index 24540d8c..90882e4f 100644
  		})
  	}
 diff --git a/crates/llm/src/conversion/vertex_gemini.rs b/crates/llm/src/conversion/vertex_gemini.rs
-index ca54e0a9..c13656f9 100644
+index ca54e0a..92189a2 100644
 --- a/crates/llm/src/conversion/vertex_gemini.rs
 +++ b/crates/llm/src/conversion/vertex_gemini.rs
 @@ -44,11 +44,27 @@ pub fn passthrough_stream(
@@ -1907,12 +1687,13 @@ index ca54e0a9..c13656f9 100644
 -		// Gemini never sends a [DONE] sentinel, so f(None) does not fire; all bookkeeping
 -		// happens per-chunk and the guard flushes on drop.
 -		let Some(Ok(chunk)) = f else {
+-			return;
 +		// Gemini has no [DONE] sentinel; clean HTTP EOF completes the stream.
 +		let chunk = match f {
 +			Some(Ok(chunk)) => chunk,
 +			Some(Err(error)) => {
 +				if error.is::<serde_json::Error>() {
- 			return;
++					return;
 +				}
 +				if !log.is_terminal() {
 +					log.fail("stream_error", error.to_string());
@@ -1995,573 +1776,8 @@ index ca54e0a9..c13656f9 100644
  			let now = Instant::now();
  			if !saw_token {
  				saw_token = true;
-diff --git a/crates/llm/src/golden_tests.rs b/crates/llm/src/golden_tests.rs
-index 4e76bbc7..8bb66e4b 100644
---- a/crates/llm/src/golden_tests.rs
-+++ b/crates/llm/src/golden_tests.rs
-@@ -869,6 +869,7 @@ mod responses {
- 		BEDROCK_TO_RESPONSES,
- 	];
- 	const BEDROCK_RESPONSES: &[(&str, &[&str])] = &[
-+		("error", ALL_BEDROCK),
- 		("basic", ALL_BEDROCK),
- 		("max_tokens", &[BEDROCK_TO_RESPONSES]),
- 		("tool", ALL_BEDROCK),
-@@ -941,7 +942,7 @@ mod responses {
- 		("incomplete_no_details", &[RESPONSES_TO_MESSAGES]),
- 		("content_filter", &[RESPONSES_TO_MESSAGES]),
- 		("context_window", &[RESPONSES_TO_MESSAGES]),
--		("failed", &[RESPONSES_TO_MESSAGES]),
-+		("failed", &[RESPONSES_TO_RESPONSES, RESPONSES_TO_MESSAGES]),
- 		("empty_tool_call", &[RESPONSES_TO_MESSAGES]),
- 	];
- 	const EMBEDDING_RESPONSES: &[(&str, &str)] = &[
-@@ -963,7 +964,7 @@ mod responses {
- 		("response/vertex/rerank-no-details.json", VERTEX),
- 		("response/cohere/rerank.json", COHERE),
- 	];
--	const VERTEX_GEMINI_RESPONSES: &[&str] = &["basic", "tool", "reasoning", "blocked"];
-+	const VERTEX_GEMINI_RESPONSES: &[&str] = &["basic", "tool", "reasoning", "blocked", "error"];
- 	const DETECT_RESPONSES: &[(&str, &str)] = &[
- 		("response/detect/bedrock-invoke.bin", BEDROCK_TO_DETECT),
- 		("response/detect/bedrock-basic.bin", BEDROCK_TO_DETECT),
-@@ -976,11 +977,16 @@ mod responses {
- 		),
- 	];
- 	const BEDROCK_STREAM_RESPONSES: &[(&str, &[&str])] = &[
-+		("error", ALL_BEDROCK),
- 		("basic", ALL_BEDROCK),
- 		("tool", ALL_BEDROCK),
- 		("reasoning", ALL_BEDROCK),
- 	];
- 	const ANTHROPIC_STREAM_RESPONSES: &[(&str, &[&str])] = &[
-+		(
-+			"stream_error",
-+			&[MESSAGES_TO_MESSAGES, MESSAGES_TO_COMPLETIONS],
-+		),
- 		("stream_basic", ALL_ANTHROPIC),
- 		("stream_thinking", ALL_ANTHROPIC),
- 		(
-@@ -997,6 +1003,14 @@ mod responses {
- 		),
- 	];
- 	const COMPLETIONS_STREAM_RESPONSES: &[(&str, &[&str])] = &[
-+		(
-+			"stream-error",
-+			&[
-+				COMPLETIONS_TO_COMPLETIONS,
-+				COMPLETIONS_TO_MESSAGES,
-+				COMPLETIONS_TO_RESPONSES,
-+			],
-+		),
- 		("stream-content_filter", &[COMPLETIONS_TO_MESSAGES]),
- 		("stream", ALL_COMPLETIONS),
- 		(
-@@ -1004,7 +1018,7 @@ mod responses {
- 			&[COMPLETIONS_TO_MESSAGES, COMPLETIONS_TO_RESPONSES],
- 		),
- 	];
--	const VERTEX_GEMINI_STREAM_RESPONSES: &[&str] = &["stream_tool"];
-+	const VERTEX_GEMINI_STREAM_RESPONSES: &[&str] = &["stream_tool", "stream_error"];
- 	const RESPONSES_STREAM_RESPONSES: &[(&str, &[&str])] = &[
- 		(
- 			"stream",
-@@ -1030,7 +1044,10 @@ mod responses {
- 		("stream-incomplete_no_details", &[RESPONSES_TO_MESSAGES]),
- 		("stream-content_filter", &[RESPONSES_TO_MESSAGES]),
- 		("stream-context_window", &[RESPONSES_TO_MESSAGES]),
--		("stream-failed", &[RESPONSES_TO_MESSAGES]),
-+		(
-+			"stream-failed",
-+			&[RESPONSES_TO_RESPONSES, RESPONSES_TO_MESSAGES],
-+		),
- 	];
- 
- 	#[tokio::test]
-@@ -1768,6 +1785,481 @@ data: {"type":"message_stop"}
- 		assert!(!llm_response.inter_chunk_latencies.is_empty());
- 		assert!(llm_response.first_token.is_some());
- 	}
-+	fn content_capture(
-+		body: agent_http::Body,
-+		fields: crate::LogContentFields,
-+		format: InputFormat,
-+	) -> (agent_http::Body, Arc<Mutex<LLMInfo>>) {
-+		let info = Arc::new(Mutex::new(LLMInfo::new(
-+			LLMRequest {
-+				input_tokens: None,
-+				input_format: format,
-+				cache_convention: CacheTokenConvention::pending(),
-+				request_model: strng::literal!("fixture"),
-+				provider: Default::default(),
-+				streaming: true,
-+				params: Default::default(),
-+				prompt: None,
-+				provider_state: None,
-+			},
-+			LLMResponse::default(),
-+		)));
-+		let log = StreamingUsageGuard::new(Box::new(TestStreamingReporter { info: info.clone() }));
-+		let body = match format {
-+			InputFormat::Completions => {
-+				crate::conversion::completions::passthrough_stream(log, fields, http::Response::new(body))
-+					.into_body()
-+			},
-+			InputFormat::Responses => {
-+				crate::conversion::responses::passthrough_stream(body, 1024 * 1024, log, fields)
-+			},
-+			_ => panic!("unsupported test format"),
-+		};
-+		(body, info)
-+	}
-+
-+	#[tokio::test]
-+	async fn passthrough_multiple_choices_preserves_each_capture_flag() {
-+		for layout in ["combined", "interleaved", "sparse"] {
-+			let indices = [0, if layout == "sparse" { u32::MAX } else { 1 }];
-+			let choice = |n: usize, last: bool| {
-+				json!({
-+					"index": indices[n],
-+					"delta": {
-+						"content": if last { "complete" } else if n == 0 { "zero " } else { "one " },
-+						"tool_calls": [{"index": 0, "id": if last { None } else { Some(format!("call_{n}")) },
-+							"function": {"name": if last { None } else { Some(format!("choice_{n}")) },
-+								"arguments": if last { format!("{n}}}") } else { "{\"choice\":".to_owned() }}}]
-+					},
-+					"finish_reason": if last { Some("tool_calls") } else { None }
-+				})
-+			};
-+			let groups = if layout == "interleaved" {
-+				vec![
-+					vec![choice(1, false)],
-+					vec![choice(0, false)],
-+					vec![choice(1, true)],
-+					vec![choice(0, true)],
-+				]
-+			} else {
-+				vec![
-+					vec![choice(0, false), choice(1, false)],
-+					vec![choice(0, true), choice(1, true)],
-+				]
-+			};
-+			let mut wire = groups.into_iter().map(|choices| format!("data: {}\n\n", json!({
-+				"id": "multi", "object": "chat.completion.chunk", "created": 123, "model": "fixture",
-+				"choices": choices, "usage": {"prompt_tokens": 10, "completion_tokens": 10, "total_tokens": 20}
-+			}))).collect::<String>();
-+			wire.push_str("data: [DONE]\n\n");
-+			for completion in [false, true] {
-+				for tool_calls in [false, true] {
-+					let (body, info) = content_capture(
-+						agent_http::Body::from(wire.clone()),
-+						crate::LogContentFields {
-+							completion,
-+							tool_calls,
-+						},
-+						InputFormat::Completions,
-+					);
-+					assert_eq!(
-+						body.collect().await.unwrap().to_bytes().as_ref(),
-+						wire.as_bytes()
-+					);
-+					let response = info.lock().unwrap().response.clone();
-+					assert!(response.stream_complete);
-+					assert!(response.error.is_none());
-+					assert_eq!(
-+						response.completion,
-+						completion.then(|| vec!["zero complete".to_owned(), "one complete".to_owned()])
-+					);
-+					assert_eq!(response.output_messages.is_some(), tool_calls);
-+					if let Some(messages) = response.output_messages {
-+						assert_eq!(messages.len(), 2);
-+						for (n, message) in messages.iter().enumerate() {
-+							assert_eq!(message.finish_reason.as_deref(), Some("tool_calls"));
-+							let crate::OutputMessagePart::ToolCall {
-+								id,
-+								name,
-+								arguments,
-+							} = &message.content[0];
-+							assert_eq!(id.as_str(), format!("call_{n}"));
-+							assert_eq!(name.as_str(), format!("choice_{n}"));
-+							assert_eq!(arguments, &json!({"choice": n}));
-+						}
-+					}
-+				}
-+			}
-+		}
-+	}
-+
-+	#[tokio::test]
-+	async fn passthrough_choice_finish_waits_for_global_terminal() {
-+		use futures_util::StreamExt;
-+		let fields = crate::LogContentFields {
-+			completion: true,
-+			tool_calls: true,
-+		};
-+		let finished = format!(
-+			"data: {}\n\n",
-+			json!({
-+				"id": "single", "object": "chat.completion.chunk", "created": 123, "model": "fixture",
-+				"choices": [{"index": 0, "delta": {"content": "finished", "tool_calls": [{"index": 0, "id": "call_0", "function": {"name": "choice_0", "arguments": "{}"}}]}, "finish_reason": "tool_calls"}]
-+			})
-+		);
-+		for terminal in [
-+			"data: [DONE]\n\n",
-+			"",
-+			"data: {\"error\":{\"code\":\"server_error\",\"message\":\"late failure\"}}\n\n",
-+		] {
-+			let wire = finished.clone() + terminal;
-+			let (body, info) = content_capture(
-+				agent_http::Body::from(wire.clone()),
-+				fields,
-+				InputFormat::Completions,
-+			);
-+			assert_eq!(
-+				body.collect().await.unwrap().to_bytes().as_ref(),
-+				wire.as_bytes()
-+			);
-+			let response = info.lock().unwrap().response.clone();
-+			assert_eq!(response.completion, Some(vec!["finished".to_owned()]));
-+			assert_eq!(response.stream_complete, !terminal.contains("late failure"));
-+			assert_eq!(
-+				response.error.as_deref(),
-+				terminal.contains("late failure").then_some("late failure")
-+			);
-+			assert_eq!(
-+				response.output_messages.unwrap()[0]
-+					.finish_reason
-+					.as_deref(),
-+				if terminal.contains("late failure") {
-+					None
-+				} else {
-+					Some("tool_calls")
-+				}
-+			);
-+		}
-+		for unfinished in [false, true] {
-+			let mut wire = finished.clone();
-+			if unfinished {
-+				wire.insert_str(0, &format!("data: {}\n\n", json!({"id":"single","object":"chat.completion.chunk","created":123,"model":"fixture","choices":[{"index":1,"delta":{"content":"partial","tool_calls":[{"index":0,"id":"call_partial","function":{"name":"partial_tool","arguments":"{\"partial\":"}}]},"finish_reason":null}]})));
-+			}
-+			let stream =
-+				futures_util::stream::iter([Ok::<_, std::convert::Infallible>(Bytes::from(wire))])
-+					.chain(futures_util::stream::pending());
-+			let (mut body, info) = content_capture(
-+				agent_http::Body::from_stream(stream),
-+				fields,
-+				InputFormat::Completions,
-+			);
-+			body.frame().await.unwrap().unwrap();
-+			assert!(!info.lock().unwrap().response.stream_complete);
-+			drop(body);
-+			let response = info.lock().unwrap().response.clone();
-+			assert_eq!(response.error_type.as_deref(), Some("stream_error"));
-+			assert_eq!(
-+				response.completion,
-+				Some(if unfinished {
-+					vec!["finished".to_owned(), "partial".to_owned()]
-+				} else {
-+					vec!["finished".to_owned()]
-+				})
-+			);
-+			let messages = response.output_messages.unwrap();
-+			assert!(messages[0].finish_reason.is_none());
-+			if unfinished {
-+				assert_eq!(
-+					serde_json::to_value(&messages[1].content).unwrap(),
-+					serde_json::to_value(vec![crate::OutputMessagePart::ToolCall {
-+						id: strng::literal!("call_partial"),
-+						name: strng::literal!("partial_tool"),
-+						arguments: json!("{\"partial\":")
-+					}])
-+					.unwrap()
-+				);
-+			}
-+		}
-+	}
-+
-+	#[tokio::test]
-+	async fn responses_terminal_snapshots_preserve_content_tools_and_known_usage() {
-+		let output = json!([
-+			{"id":"msg_final","type":"message","role":"assistant","status":"completed","content":[
-+				{"type":"output_text","text":"final text","annotations":[]},
-+				{"type":"refusal","refusal":"final refusal"}]},
-+			{"id":"fc_final","type":"function_call","call_id":"call_final","name":"final_tool","arguments":"{\"exact\":9007199254740993}","status":"completed"}
-+		]);
-+		for status in ["completed", "failed", "incomplete"] {
-+			for usage in [None, Some(0), Some(25)] {
-+				let mut response = json!({"id":"final","object":"response","created_at":123,"status":status,"model":"final-model","output":output,"usage":null});
-+				if let Some(tokens) = usage {
-+					response["usage"] = json!({"input_tokens":tokens,"input_tokens_details":{"cached_tokens":tokens,"cache_write_tokens":tokens},"output_tokens":tokens,"output_tokens_details":{"reasoning_tokens":tokens},"total_tokens":tokens*2});
-+				}
-+				if status == "failed" {
-+					response["error"] = json!({"code":"server_error","message":"final failure"});
-+				}
-+				if status == "incomplete" {
-+					response["incomplete_details"] = json!({"reason":"max_output_tokens"});
-+				}
-+				let event =
-+					json!({"type":format!("response.{status}"),"response":response,"sequence_number":1});
-+				serde_json::from_value::<types::responses::typed::ResponseStreamEvent>(event.clone())
-+					.unwrap();
-+				let wire = format!("event: response.{status}\ndata: {event}\n\n");
-+				for completion in [false, true] {
-+					for tool_calls in [false, true] {
-+						let (body, info) = content_capture(
-+							agent_http::Body::from(wire.clone()),
-+							crate::LogContentFields {
-+								completion,
-+								tool_calls,
-+							},
-+							InputFormat::Responses,
-+						);
-+						assert_eq!(
-+							body.collect().await.unwrap().to_bytes().as_ref(),
-+							wire.as_bytes()
-+						);
-+						let captured = info.lock().unwrap().response.clone();
-+						assert_eq!(
-+							captured.completion,
-+							completion.then(|| vec!["final text".to_owned(), "final refusal".to_owned()])
-+						);
-+						assert_eq!(captured.provider_model.as_deref(), Some("final-model"));
-+						assert_eq!(captured.input_tokens, usage);
-+						assert_eq!(captured.output_tokens, usage);
-+						assert_eq!(captured.cached_input_tokens, usage);
-+						assert_eq!(captured.cache_creation_input_tokens, usage);
-+						assert_eq!(captured.reasoning_tokens, usage);
-+						assert_eq!(captured.total_tokens, usage.map(|n| n * 2));
-+						assert_eq!(
-+							captured.error.as_deref(),
-+							(status == "failed").then_some("final failure")
-+						);
-+						assert_eq!(captured.stream_complete, status != "failed");
-+						assert_eq!(captured.output_messages.is_some(), tool_calls);
-+						if let Some(messages) = captured.output_messages {
-+							assert_eq!(messages.len(), 1);
-+							assert_eq!(
-+								messages[0].finish_reason.as_deref(),
-+								(status != "failed").then_some(status)
-+							);
-+							assert_eq!(
-+								serde_json::to_value(&messages[0].content).unwrap(),
-+								serde_json::to_value(vec![crate::OutputMessagePart::ToolCall {
-+									id: strng::literal!("call_final"),
-+									name: strng::literal!("final_tool"),
-+									arguments: json!({"exact":9007199254740993u64})
-+								}])
-+								.unwrap()
-+							);
-+						}
-+					}
-+				}
-+			}
-+		}
-+	}
-+
-+	#[tokio::test]
-+	async fn responses_done_snapshots_replace_partial_parts_without_duplication() {
-+		for partial in [false, true] {
-+			for final_output in ["empty", "snapshot", "null"] {
-+				let tool = json!({"id":"fc_done","type":"function_call","call_id":"call_done","name":"done_tool","arguments":"","status":"in_progress"});
-+				let mut events = vec![
-+					json!({"type":"response.output_item.added","output_index":1,"item":tool,"sequence_number":1}),
-+				];
-+				if partial {
-+					events.extend([
-+						json!({"type":"response.output_text.delta","item_id":"msg_done","output_index":0,"content_index":0,"delta":"done ","sequence_number":2}),
-+						json!({"type":"response.refusal.delta","item_id":"msg_done","output_index":0,"content_index":1,"delta":"I cannot ","sequence_number":3}),
-+						json!({"type":"response.function_call_arguments.delta","item_id":"fc_done","output_index":1,"delta":"{\"exact\":","sequence_number":4}),
-+					]);
-+				}
-+				events.extend([
-+					json!({"type":"response.content_part.done","item_id":"msg_done","output_index":0,"content_index":0,"part":{"type":"output_text","text":"done full","annotations":[]},"sequence_number":5}),
-+					json!({"type":"response.refusal.done","item_id":"msg_done","output_index":0,"content_index":1,"refusal":"I cannot assist.","sequence_number":6}),
-+					json!({"type":"response.function_call_arguments.done","item_id":"fc_done","output_index":1,"name":"done_tool","arguments":"{\"exact\":9007199254740993}","sequence_number":7}),
-+					json!({"type":"response.output_text.done","item_id":"msg_sparse","output_index":u32::MAX,"content_index":u32::MAX,"text":"sparse full","logprobs":[],"sequence_number":8}),
-+				]);
-+				for event in &events {
-+					serde_json::from_value::<types::responses::typed::ResponseStreamEvent>(event.clone())
-+						.unwrap();
-+				}
-+				let output = match final_output {
-+					"snapshot" => json!([
-+						{"id":"msg_done","type":"message","role":"assistant","status":"completed","content":[{"type":"output_text","text":"done full","annotations":[]},{"type":"refusal","refusal":"I cannot assist."}]},
-+						{"id":"fc_done","type":"function_call","call_id":"call_done","name":"done_tool","arguments":"{\"exact\":9007199254740993}","status":"completed"}
-+					]),
-+					"null" => Value::Null,
-+					_ => json!([]),
-+				};
-+				events.push(json!({"type":"response.completed","response":{"id":"done","object":"response","created_at":123,"status":"completed","model":"fixture","output":output,"usage":null},"sequence_number":9}));
-+				let wire = events
-+					.iter()
-+					.map(|event| {
-+						format!(
-+							"event: {}\ndata: {event}\n\n",
-+							event["type"].as_str().unwrap()
-+						)
-+					})
-+					.collect::<String>();
-+				for completion in [false, true] {
-+					for tool_calls in [false, true] {
-+						let (body, info) = content_capture(
-+							agent_http::Body::from(wire.clone()),
-+							crate::LogContentFields {
-+								completion,
-+								tool_calls,
-+							},
-+							InputFormat::Responses,
-+						);
-+						assert_eq!(
-+							body.collect().await.unwrap().to_bytes().as_ref(),
-+							wire.as_bytes()
-+						);
-+						let captured = info.lock().unwrap().response.clone();
-+						assert_eq!(
-+							captured.completion,
-+							completion.then(|| vec![
-+								"done full".to_owned(),
-+								"I cannot assist.".to_owned(),
-+								"sparse full".to_owned()
-+							])
-+						);
-+						assert!(captured.error.is_none());
-+						assert!(captured.stream_complete);
-+						assert!(captured.input_tokens.is_none());
-+						assert_eq!(captured.output_messages.is_some(), tool_calls);
-+						if let Some(messages) = captured.output_messages {
-+							assert_eq!(
-+								serde_json::to_value(&messages[0].content).unwrap(),
-+								serde_json::to_value(vec![crate::OutputMessagePart::ToolCall {
-+									id: strng::literal!("call_done"),
-+									name: strng::literal!("done_tool"),
-+									arguments: json!({"exact":9007199254740993u64})
-+								}])
-+								.unwrap()
-+							);
-+						}
-+					}
-+				}
-+			}
-+		}
-+	}
-+
-+	#[tokio::test]
-+	async fn responses_drop_preserves_partial_prose_tools_and_known_usage() {
-+		use futures_util::StreamExt;
-+		let events = [
-+			json!({"type":"response.created","response":{"id":"partial","object":"response","created_at":123,"status":"in_progress","model":"fixture","output":[],"usage":{"input_tokens":9,"input_tokens_details":{"cached_tokens":0},"output_tokens":2,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":11}},"sequence_number":1}),
-+			json!({"type":"response.output_item.added","output_index":u32::MAX,"item":{"id":"fc_partial","type":"function_call","call_id":"call_partial","name":"partial_tool","arguments":"","status":"in_progress"},"sequence_number":2}),
-+			json!({"type":"response.output_text.delta","item_id":"msg_partial","output_index":0,"content_index":0,"delta":"partial text","sequence_number":3}),
-+			json!({"type":"response.refusal.delta","item_id":"msg_partial","output_index":0,"content_index":u32::MAX,"delta":"partial refusal","sequence_number":4}),
-+			json!({"type":"response.function_call_arguments.delta","item_id":"fc_partial","output_index":u32::MAX,"delta":"{\"partial\":","sequence_number":5}),
-+		];
-+		let wire = events
-+			.iter()
-+			.map(|event| {
-+				serde_json::from_value::<types::responses::typed::ResponseStreamEvent>(event.clone())
-+					.unwrap();
-+				format!(
-+					"event: {}\ndata: {event}\n\n",
-+					event["type"].as_str().unwrap()
-+				)
-+			})
-+			.collect::<String>();
-+		for completion in [false, true] {
-+			for tool_calls in [false, true] {
-+				let stream = futures_util::stream::iter([Ok::<_, std::convert::Infallible>(Bytes::from(
-+					wire.clone(),
-+				))])
-+				.chain(futures_util::stream::pending());
-+				let (mut body, info) = content_capture(
-+					agent_http::Body::from_stream(stream),
-+					crate::LogContentFields {
-+						completion,
-+						tool_calls,
-+					},
-+					InputFormat::Responses,
-+				);
-+				assert_eq!(
-+					body
-+						.frame()
-+						.await
-+						.unwrap()
-+						.unwrap()
-+						.into_data()
-+						.unwrap()
-+						.as_ref(),
-+					wire.as_bytes()
-+				);
-+				drop(body);
-+				let captured = info.lock().unwrap().response.clone();
-+				assert_eq!(
-+					captured.completion,
-+					completion.then(|| vec!["partial text".to_owned(), "partial refusal".to_owned()])
-+				);
-+				assert_eq!(captured.error_type.as_deref(), Some("stream_error"));
-+				assert!(!captured.stream_complete);
-+				assert_eq!(captured.input_tokens, Some(9));
-+				assert_eq!(captured.output_tokens, Some(2));
-+				assert_eq!(captured.output_messages.is_some(), tool_calls);
-+				if let Some(messages) = captured.output_messages {
-+					assert!(messages[0].finish_reason.is_none());
-+					assert_eq!(
-+						serde_json::to_value(&messages[0].content).unwrap(),
-+						serde_json::to_value(vec![crate::OutputMessagePart::ToolCall {
-+							id: strng::literal!("call_partial"),
-+							name: strng::literal!("partial_tool"),
-+							arguments: json!("{\"partial\":")
-+						}])
-+						.unwrap()
-+					);
-+				}
-+			}
-+		}
-+	}
-+
-+	#[tokio::test]
-+	async fn passthrough_refusals_are_retained_as_assistant_prose() {
-+		let chat = json!({"id":"refusal","object":"chat.completion","created":123,"model":"fixture","choices":[{"index":0,"message":{"role":"assistant","content":null,"refusal":"I cannot assist."},"finish_reason":"stop"}]});
-+		let responses = json!({"id":"refusal","object":"response","created_at":123,"status":"completed","model":"fixture","output":[{"id":"msg_refusal","type":"message","role":"assistant","status":"completed","content":[{"type":"refusal","refusal":"I cannot assist."}]}]});
-+		for completion in [false, true] {
-+			let fields = crate::LogContentFields {
-+				completion,
-+				tool_calls: false,
-+			};
-+			let chat: types::completions::Response = serde_json::from_value(chat.clone()).unwrap();
-+			assert_eq!(
-+				chat.to_llm_response(fields).completion,
-+				completion.then(|| vec!["I cannot assist.".to_owned()])
-+			);
-+			let responses: types::responses::Response =
-+				serde_json::from_value(responses.clone()).unwrap();
-+			assert_eq!(
-+				responses.to_llm_response(fields).completion,
-+				completion.then(|| vec!["I cannot assist.".to_owned()])
-+			);
-+			let wire = format!(
-+				"data: {}\n\ndata: [DONE]\n\n",
-+				json!({"id":"refusal","object":"chat.completion.chunk","created":123,"model":"fixture","choices":[{"index":0,"delta":{"refusal":"I cannot assist."},"finish_reason":"stop"}]})
-+			);
-+			let (body, info) = content_capture(
-+				agent_http::Body::from(wire.clone()),
-+				fields,
-+				InputFormat::Completions,
-+			);
-+			assert_eq!(
-+				body.collect().await.unwrap().to_bytes().as_ref(),
-+				wire.as_bytes()
-+			);
-+			assert_eq!(
-+				info.lock().unwrap().response.completion,
-+				completion.then(|| vec!["I cannot assist.".to_owned()])
-+			);
-+		}
-+	}
- }
- 
- #[test]
 diff --git a/crates/llm/src/lib.rs b/crates/llm/src/lib.rs
-index 275de620..90c419a9 100644
+index 275de62..90c419a 100644
 --- a/crates/llm/src/lib.rs
 +++ b/crates/llm/src/lib.rs
 @@ -366,6 +366,12 @@ impl LLMInfo {
@@ -2659,7 +1875,7 @@ index 275de620..90c419a9 100644
  	MissingField(Strng),
  	#[error("model not found")]
 diff --git a/crates/llm/src/parse/aws_sse.rs b/crates/llm/src/parse/aws_sse.rs
-index c2f878be..0685ebac 100644
+index c2f878b..0685eba 100644
 --- a/crates/llm/src/parse/aws_sse.rs
 +++ b/crates/llm/src/parse/aws_sse.rs
 @@ -135,37 +135,105 @@ impl Decoder for EventStreamCodec {
@@ -2777,7 +1993,7 @@ index c2f878be..0685ebac 100644
  			.filter_map(|(event_name, event)| {
  				serde_json::to_vec(&event)
 diff --git a/crates/llm/src/parse/passthrough.rs b/crates/llm/src/parse/passthrough.rs
-index 12d15bb6..4131f793 100644
+index 12d15bb..4131f79 100644
 --- a/crates/llm/src/parse/passthrough.rs
 +++ b/crates/llm/src/parse/passthrough.rs
 @@ -18,11 +18,29 @@ pin_project! {
@@ -2844,7 +2060,7 @@ index 12d15bb6..4131f793 100644
  		}
  	}
 diff --git a/crates/llm/src/parse/sse.rs b/crates/llm/src/parse/sse.rs
-index e7622059..1f7e4c56 100644
+index e762205..a2a6fac 100644
 --- a/crates/llm/src/parse/sse.rs
 +++ b/crates/llm/src/parse/sse.rs
 @@ -7,7 +7,7 @@ use serde::de::DeserializeOwned;
@@ -3028,464 +2244,8 @@ index e7622059..1f7e4c56 100644
  			.into_iter()
  			.filter_map(|(event_name, item)| {
  				let json_bytes = serde_json::to_vec(&item).ok()?;
-@@ -168,3 +244,50 @@ pub(super) fn unwrap_json<T: DeserializeOwned>(frame: Frame<Bytes>) -> anyhow::R
- 			.transpose()?,
- 	)
- }
-+
-+#[cfg(test)]
-+mod tests {
-+	use std::sync::{Arc, Mutex};
-+
-+	use http_body_util::BodyExt;
-+
-+	use super::*;
-+
-+	#[tokio::test]
-+	async fn clean_eof_and_done_notify_once() {
-+		for input in ["data: {}\n\n", "data: {}\n\ndata: [DONE]\n\n"] {
-+			let events = Arc::new(Mutex::new(Vec::new()));
-+			let captured = events.clone();
-+			let body =
-+				json_passthrough::<serde_json::Value>(Body::from(input.to_string()), 1024, move |event| {
-+					captured.lock().unwrap().push(match event {
-+						Some(Ok(_)) => "item",
-+						Some(Err(_)) => "error",
-+						None => "eof",
-+					});
-+				});
-+			assert_eq!(
-+				body.collect().await.unwrap().to_bytes().as_ref(),
-+				input.as_bytes()
-+			);
-+			assert_eq!(*events.lock().unwrap(), ["item", "eof"]);
-+		}
-+	}
-+
-+	#[tokio::test]
-+	async fn dropped_stream_notifies_interruption() {
-+		let events = Arc::new(Mutex::new(Vec::new()));
-+		let captured = events.clone();
-+		let body = json_passthrough::<serde_json::Value>(Body::empty(), 1024, move |event| {
-+			captured
-+				.lock()
-+				.unwrap()
-+				.push(event.unwrap().unwrap_err().to_string());
-+		});
-+		drop(body);
-+		assert_eq!(
-+			*events.lock().unwrap(),
-+			["stream interrupted before terminal event"]
-+		);
-+	}
-+}
-diff --git a/crates/llm/src/tests/response/anthropic/stream_error.json b/crates/llm/src/tests/response/anthropic/stream_error.json
-new file mode 100644
-index 00000000..6d5ca9c6
---- /dev/null
-+++ b/crates/llm/src/tests/response/anthropic/stream_error.json
-@@ -0,0 +1,16 @@
-+event: message_start
-+data: {"type": "message_start", "message": {"id": "msg-fail", "type": "message", "role": "assistant", "model": "gpt-4o", "content": [], "usage": {"input_tokens": 5, "output_tokens": 0}}}
-+
-+event: content_block_start
-+data: {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}}
-+
-+event: content_block_delta
-+data: {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "partial message"}}
-+
-+event: error
-+data: {"type": "error", "error": {"type": "overloaded_error", "message": "messages provider failed"}}
-+
-+event: content_block_delta
-+data: {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "bogus message"}}
-+
-+: End of fixture
-diff --git a/crates/llm/src/tests/response/anthropic/stream_error.messages-completions-streaming.snap b/crates/llm/src/tests/response/anthropic/stream_error.messages-completions-streaming.snap
-new file mode 100644
-index 00000000..239f2f90
---- /dev/null
-+++ b/crates/llm/src/tests/response/anthropic/stream_error.messages-completions-streaming.snap
-@@ -0,0 +1,22 @@
-+---
-+source: crates/llm/src/golden_tests.rs
-+description: src/tests/response/anthropic/stream_error.json
-+---
-+data: {"id":"msg-fail","choices":[{"index":0,"delta":{"content":"partial message","role":"assistant"}}],"created":123,"model":"gpt-4o","service_tier":null,"system_fingerprint":null,"object":"chat.completion.chunk","usage":null}
-+
-+data: {"id":"msg-fail","choices":[{"index":0,"delta":{"content":"bogus message"}}],"created":123,"model":"gpt-4o","service_tier":null,"system_fingerprint":null,"object":"chat.completion.chunk","usage":null}
-+
-+data: [DONE]
-+
-+
-+
-+{
-+  "error_type": "overloaded_error",
-+  "error": "messages provider failed",
-+  "input_tokens": 5,
-+  "output_tokens": 0,
-+  "provider_model": "gpt-4o",
-+  "completion": [
-+    "partial message"
-+  ]
-+}
-diff --git a/crates/llm/src/tests/response/anthropic/stream_error.messages-messages-streaming.snap b/crates/llm/src/tests/response/anthropic/stream_error.messages-messages-streaming.snap
-new file mode 100644
-index 00000000..d0546087
---- /dev/null
-+++ b/crates/llm/src/tests/response/anthropic/stream_error.messages-messages-streaming.snap
-@@ -0,0 +1,32 @@
-+---
-+source: crates/llm/src/golden_tests.rs
-+description: src/tests/response/anthropic/stream_error.json
-+---
-+event: message_start
-+data: {"type": "message_start", "message": {"id": "msg-fail", "type": "message", "role": "assistant", "model": "gpt-4o", "content": [], "usage": {"input_tokens": 5, "output_tokens": 0}}}
-+
-+event: content_block_start
-+data: {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}}
-+
-+event: content_block_delta
-+data: {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "partial message"}}
-+
-+event: error
-+data: {"type": "error", "error": {"type": "overloaded_error", "message": "messages provider failed"}}
-+
-+event: content_block_delta
-+data: {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "bogus message"}}
-+
-+: End of fixture
-+
-+
-+{
-+  "error_type": "overloaded_error",
-+  "error": "messages provider failed",
-+  "input_tokens": 5,
-+  "output_tokens": 0,
-+  "provider_model": "gpt-4o",
-+  "completion": [
-+    "partial message"
-+  ]
-+}
-diff --git a/crates/llm/src/tests/response/bedrock/error.bedrock-completions-streaming.snap b/crates/llm/src/tests/response/bedrock/error.bedrock-completions-streaming.snap
-new file mode 100644
-index 00000000..c2c452e2
---- /dev/null
-+++ b/crates/llm/src/tests/response/bedrock/error.bedrock-completions-streaming.snap
-@@ -0,0 +1,23 @@
-+---
-+source: crates/llm/src/golden_tests.rs
-+description: src/tests/response/bedrock/error.bin
-+---
-+data: {"id":"request_id","choices":[{"index":0,"delta":{"content":null,"role":"assistant"}}],"created":123,"model":"input-model","service_tier":null,"system_fingerprint":null,"object":"chat.completion.chunk","usage":null}
-+
-+data: {"id":"request_id","choices":[{"index":0,"delta":{"content":"\nOnce upon a time, there was a little boy named Jack who loved to play with his friends in the park. His favorite activity was to climb the tallest tree and swing on the strongest branch. One day, Jac"}}],"created":123,"model":"input-model","service_tier":null,"system_fingerprint":null,"object":"chat.completion.chunk","usage":null}
-+
-+data: {"id":"request_id","choices":[{"index":0,"delta":{"content":"k and his friends were playing when they heard a loud noise coming from the tree. They ran over to investigate and found a large bird trapped inside.\n\nJack knew that he had to help the bird, so he climbed up the tree and gently removed the bird from the branches. The bird was grateful and thanked Jack for his help"}}],"created":123,"model":"input-model","service_tier":null,"system_fingerprint":null,"object":"chat.completion.chunk","usage":null}
-+
-+data: {"id":"request_id","choices":[{"index":0,"delta":{"content":". From that day on, Jack became known as the bird whisperer in the park and everyone loved to hear his stories about the birds he had helped."}}],"created":123,"model":"input-model","service_tier":null,"system_fingerprint":null,"object":"chat.completion.chunk","usage":null}
-+
-+data: [DONE]
-+
-+
-+
-+{
-+  "error_type": "provider_error",
-+  "error": "throttlingException: {\"message\":\"bedrock provider failed\"}",
-+  "completion": [
-+    "\nOnce upon a time, there was a little boy named Jack who loved to play with his friends in the park. His favorite activity was to climb the tallest tree and swing on the strongest branch. One day, Jack and his friends were playing when they heard a loud noise coming from the tree. They ran over to investigate and found a large bird trapped inside.\n\nJack knew that he had to help the bird, so he climbed up the tree and gently removed the bird from the branches. The bird was grateful and thanked Jack for his help. From that day on, Jack became known as the bird whisperer in the park and everyone loved to hear his stories about the birds he had helped."
-+  ]
-+}
-diff --git a/crates/llm/src/tests/response/bedrock/error.bedrock-completions.snap b/crates/llm/src/tests/response/bedrock/error.bedrock-completions.snap
-new file mode 100644
-index 00000000..06af339c
---- /dev/null
-+++ b/crates/llm/src/tests/response/bedrock/error.bedrock-completions.snap
-@@ -0,0 +1,9 @@
-+---
-+source: crates/llm/src/golden_tests.rs
-+description: src/tests/response/bedrock/error.json
-+info:
-+  message: bedrock provider failed
-+---
-+{
-+  "error": "provider returned provider_error: bedrock provider failed"
-+}
-diff --git a/crates/llm/src/tests/response/bedrock/error.bedrock-messages-streaming.snap b/crates/llm/src/tests/response/bedrock/error.bedrock-messages-streaming.snap
-new file mode 100644
-index 00000000..72fbce51
---- /dev/null
-+++ b/crates/llm/src/tests/response/bedrock/error.bedrock-messages-streaming.snap
-@@ -0,0 +1,34 @@
-+---
-+source: crates/llm/src/golden_tests.rs
-+description: src/tests/response/bedrock/error.bin
-+---
-+event: message_start
-+data: {"type":"message_start","message":{"id":"","type":"message","role":"assistant","content":[],"model":"input-model","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":0,"output_tokens":0}}}
-+
-+event: content_block_start
-+data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}
-+
-+event: content_block_delta
-+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"\nOnce upon a time, there was a little boy named Jack who loved to play with his friends in the park. His favorite activity was to climb the tallest tree and swing on the strongest branch. One day, Jac"}}
-+
-+event: content_block_delta
-+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"k and his friends were playing when they heard a loud noise coming from the tree. They ran over to investigate and found a large bird trapped inside.\n\nJack knew that he had to help the bird, so he climbed up the tree and gently removed the bird from the branches. The bird was grateful and thanked Jack for his help"}}
-+
-+event: content_block_delta
-+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":". From that day on, Jack became known as the bird whisperer in the park and everyone loved to hear his stories about the birds he had helped."}}
-+
-+event: content_block_stop
-+data: {"type":"content_block_stop","index":0}
-+
-+event: error
-+data: {"type":"error","error":{"type":"api_error","message":"Stream processing error"}}
-+
-+
-+
-+{
-+  "error_type": "provider_error",
-+  "error": "throttlingException: {\"message\":\"bedrock provider failed\"}",
-+  "completion": [
-+    "\nOnce upon a time, there was a little boy named Jack who loved to play with his friends in the park. His favorite activity was to climb the tallest tree and swing on the strongest branch. One day, Jack and his friends were playing when they heard a loud noise coming from the tree. They ran over to investigate and found a large bird trapped inside.\n\nJack knew that he had to help the bird, so he climbed up the tree and gently removed the bird from the branches. The bird was grateful and thanked Jack for his help. From that day on, Jack became known as the bird whisperer in the park and everyone loved to hear his stories about the birds he had helped."
-+  ]
-+}
-diff --git a/crates/llm/src/tests/response/bedrock/error.bedrock-messages.snap b/crates/llm/src/tests/response/bedrock/error.bedrock-messages.snap
-new file mode 100644
-index 00000000..06af339c
---- /dev/null
-+++ b/crates/llm/src/tests/response/bedrock/error.bedrock-messages.snap
-@@ -0,0 +1,9 @@
-+---
-+source: crates/llm/src/golden_tests.rs
-+description: src/tests/response/bedrock/error.json
-+info:
-+  message: bedrock provider failed
-+---
-+{
-+  "error": "provider returned provider_error: bedrock provider failed"
-+}
-diff --git a/crates/llm/src/tests/response/bedrock/error.bedrock-responses-streaming.snap b/crates/llm/src/tests/response/bedrock/error.bedrock-responses-streaming.snap
-new file mode 100644
-index 00000000..b0797ea6
---- /dev/null
-+++ b/crates/llm/src/tests/response/bedrock/error.bedrock-responses-streaming.snap
-@@ -0,0 +1,31 @@
-+---
-+source: crates/llm/src/golden_tests.rs
-+description: src/tests/response/bedrock/error.bin
-+---
-+event: event
-+data: {"type":"response.created","sequence_number":1,"response":{"created_at":123,"id":"","model":"input-model","object":"response","output":[],"status":"in_progress"}}
-+
-+event: event
-+data: {"type":"response.output_item.added","sequence_number":2,"output_index":0,"item":{"type":"message","content":[],"id":"","role":"assistant","status":"in_progress"}}
-+
-+event: event
-+data: {"type":"response.output_text.delta","sequence_number":3,"item_id":"","output_index":0,"content_index":0,"delta":"\nOnce upon a time, there was a little boy named Jack who loved to play with his friends in the park. His favorite activity was to climb the tallest tree and swing on the strongest branch. One day, Jac"}
-+
-+event: event
-+data: {"type":"response.output_text.delta","sequence_number":4,"item_id":"","output_index":0,"content_index":0,"delta":"k and his friends were playing when they heard a loud noise coming from the tree. They ran over to investigate and found a large bird trapped inside.\n\nJack knew that he had to help the bird, so he climbed up the tree and gently removed the bird from the branches. The bird was grateful and thanked Jack for his help"}
-+
-+event: event
-+data: {"type":"response.output_text.delta","sequence_number":5,"item_id":"","output_index":0,"content_index":0,"delta":". From that day on, Jack became known as the bird whisperer in the park and everyone loved to hear his stories about the birds he had helped."}
-+
-+event: error
-+data: {"type":"error","sequence_number":6,"code":null,"message":"Stream processing error","param":null}
-+
-+
-+
-+{
-+  "error_type": "provider_error",
-+  "error": "throttlingException: {\"message\":\"bedrock provider failed\"}",
-+  "completion": [
-+    "\nOnce upon a time, there was a little boy named Jack who loved to play with his friends in the park. His favorite activity was to climb the tallest tree and swing on the strongest branch. One day, Jack and his friends were playing when they heard a loud noise coming from the tree. They ran over to investigate and found a large bird trapped inside.\n\nJack knew that he had to help the bird, so he climbed up the tree and gently removed the bird from the branches. The bird was grateful and thanked Jack for his help. From that day on, Jack became known as the bird whisperer in the park and everyone loved to hear his stories about the birds he had helped."
-+  ]
-+}
-diff --git a/crates/llm/src/tests/response/bedrock/error.bedrock-responses.snap b/crates/llm/src/tests/response/bedrock/error.bedrock-responses.snap
-new file mode 100644
-index 00000000..06af339c
---- /dev/null
-+++ b/crates/llm/src/tests/response/bedrock/error.bedrock-responses.snap
-@@ -0,0 +1,9 @@
-+---
-+source: crates/llm/src/golden_tests.rs
-+description: src/tests/response/bedrock/error.json
-+info:
-+  message: bedrock provider failed
-+---
-+{
-+  "error": "provider returned provider_error: bedrock provider failed"
-+}
-diff --git a/crates/llm/src/tests/response/bedrock/error.bin b/crates/llm/src/tests/response/bedrock/error.bin
-new file mode 100644
-index 0000000000000000000000000000000000000000..9e347c701fc617eb89f5688b970f5967745b7efa
-GIT binary patch
-literal 1702
-zcmc&#y=xRf6yFFU5`*yrEF$ul!s<K)!Qx0`Okxs0qDf2?ubJC@cRShLnRRCN_SSGk
-zu&@<G{|g&I3kwSyD+?9kA0YS_h?RwJ_C8F~7)402%ig}3H^2RTyz@NovFCY9UpF6J
-z9Ias+r9Eeh6c2ev5;TUlaM^Ng$7;Tk_IGidr)eyFZiSNP*Nu{6wf^${?t^8k4VJPR
-z;|)K+W-AoytirU4(Y-T97|W$)U3>5Bg6EAqB^YZTzC63X6UMRr!BesFqiKvS|7R@Q
-zJI%`gJFIr0!UETm)i#*LjwNJuxhQ>vEL9RXSdm}_Y={~m=Z4<I!rB<2p$d>Z!2lMx
-zA3+`}h*g_@S_Ns$3&@2HAruChTA&OJ2<iGj%5_wQIalCqrG-V{z7=g@X%C%1`~6rX
-zjdHQ&ag4@-)kw=^045i*1q98tGFB_ua`lGh(hsY!C=mi)R2(SQt?Z&diW8~Q2in-I
-zop*|dm#3~w&&*z(n_swg{l?A3Tep{%SMIE?vF^m?$|sWKr;}vsRrY?LC5g&U-_B+3
-z^l&sgHu4ZlJ_-nt>%eKGvH+wK2EkW}Thr7k=`l)7R$(Q?0*Esp$+V+f$TsmPTHMJ&
-zJU3NFck0A-i^LYx)@m|62`r=$0aoj>E=%bni8;0AmX3#zmktOqPRrxm&I%aiYNf2y
-zAnTQenzkrcF~Py4XCPWy9yr9@Qx{E%yH|5gX=y^+%;FL-0g%zajZLLX>p2*IX9L!K
-zIXU)?w4Zj`|2S~z_&#f2h1s5T#4kCUtY4Ztf(H5&KZvBtDX5g20c|-MB_)68?TITn
-zqM4)%MG+Y$)fuK_%2<jbQob81qqy~ZnSrE^NDQib<C1kp-%Oq%{$A6y+Ig{cdMAhD
-z+XvCIRq218Xgg=_9z%bZbx&?R`AmqP)5S+V)=%x8>4&l7W9ml!(c18_KkrZ2P%9dY
-ol(m_`sy}|#2J8Q6(AaHYplQNGs#TlfrD-~f7z5V*KJoV5FO#=ZA^-pY
-
-literal 0
-HcmV?d00001
-
-diff --git a/crates/llm/src/tests/response/bedrock/error.json b/crates/llm/src/tests/response/bedrock/error.json
-new file mode 100644
-index 00000000..93472c22
---- /dev/null
-+++ b/crates/llm/src/tests/response/bedrock/error.json
-@@ -0,0 +1 @@
-+{"message":"bedrock provider failed"}
-diff --git a/crates/llm/src/tests/response/completions/stream-error.completions-completions-streaming.snap b/crates/llm/src/tests/response/completions/stream-error.completions-completions-streaming.snap
-new file mode 100644
-index 00000000..d4b38b9b
---- /dev/null
-+++ b/crates/llm/src/tests/response/completions/stream-error.completions-completions-streaming.snap
-@@ -0,0 +1,23 @@
-+---
-+source: crates/llm/src/golden_tests.rs
-+description: src/tests/response/completions/stream-error.json
-+---
-+data: {"id": "chat-fail", "object": "chat.completion.chunk", "model": "gpt-4o", "choices": [{"index": 0, "delta": {"content": "partial visible"}, "finish_reason": null}]}
-+
-+data: {"error": {"code": "server_error", "message": "chat provider failed"}}
-+
-+data: {"id": "chat-fail", "object": "chat.completion.chunk", "model": "gpt-4o", "choices": [{"index": 0, "delta": {"content": "bogus after error"}, "finish_reason": null}]}
-+
-+data: [DONE]
-+
-+: End of fixture
-+
-+
-+{
-+  "error_type": "server_error",
-+  "error": "chat provider failed",
-+  "provider_model": "gpt-4o",
-+  "completion": [
-+    "partial visible"
-+  ]
-+}
-diff --git a/crates/llm/src/tests/response/completions/stream-error.completions-messages-streaming.snap b/crates/llm/src/tests/response/completions/stream-error.completions-messages-streaming.snap
-new file mode 100644
-index 00000000..78a01ad6
---- /dev/null
-+++ b/crates/llm/src/tests/response/completions/stream-error.completions-messages-streaming.snap
-@@ -0,0 +1,35 @@
-+---
-+source: crates/llm/src/golden_tests.rs
-+description: src/tests/response/completions/stream-error.json
-+---
-+event: message_start
-+data: {"type":"message_start","message":{"id":"chat-fail","type":"message","role":"assistant","content":[],"model":"gpt-4o","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":0,"output_tokens":0}}}
-+
-+event: content_block_start
-+data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}
-+
-+event: content_block_delta
-+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"partial visible"}}
-+
-+event: content_block_delta
-+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"bogus after error"}}
-+
-+event: content_block_stop
-+data: {"type":"content_block_stop","index":0}
-+
-+event: message_delta
-+data: {"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":0,"output_tokens":0}}
-+
-+event: message_stop
-+data: {"type":"message_stop"}
-+
-+
-+
-+{
-+  "error_type": "server_error",
-+  "error": "chat provider failed",
-+  "provider_model": "gpt-4o",
-+  "completion": [
-+    "partial visible"
-+  ]
-+}
-diff --git a/crates/llm/src/tests/response/completions/stream-error.completions-responses-streaming.snap b/crates/llm/src/tests/response/completions/stream-error.completions-responses-streaming.snap
-new file mode 100644
-index 00000000..bfb7eba6
---- /dev/null
-+++ b/crates/llm/src/tests/response/completions/stream-error.completions-responses-streaming.snap
-@@ -0,0 +1,44 @@
-+---
-+source: crates/llm/src/golden_tests.rs
-+description: src/tests/response/completions/stream-error.json
-+---
-+event: event
-+data: {"type":"response.created","sequence_number":1,"response":{"created_at":123,"id":"","model":"gpt-4o","object":"response","output":[],"status":"in_progress"}}
-+
-+event: event
-+data: {"type":"response.in_progress","sequence_number":2,"response":{"created_at":123,"id":"","model":"gpt-4o","object":"response","output":[],"status":"in_progress"}}
-+
-+event: event
-+data: {"type":"response.output_item.added","sequence_number":3,"output_index":0,"item":{"type":"message","content":[],"id":"","role":"assistant","status":"in_progress"}}
-+
-+event: event
-+data: {"type":"response.content_part.added","sequence_number":4,"item_id":"","output_index":0,"content_index":0,"part":{"type":"output_text","annotations":[],"logprobs":null,"text":""}}
-+
-+event: event
-+data: {"type":"response.output_text.delta","sequence_number":5,"item_id":"","output_index":0,"content_index":0,"delta":"partial visible"}
-+
-+event: event
-+data: {"type":"response.output_text.delta","sequence_number":6,"item_id":"","output_index":0,"content_index":0,"delta":"bogus after error"}
-+
-+event: event
-+data: {"type":"response.output_text.done","sequence_number":7,"item_id":"","output_index":0,"content_index":0,"text":"partial visiblebogus after error","logprobs":null}
-+
-+event: event
-+data: {"type":"response.content_part.done","sequence_number":8,"item_id":"","output_index":0,"content_index":0,"part":{"type":"output_text","annotations":[],"logprobs":null,"text":"partial visiblebogus after error"}}
-+
-+event: event
-+data: {"type":"response.output_item.done","sequence_number":9,"output_index":0,"item":{"type":"message","content":[{"type":"output_text","annotations":[],"logprobs":null,"text":"partial visiblebogus after error"}],"id":"","role":"assistant","status":"completed"}}
-+
-+event: event
-+data: {"type":"response.completed","sequence_number":10,"response":{"created_at":123,"id":"","model":"gpt-4o","object":"response","output":[{"type":"message","content":[{"type":"output_text","annotations":[],"logprobs":null,"text":"partial visiblebogus after error"}],"id":"","role":"assistant","status":"completed"}],"status":"completed"}}
-+
-+
-+
-+{
-+  "error_type": "server_error",
-+  "error": "chat provider failed",
-+  "provider_model": "gpt-4o",
-+  "completion": [
-+    "partial visible"
-+  ]
-+}
-diff --git a/crates/llm/src/tests/response/completions/stream-error.json b/crates/llm/src/tests/response/completions/stream-error.json
-new file mode 100644
-index 00000000..faf4c4b0
---- /dev/null
-+++ b/crates/llm/src/tests/response/completions/stream-error.json
-@@ -0,0 +1,9 @@
-+data: {"id": "chat-fail", "object": "chat.completion.chunk", "model": "gpt-4o", "choices": [{"index": 0, "delta": {"content": "partial visible"}, "finish_reason": null}]}
-+
-+data: {"error": {"code": "server_error", "message": "chat provider failed"}}
-+
-+data: {"id": "chat-fail", "object": "chat.completion.chunk", "model": "gpt-4o", "choices": [{"index": 0, "delta": {"content": "bogus after error"}, "finish_reason": null}]}
-+
-+data: [DONE]
-+
-+: End of fixture
 diff --git a/crates/llm/src/tests/response/completions/stream.completions-messages-streaming.snap b/crates/llm/src/tests/response/completions/stream.completions-messages-streaming.snap
-index 48fae871..7664e5a9 100644
+index 48fae87..7664e5a 100644
 --- a/crates/llm/src/tests/response/completions/stream.completions-messages-streaming.snap
 +++ b/crates/llm/src/tests/response/completions/stream.completions-messages-streaming.snap
 @@ -280,5 +280,8 @@ data: {"type":"message_stop"}
@@ -3498,74 +2258,8 @@ index 48fae871..7664e5a9 100644
 +    "Hi there! How can I help today? If you’re not sure where to start, I can:\n\n- Answer questions or explain concepts\n- Help with writing, editing, or brainstorming\n- Assist with coding, math, or data tasks\n- Plan something (a trip, a project, a study schedule)\n- Translate or practice a language\n\nTell me what you’re aiming for, and I’ll tailor my help."
 +  ]
  }
-diff --git a/crates/llm/src/tests/response/responses/failed.responses-responses.snap b/crates/llm/src/tests/response/responses/failed.responses-responses.snap
-new file mode 100644
-index 00000000..23efdbe8
---- /dev/null
-+++ b/crates/llm/src/tests/response/responses/failed.responses-responses.snap
-@@ -0,0 +1,60 @@
-+---
-+source: crates/llm/src/golden_tests.rs
-+description: src/tests/response/responses/failed.json
-+info:
-+  id: resp_terminal
-+  object: response
-+  created_at: 123
-+  model: gpt-5.6-luna
-+  status: failed
-+  output: []
-+  usage:
-+    input_tokens: 100
-+    output_tokens: 5
-+    total_tokens: 105
-+    input_tokens_details:
-+      cached_tokens: 20
-+      cache_write_tokens: 30
-+    output_tokens_details:
-+      reasoning_tokens: 3
-+  error:
-+    code: server_error
-+    message: provider failed
-+---
-+{
-+  "response": {
-+    "id": "[id]",
-+    "status": "failed",
-+    "output": [],
-+    "model": "gpt-5.6-luna",
-+    "usage": {
-+      "input_tokens": 100,
-+      "output_tokens": 5,
-+      "input_tokens_details": {
-+        "cached_tokens": 20,
-+        "cache_write_tokens": 30
-+      },
-+      "output_tokens_details": {
-+        "reasoning_tokens": 3
-+      },
-+      "total_tokens": 105
-+    },
-+    "object": "response",
-+    "created_at": "[date]",
-+    "error": {
-+      "code": "server_error",
-+      "message": "provider failed"
-+    }
-+  },
-+  "parsed": {
-+    "error_type": "server_error",
-+    "error": "provider failed",
-+    "input_tokens": 100,
-+    "output_tokens": 5,
-+    "total_tokens": 105,
-+    "reasoning_tokens": 3,
-+    "cache_creation_input_tokens": 30,
-+    "cached_input_tokens": 20,
-+    "provider_model": "gpt-5.6-luna"
-+  }
-+}
 diff --git a/crates/llm/src/tests/response/responses/stream-error.responses-messages-streaming.snap b/crates/llm/src/tests/response/responses/stream-error.responses-messages-streaming.snap
-index 73a84a06..20b09d25 100644
+index 73a84a0..20b09d2 100644
 --- a/crates/llm/src/tests/response/responses/stream-error.responses-messages-streaming.snap
 +++ b/crates/llm/src/tests/response/responses/stream-error.responses-messages-streaming.snap
 @@ -11,6 +11,8 @@ data: {"type":"error","error":{"type":"rate_limit_error","message":"provider fai
@@ -3578,7 +2272,7 @@ index 73a84a06..20b09d25 100644
    "completion": [
      ""
 diff --git a/crates/llm/src/tests/response/responses/stream-failed.responses-messages-streaming.snap b/crates/llm/src/tests/response/responses/stream-failed.responses-messages-streaming.snap
-index cb8e28e8..9b4f4cdc 100644
+index cb8e28e..9b4f4cd 100644
 --- a/crates/llm/src/tests/response/responses/stream-failed.responses-messages-streaming.snap
 +++ b/crates/llm/src/tests/response/responses/stream-failed.responses-messages-streaming.snap
 @@ -26,6 +26,8 @@ data: {"type":"error","error":{"type":"api_error","message":"provider failed"}}
@@ -3590,184 +2284,8 @@ index cb8e28e8..9b4f4cdc 100644
    "input_tokens": 100,
    "output_tokens": 5,
    "total_tokens": 105,
-diff --git a/crates/llm/src/tests/response/responses/stream-failed.responses-responses-streaming.snap b/crates/llm/src/tests/response/responses/stream-failed.responses-responses-streaming.snap
-new file mode 100644
-index 00000000..9aa5c4cf
---- /dev/null
-+++ b/crates/llm/src/tests/response/responses/stream-failed.responses-responses-streaming.snap
-@@ -0,0 +1,56 @@
-+---
-+source: crates/llm/src/golden_tests.rs
-+description: src/tests/response/responses/stream-failed.json
-+---
-+event: response.created
-+data: {"type":"response.created","sequence_number":1,"response":{"id":"resp_terminal","object":"response","created_at":123,"model":"gpt-5.6-luna","status":"in_progress","output":[]}}
-+
-+event: response.output_text.delta
-+data: {"type":"response.output_text.delta","item_id":"msg_partial","output_index":0,"content_index":0,"delta":"Let me check.","sequence_number":2}
-+
-+event: response.output_item.added
-+data: {"type":"response.output_item.added","output_index":1,"item":{"type":"function_call","id":"fc_partial","call_id":"call_partial","name":"weather","arguments":"","status":"in_progress"},"sequence_number":3}
-+
-+event: response.function_call_arguments.delta
-+data: {"type":"response.function_call_arguments.delta","item_id":"fc_partial","output_index":1,"delta":"{\"city\":","sequence_number":4}
-+
-+event: response.failed
-+data: {"type":"response.failed","sequence_number":5,"response":{"id":"resp_terminal","object":"response","created_at":123,"model":"gpt-5.6-luna","status":"failed","output":[],"usage":{"input_tokens":100,"output_tokens":5,"total_tokens":105,"input_tokens_details":{"cached_tokens":20,"cache_write_tokens":30},"output_tokens_details":{"reasoning_tokens":3}},"error":{"code":"server_error","message":"provider failed"}}}
-+
-+event: response.output_text.delta
-+data: {"type":"response.output_text.delta","item_id":"msg_partial","output_index":0,"content_index":0,"delta":"This must not appear.","sequence_number":6}
-+
-+event: response.completed
-+data: {"type":"response.completed","response":{"id":"resp_terminal","object":"response","created_at":123,"model":"gpt-5.6-luna","status":"completed","output":[],"usage":{"input_tokens":100,"output_tokens":5,"total_tokens":105,"input_tokens_details":{"cached_tokens":20,"cache_write_tokens":30},"output_tokens_details":{"reasoning_tokens":3}},"error":null},"sequence_number":7}
-+
-+data: [DONE]
-+
-+
-+
-+{
-+  "error_type": "provider_error",
-+  "error": "provider failed",
-+  "input_tokens": 100,
-+  "output_tokens": 5,
-+  "total_tokens": 105,
-+  "reasoning_tokens": 3,
-+  "cache_creation_input_tokens": 30,
-+  "cached_input_tokens": 20,
-+  "provider_model": "gpt-5.6-luna",
-+  "completion": [
-+    "Let me check."
-+  ],
-+  "output_messages": [
-+    {
-+      "role": "assistant",
-+      "content": [
-+        {
-+          "type": "tool_call",
-+          "id": "call_partial",
-+          "name": "weather",
-+          "arguments": "{\"city\":"
-+        }
-+      ]
-+    }
-+  ]
-+}
-diff --git a/crates/llm/src/tests/response/vertex-gemini/error.gemini-native.snap b/crates/llm/src/tests/response/vertex-gemini/error.gemini-native.snap
-new file mode 100644
-index 00000000..af1dd5b3
---- /dev/null
-+++ b/crates/llm/src/tests/response/vertex-gemini/error.gemini-native.snap
-@@ -0,0 +1,22 @@
-+---
-+source: crates/llm/src/golden_tests.rs
-+description: src/tests/response/vertex-gemini/error.json
-+info:
-+  error:
-+    code: 429
-+    status: RESOURCE_EXHAUSTED
-+    message: gemini provider failed
-+---
-+{
-+  "response": {
-+    "error": {
-+      "code": 429,
-+      "status": "RESOURCE_EXHAUSTED",
-+      "message": "gemini provider failed"
-+    }
-+  },
-+  "parsed": {
-+    "error_type": "RESOURCE_EXHAUSTED",
-+    "error": "gemini provider failed"
-+  }
-+}
-diff --git a/crates/llm/src/tests/response/vertex-gemini/error.json b/crates/llm/src/tests/response/vertex-gemini/error.json
-new file mode 100644
-index 00000000..22ac8010
---- /dev/null
-+++ b/crates/llm/src/tests/response/vertex-gemini/error.json
-@@ -0,0 +1 @@
-+{"error": {"code": 429, "status": "RESOURCE_EXHAUSTED", "message": "gemini provider failed"}}
-\ No newline at end of file
-diff --git a/crates/llm/src/tests/response/vertex-gemini/error.vertex-gemini-completions.snap b/crates/llm/src/tests/response/vertex-gemini/error.vertex-gemini-completions.snap
-new file mode 100644
-index 00000000..0c78062f
---- /dev/null
-+++ b/crates/llm/src/tests/response/vertex-gemini/error.vertex-gemini-completions.snap
-@@ -0,0 +1,33 @@
-+---
-+source: crates/llm/src/golden_tests.rs
-+description: src/tests/response/vertex-gemini/error.json
-+info:
-+  error:
-+    code: 429
-+    status: RESOURCE_EXHAUSTED
-+    message: gemini provider failed
-+---
-+{
-+  "response": {
-+    "model": "",
-+    "usage": null,
-+    "choices": [
-+      {
-+        "message": {
-+          "content": "",
-+          "role": "assistant"
-+        },
-+        "index": 0,
-+        "finish_reason": "stop"
-+      }
-+    ],
-+    "id": "[id]",
-+    "created": "[date]",
-+    "object": "chat.completion"
-+  },
-+  "parsed": {
-+    "error_type": "RESOURCE_EXHAUSTED",
-+    "error": "gemini provider failed",
-+    "provider_model": ""
-+  }
-+}
-diff --git a/crates/llm/src/tests/response/vertex-gemini/stream_error.json b/crates/llm/src/tests/response/vertex-gemini/stream_error.json
-new file mode 100644
-index 00000000..710f1000
---- /dev/null
-+++ b/crates/llm/src/tests/response/vertex-gemini/stream_error.json
-@@ -0,0 +1,7 @@
-+data: {"candidates": [{"content": {"role": "model", "parts": [{"text": "gemini partial"}]}, "index": 0}], "modelVersion": "gemini-2.5-pro", "responseId": "fixture-gemini"}
-+
-+data: {"error": {"code": 429, "status": "RESOURCE_EXHAUSTED", "message": "gemini provider failed"}, "responseId": "fixture-gemini"}
-+
-+data: {"candidates": [{"content": {"role": "model", "parts": [{"text": "gemini visible"}]}, "finishReason": "STOP", "index": 0}], "usageMetadata": {"promptTokenCount": 10, "candidatesTokenCount": 5, "totalTokenCount": 15}, "modelVersion": "gemini-2.5-pro", "responseId": "fixture-gemini"}
-+
-+: End of fixture
-diff --git a/crates/llm/src/tests/response/vertex-gemini/stream_error.vertex-gemini-completions-streaming.snap b/crates/llm/src/tests/response/vertex-gemini/stream_error.vertex-gemini-completions-streaming.snap
-new file mode 100644
-index 00000000..52866165
---- /dev/null
-+++ b/crates/llm/src/tests/response/vertex-gemini/stream_error.vertex-gemini-completions-streaming.snap
-@@ -0,0 +1,20 @@
-+---
-+source: crates/llm/src/golden_tests.rs
-+description: src/tests/response/vertex-gemini/stream_error.json
-+---
-+data: {"id":"fixture-gemini","choices":[{"index":0,"delta":{"content":"gemini partial","role":"assistant"}}],"created":123,"model":"gemini-2.5-pro","service_tier":null,"system_fingerprint":null,"object":"chat.completion.chunk","usage":null}
-+
-+data: {"id":"fixture-gemini","choices":[{"index":0,"delta":{"content":"gemini visible"},"finish_reason":"stop"}],"created":123,"model":"gemini-2.5-pro","service_tier":null,"system_fingerprint":null,"object":"chat.completion.chunk","usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}
-+
-+data: [DONE]
-+
-+
-+
-+{
-+  "error_type": "RESOURCE_EXHAUSTED",
-+  "error": "gemini provider failed",
-+  "provider_model": "gemini-2.5-pro",
-+  "completion": [
-+    "gemini partial"
-+  ]
-+}
 diff --git a/crates/llm/src/types/completions.rs b/crates/llm/src/types/completions.rs
-index 688234f5..4ec471cd 100644
+index 688234f..4ec471c 100644
 --- a/crates/llm/src/types/completions.rs
 +++ b/crates/llm/src/types/completions.rs
 @@ -216,7 +216,16 @@ impl ResponseType for Response {
@@ -3799,7 +2317,7 @@ index 688234f5..4ec471cd 100644
  	}
  
 diff --git a/crates/llm/src/types/detect.rs b/crates/llm/src/types/detect.rs
-index 285e6337..dbba40f3 100644
+index 285e633..dbba40f 100644
 --- a/crates/llm/src/types/detect.rs
 +++ b/crates/llm/src/types/detect.rs
 @@ -628,6 +628,9 @@ impl ResponseType for Response {
@@ -3813,7 +2331,7 @@ index 285e6337..dbba40f3 100644
  	}
  
 diff --git a/crates/llm/src/types/gemini.rs b/crates/llm/src/types/gemini.rs
-index d5302349..caa1d5a0 100644
+index d530234..caa1d5a 100644
 --- a/crates/llm/src/types/gemini.rs
 +++ b/crates/llm/src/types/gemini.rs
 @@ -541,9 +541,12 @@ pub struct Response(pub vg::GenerateContentResponse);
@@ -3830,7 +2348,7 @@ index d5302349..caa1d5a0 100644
  			output_tokens: counts.map(|c| c.1),
  			total_tokens: counts.map(|c| c.2),
 diff --git a/crates/llm/src/types/messages.rs b/crates/llm/src/types/messages.rs
-index 7d14f704..5fda00bb 100644
+index 7d14f70..5fda00b 100644
 --- a/crates/llm/src/types/messages.rs
 +++ b/crates/llm/src/types/messages.rs
 @@ -605,6 +605,9 @@ impl ResponseType for Response {
@@ -3854,7 +2372,7 @@ index 7d14f704..5fda00bb 100644
  		}
  
 diff --git a/crates/llm/src/types/responses.rs b/crates/llm/src/types/responses.rs
-index cddb31a5..4c141268 100644
+index cddb31a..4c14126 100644
 --- a/crates/llm/src/types/responses.rs
 +++ b/crates/llm/src/types/responses.rs
 @@ -810,6 +810,14 @@ impl ResponseType for Response {
