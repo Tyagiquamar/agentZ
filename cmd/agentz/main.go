@@ -100,11 +100,8 @@ var (
 	agentImage                                       string
 	controllerImage                                  string
 	gatewayURL                                       string
-	delegationImage                                  = agentgatewayv1alpha1.Image{
-		Registry:   new("public.ecr.aws"),
-		Repository: new("k9v9d5v2/agentz/agentgateway"),
-		Tag:        new("main"),
-	}
+	delegationImage                                  string
+
 	agentgatewayTraceMode                         string
 	agentgatewayTraceServiceName                  string
 	agentgatewayTraceServiceNamespace             string
@@ -354,16 +351,10 @@ var managerCmd = &cli.Command{
 			},
 		},
 		&cli.StringFlag{
-			Name: "delegation-image-registry", Usage: "Registry for the patched delegated Agentgateway image",
-			Value: *delegationImage.Registry, Destination: delegationImage.Registry,
-		},
-		&cli.StringFlag{
-			Name: "delegation-image-repository", Usage: "Repository for the patched delegated Agentgateway image",
-			Value: *delegationImage.Repository, Destination: delegationImage.Repository,
-		},
-		&cli.StringFlag{
-			Name: "delegation-image-tag", Usage: "Tag for the patched delegated Agentgateway image",
-			Value: *delegationImage.Tag, Destination: delegationImage.Tag,
+			Name:        "delegation-image",
+			Usage:       "Patched Agentgateway image for delegated inference and MCP",
+			Value:       "public.ecr.aws/k9v9d5v2/agentz/agentgateway:main",
+			Destination: &delegationImage,
 		},
 		&cli.StringFlag{
 			Name:        "agentgateway-trace-mode",
@@ -1475,8 +1466,14 @@ var managerCmd = &cli.Command{
 			os.Exit(1)
 		}
 		extAuthRuntimeReconciler := &mcpconn.ExtAuthRuntimeReconciler{
-			TraceBackend:            traceBackend,
-			DelegationImage:         delegationImage,
+			TraceBackend: traceBackend,
+			// Clear inherited image parts so Repository is the complete reference.
+			DelegationImage: agentgatewayv1alpha1.Image{
+				Registry:   new(""),
+				Repository: new(delegationImage),
+				Tag:        new(""),
+				Digest:     new(""),
+			},
 			Bao:                     baoClient,
 			Client:                  mgr.GetClient(),
 			ControllerImage:         controllerImage,
