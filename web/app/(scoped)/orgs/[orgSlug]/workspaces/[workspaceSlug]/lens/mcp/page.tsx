@@ -16,6 +16,7 @@ import { LensFilters } from "@/app/(scoped)/orgs/[orgSlug]/workspaces/[workspace
 import { lensDateRange } from "@/app/(scoped)/orgs/[orgSlug]/workspaces/[workspaceSlug]/lens/search-params"
 import { searchParamStringSchema, type SearchParamStringInput } from "@/lib/search-params"
 import { getWorkspaceScope } from "@/data/workspaces"
+import type { WorkspaceType } from "@/lib/gateway/client"
 import { CircleAlert } from "lucide-react"
 
 export const metadata: Metadata = {
@@ -83,7 +84,12 @@ export default async function McpPage({
           <Filters searchParams={resolved} selection={selection} />
         </Suspense>
         <Suspense key={contentKey} fallback={<McpGraphSkeleton />}>
-          <Graph searchParams={resolved} workspaceId={workspaceId} selection={selection} />
+          <Graph
+            searchParams={resolved}
+            workspaceId={workspaceId}
+            workspaceType={workspace.workspace.type}
+            selection={selection}
+          />
         </Suspense>
       </div>
     </main>
@@ -122,10 +128,12 @@ async function Filters({
 async function Graph({
   searchParams,
   workspaceId,
+  workspaceType,
   selection,
 }: {
   searchParams: Promise<ResolvedMcpSearchParams>
   workspaceId: string
+  workspaceType: WorkspaceType
   selection: Promise<ResolvedPageSelection>
 }) {
   const params = await searchParams
@@ -138,6 +146,10 @@ async function Graph({
 
   if (!scope.subject) {
     return <EmptyState message="No agents or apps available" />
+  }
+
+  if (workspaceType === "coding" && scope.subject.kind === "agent" && !scope.selected.session_id) {
+    return <EmptyState message="No conversations available" />
   }
 
   const result = await getMcpGraphAction(

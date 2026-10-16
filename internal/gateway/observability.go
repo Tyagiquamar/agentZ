@@ -55,9 +55,12 @@ func (s *Service) authorizeObservability(w http.ResponseWriter, r *http.Request,
 	if workspace.Type != gatewaydb.WorkspaceTypeCoding {
 		return access.namespace, true
 	}
-	_, err = s.resolveCodingSession(
-		r.Context(), access, agentName, strings.TrimSpace(*sessionID),
-	)
+	session := strings.TrimSpace(*sessionID)
+	if session == "" {
+		apiutil.WriteError(w, r, resourceForbidden(errors.New("a coding conversation is required for observability")))
+		return "", false
+	}
+	_, err = s.resolveCodingSession(r.Context(), access, agentName, session)
 	if err != nil {
 		apiutil.WriteError(w, r, mapGatewayStoreError("get conversation", err))
 		return "", false
@@ -378,7 +381,11 @@ func (s *Service) GetMCPGraph(w http.ResponseWriter, r *http.Request, agentName 
 	if !ok {
 		return
 	}
-	ns, ok := s.authorizeObservability(w, r, agentName, params.SessionId)
+	sessionID := ""
+	if params.SessionId != nil {
+		sessionID = *params.SessionId
+	}
+	ns, ok := s.authorizeObservability(w, r, agentName, &sessionID)
 	if !ok {
 		return
 	}
@@ -423,10 +430,6 @@ func (s *Service) GetMCPGraph(w http.ResponseWriter, r *http.Request, agentName 
 		return
 	}
 
-	sessionID := ""
-	if params.SessionId != nil {
-		sessionID = *params.SessionId
-	}
 	rows, err := s.queries.GatewayGetMCPGraph(
 		r.Context(),
 		gatewaydb.GatewayGetMCPGraphParams{
