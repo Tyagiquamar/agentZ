@@ -181,34 +181,6 @@ INSERT INTO observer_mcp_tool_invocations(
 )
 ON CONFLICT(trace_id, span_id, start_time) DO NOTHING;
 
--- name: UpsertMCPToolLastCalled :batchexec
-INSERT INTO observer_mcp_tool_last_called(
-  tenant_namespace,
-  agent_name,
-  mcp_connection_name,
-  tool_name,
-  last_called_at,
-  updated_at
-) VALUES (
-  sqlc.arg(tenant_namespace),
-  sqlc.arg(agent_name),
-  sqlc.arg(mcp_connection_name),
-  sqlc.arg(tool_name),
-  sqlc.arg(last_called_at),
-  now()
-)
-ON CONFLICT(
-  tenant_namespace,
-  agent_name,
-  mcp_connection_name,
-  tool_name
-) DO UPDATE SET
-  last_called_at = GREATEST(
-    observer_mcp_tool_last_called.last_called_at,
-    EXCLUDED.last_called_at
-  ),
-  updated_at = now();
-
 -- name: RefreshTraceSummary :batchexec
 INSERT INTO observer_traces(
   trace_id,
@@ -413,9 +385,7 @@ WITH operation AS (
     reasoning_tokens,
     cached_input_tokens,
     cached_write_tokens,
-    cost_usd,
-    resource_attributes,
-    span_attributes
+    cost_usd
   ) VALUES (
     sqlc.arg(organization_id),
     sqlc.arg(workspace_id),
@@ -451,9 +421,7 @@ WITH operation AS (
     sqlc.narg(reasoning_tokens),
     sqlc.narg(cached_input_tokens),
     sqlc.narg(cached_write_tokens),
-    sqlc.narg(cost_usd),
-    sqlc.arg(resource_attributes),
-    sqlc.arg(span_attributes)
+    sqlc.narg(cost_usd)
   )
   ON CONFLICT (organization_id, workspace_id, client_id, trace_id, span_id, start_time) DO NOTHING
   RETURNING *
@@ -485,25 +453,23 @@ WITH operation AS (
     item.value->>'name' AS name, item.value->'arguments' AS arguments
   FROM operation op
   CROSS JOIN LATERAL jsonb_path_query(sqlc.arg(output_messages)::jsonb, '$.tool_calls[*]') WITH ORDINALITY AS item(value, ordinal)
-  WHERE op.resource_kind = 'inference' AND op.agent_kind IN ('claude', 'codex')
-    AND op.session_id <> '' AND op.turn_id <> ''
+  WHERE op.resource_kind = 'inference'
     AND octet_length(item.value->>'id') BETWEEN 1 AND 512 AND item.value->>'name' <> ''
   ORDER BY item.value->>'id', item.ordinal
 ), tools AS (
   INSERT INTO observer_app_operations (
     organization_id, workspace_id, client_id, app_name, grant_id, user_id,
     resource_kind, resource_namespace, resource_name, resource_uid, target_id,
-    trace_id, span_id, start_time, end_time, duration_ns, name, span_class, operation_name,
+    trace_id, span_id, parent_span_id, start_time, end_time, duration_ns, name, span_class, operation_name,
     status_code, tool_name, session_id, turn_id, agent_kind, tool_call_id, source_operation_id
   )
   SELECT op.organization_id, op.workspace_id, op.client_id, op.app_name, op.grant_id, op.user_id,
     'tool', op.resource_namespace, op.resource_name, op.resource_uid, op.target_id,
-    op.trace_id, substring(uuid_send(gen_random_uuid()) from 1 for 8), op.end_time, op.end_time, 0,
+    op.trace_id, substring(uuid_send(gen_random_uuid()) from 1 for 8), op.span_id, op.end_time, op.end_time, 0,
     call.name, 'tool', 'execute_tool', 'UNSET', call.name, op.session_id, op.turn_id,
     op.agent_kind, call.call_id, op.id
   FROM operation op CROSS JOIN output_calls call
-  ON CONFLICT (organization_id, workspace_id, client_id, user_id, session_id, turn_id, tool_call_id)
-    WHERE resource_kind = 'tool' DO NOTHING
+  ON CONFLICT DO NOTHING
   RETURNING id, tool_call_id
 ), tool_payloads AS (
   INSERT INTO observer_app_operation_payloads (operation_id, tool_arguments)
@@ -526,14 +492,13 @@ WITH operation AS (
   WHERE block.value ? 'content'
 ), results AS (
   INSERT INTO observer_app_tool_results (
-    organization_id, workspace_id, client_id, user_id, session_id, source_turn_id, tool_call_id,
+    organization_id, workspace_id, client_id, user_id, session_id, tool_call_id,
     source_operation_id, source_start_time, source_ordinal, protocol, is_error
   )
-  SELECT op.organization_id, op.workspace_id, op.client_id, op.user_id, op.session_id, op.turn_id, input.call_id,
+  SELECT op.organization_id, op.workspace_id, op.client_id, op.user_id, op.session_id, input.call_id,
     op.id, op.start_time, input.ordinal, input.protocol, input.is_error
   FROM operation op CROSS JOIN input_results input
-  WHERE op.resource_kind = 'inference' AND op.agent_kind IN ('claude', 'codex')
-    AND op.session_id <> '' AND op.turn_id <> '' AND octet_length(input.call_id) BETWEEN 1 AND 512
+  WHERE op.resource_kind = 'inference' AND octet_length(input.call_id) BETWEEN 1 AND 512
   ON CONFLICT (source_operation_id, protocol, source_ordinal) DO NOTHING
 ), payload AS (
   INSERT INTO observer_app_operation_payloads (operation_id, input_messages, output_messages, tool_arguments, tool_result, tool_error)
@@ -567,7 +532,7 @@ WITH affected AS MATERIALIZED (
     key->>'client_id' AS client_id, key->>'user_id' AS user_id, key->>'call_id' AS call_id
   FROM jsonb_array_elements(sqlc.arg(invocations)::jsonb) AS key
 ), matches AS (
-  SELECT mcp.id, CASE WHEN COUNT(DISTINCT tool.run_id) = 1 THEN MIN(tool.run_id) END AS run_id
+  SELECT mcp.id, CASE WHEN COUNT(tool.run_id) = COUNT(tool.id) AND COUNT(DISTINCT tool.run_id) = 1 THEN MIN(tool.run_id) END AS run_id
   FROM affected key
   JOIN observer_app_operations mcp ON mcp.organization_id = key.organization_id AND mcp.workspace_id = key.workspace_id
     AND mcp.client_id = key.client_id AND mcp.user_id = key.user_id AND mcp.tool_call_id = key.call_id
@@ -583,7 +548,7 @@ WITH affected AS MATERIALIZED (
     AND (mcp.turn_id = '' OR tool.turn_id = mcp.turn_id)
   GROUP BY mcp.id
 )
-UPDATE observer_app_operations mcp SET run_id = matches.run_id, membership_inferred = matches.run_id IS NOT NULL
+UPDATE observer_app_operations mcp SET run_id = matches.run_id
 FROM matches WHERE mcp.id = matches.id AND mcp.run_id IS DISTINCT FROM matches.run_id;
 
 -- name: RefreshAppToolResults :exec

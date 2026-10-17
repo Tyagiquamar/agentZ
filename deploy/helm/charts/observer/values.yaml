@@ -66,6 +66,8 @@ containerSecurityContext:
 service:
   type: ClusterIP
   otlpGrpcPort: 4317
+  # Reachable only from controller-managed inference and MCP gateway pods.
+  appGrpcPort: 4318
 
 config:
   logLevel: info

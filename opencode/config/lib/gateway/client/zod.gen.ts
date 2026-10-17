@@ -2,16 +2,6 @@
 
 import * as z from "zod"
 
-export const zLensApp = z.object({
-  client_id: z.string(),
-  name: z.string(),
-  agent_kind: z.enum(["claude", "codex"]).optional(),
-})
-
-export const zListLensAppsResponse = z.object({
-  apps: z.array(zLensApp),
-})
-
 export const zAppSession = z.object({
   session_id: z.string(),
   last_seen: z.iso.datetime({ offset: true }),
@@ -385,11 +375,6 @@ export const zListAppTracesResponse = z.object({
   next_page_token: z.string(),
 })
 
-export const zListAppSpansResponse = z.object({
-  spans: z.array(zAppSpan),
-  next_page_token: z.string(),
-})
-
 /**
  * Content fields contain serialized JSON, including the JSON literal null for absent values.
  */
@@ -397,6 +382,12 @@ export const zAppOperationResponse = z.object({
   span: zAppSpan,
   payload: zAppPayload,
   tool_error: z.string(),
+})
+
+export const zListAppSpansResponse = z.object({
+  spans: z.array(zAppSpan),
+  next_page_token: z.string(),
+  recording: z.array(zAppOperationResponse),
 })
 
 export const zTenantPhase = z.enum(["BOOTSTRAPPING", "READY", "FAILED"])
@@ -420,6 +411,17 @@ export const zResourceActor = z.object({
   name: z.string().nullable(),
   email: z.email().nullable(),
   image: z.string().nullable(),
+})
+
+export const zLensApp = z.object({
+  client_id: z.string(),
+  name: z.string(),
+  user: zResourceActor.optional(),
+  agent_kind: z.enum(["claude", "codex"]).optional(),
+})
+
+export const zListLensAppsResponse = z.object({
+  apps: z.array(zLensApp),
 })
 
 export const zChatInput = z.object({
@@ -4096,6 +4098,7 @@ export const zListAppSpansPath = z.object({
 export const zListAppSpansQuery = z.object({
   limit: z.int().gte(1).lte(200).optional().default(50),
   page_token: z.string().min(1).optional(),
+  include_recording: z.boolean().optional().default(false),
 })
 
 /**

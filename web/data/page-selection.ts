@@ -74,9 +74,7 @@ export async function resolvePageSelection(
   const [history, agentsResult, appsResult] = await Promise.all([
     getSelectionHistory(),
     isLens ? listAllAgentsCachedQuery(workspaceId) : listAgentsCachedQuery(undefined, workspaceId),
-    page === "lens/traces" || page === "lens/mcp"
-      ? listLensApps({ client: getGatewayServerClient(workspaceId) })
-      : undefined,
+    isLens ? listLensApps({ client: getGatewayServerClient(workspaceId) }) : undefined,
   ])
   const requested = restoreSelection(history, scope, page, search)
   const state: ResolvedPageSelection = {
@@ -161,18 +159,19 @@ export async function resolvePageSelection(
     }
     const rememberedSession =
       requested.app_client_id === app.client_id ? requested.session_id : undefined
-    const [first, exact] = await Promise.all([
-      listAppSessionsAction(app.client_id, workspaceId, { limit: 50 }),
-      rememberedSession
-        ? listAppSessionsAction(app.client_id, workspaceId, { session_id: rememberedSession })
-        : undefined,
-    ])
+    const first = await listAppSessionsAction(app.client_id, workspaceId, { limit: 50 })
     if (first.error) return { ...state, error: first.error }
-    if (exact?.error) return { ...state, error: exact.error }
     const sessions = [...first.data.sessions]
-    const selected = exact?.data.sessions[0] ?? sessions[0]
-    if (selected && !sessions.some((session) => session.session_id === selected.session_id))
-      sessions.push(selected)
+    let selected = sessions.find((session) => session.session_id === rememberedSession)
+    if (!selected && rememberedSession) {
+      const exact = await listAppSessionsAction(app.client_id, workspaceId, {
+        session_id: rememberedSession,
+      })
+      if (exact.error) return { ...state, error: exact.error }
+      selected = exact.data.sessions[0]
+      if (selected) sessions.push(selected)
+    }
+    selected ??= sessions[0]
     state.sessions = sessions.map((session) => ({
       sessionId: session.session_id,
       title: session.session_id,

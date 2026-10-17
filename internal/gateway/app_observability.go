@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -101,6 +102,15 @@ func (s *Service) ListLensApps(w http.ResponseWriter, r *http.Request) {
 	apps := make([]gatewayapi.LensApp, 0, len(rows))
 	for _, row := range rows {
 		app := gatewayapi.LensApp{ClientId: row.ClientID, Name: row.Name}
+		if row.UserID != "" {
+			app.User = &gatewayapi.ResourceActor{
+				Id: row.UserID, Name: &row.UserName,
+				Email: new(openapi_types.Email(row.UserEmail)),
+			}
+			if row.UserImage.Valid {
+				app.User.Image = &row.UserImage.String
+			}
+		}
 		if row.AgentKind != "" {
 			app.AgentKind = new(gatewayapi.LensAppAgentKind(row.AgentKind))
 		}
@@ -349,7 +359,41 @@ func (s *Service) ListAppSpans(w http.ResponseWriter, r *http.Request, clientID 
 		}
 		spans = append(spans, appSpan(row.ObserverAppSpan))
 	}
-	apiutil.WriteJSON(w, http.StatusOK, gatewayapi.ListAppSpansResponse{Spans: spans, NextPageToken: next})
+	result := gatewayapi.ListAppSpansResponse{
+		Spans: spans, NextPageToken: next, Recording: []gatewayapi.AppOperationResponse{},
+	}
+	if params.IncludeRecording != nil && *params.IncludeRecording && len(spans) > 0 {
+		ids := make([]int64, len(spans))
+		var prompt int64
+		for i, span := range spans {
+			ids[i] = span.Id
+			if !set && prompt == 0 && span.ResourceKind == "inference" {
+				prompt = span.Id
+			}
+		}
+		rows, err := s.queries.GatewayGetAppOperations(r.Context(), gatewaydb.GatewayGetAppOperationsParams{
+			OrganizationID: req.claims.OrganizationID, WorkspaceID: req.workspaceID, ClientID: clientID, OperationIds: ids,
+			Recording: true, PromptOperationID: prompt,
+		})
+		if err != nil {
+			apiutil.WriteInternalError(w, r, err)
+			return
+		}
+		if len(rows) != len(ids) {
+			apiutil.WriteError(w, r, mapGatewayStoreError("get app operations", pgx.ErrNoRows))
+			return
+		}
+		result.Recording = make([]gatewayapi.AppOperationResponse, 0, len(rows))
+		for _, row := range rows {
+			op, err := appOperation(row)
+			if err != nil {
+				apiutil.WriteInternalError(w, r, err)
+				return
+			}
+			result.Recording = append(result.Recording, op)
+		}
+	}
+	apiutil.WriteJSON(w, http.StatusOK, result)
 }
 
 // GetAppOperation retrieves one operation and its payload using the complete viewer scope.
@@ -358,15 +402,27 @@ func (s *Service) GetAppOperation(w http.ResponseWriter, r *http.Request, client
 	if !ok {
 		return
 	}
-	row, err := s.queries.GatewayGetAppOperation(r.Context(), gatewaydb.GatewayGetAppOperationParams{
-		OrganizationID: req.claims.OrganizationID, WorkspaceID: req.workspaceID, ClientID: clientID, OperationID: operationID,
+	rows, err := s.queries.GatewayGetAppOperations(r.Context(), gatewaydb.GatewayGetAppOperationsParams{
+		OrganizationID: req.claims.OrganizationID, WorkspaceID: req.workspaceID, ClientID: clientID, OperationIds: []int64{operationID},
 	})
 	if err != nil {
 		apiutil.WriteError(w, r, mapGatewayStoreError("get app operation", err))
 		return
 	}
-	op := row.ObserverAppSpan
-	result := gatewayapi.AppOperationResponse{Span: appSpan(op)}
+	if len(rows) == 0 {
+		apiutil.WriteError(w, r, mapGatewayStoreError("get app operation", pgx.ErrNoRows))
+		return
+	}
+	result, err := appOperation(rows[0])
+	if err != nil {
+		apiutil.WriteInternalError(w, r, err)
+		return
+	}
+	apiutil.WriteJSON(w, http.StatusOK, result)
+}
+
+func appOperation(row gatewaydb.GatewayGetAppOperationsRow) (gatewayapi.AppOperationResponse, error) {
+	result := gatewayapi.AppOperationResponse{Span: appSpan(row.ObserverAppSpan)}
 	payloads := map[*string][]byte{
 		&result.Payload.InputMessages:  row.InputMessages,
 		&result.Payload.OutputMessages: row.OutputMessages,
@@ -377,12 +433,11 @@ func (s *Service) GetAppOperation(w http.ResponseWriter, r *http.Request, client
 	for target, raw := range payloads {
 		var formatted bytes.Buffer
 		if err := json.Indent(&formatted, raw, "", "  "); err != nil {
-			apiutil.WriteInternalError(w, r, err)
-			return
+			return gatewayapi.AppOperationResponse{}, err
 		}
 		*target = formatted.String()
 	}
-	apiutil.WriteJSON(w, http.StatusOK, result)
+	return result, nil
 }
 
 func appSpan(row gatewaydb.ObserverAppSpan) gatewayapi.AppSpan {

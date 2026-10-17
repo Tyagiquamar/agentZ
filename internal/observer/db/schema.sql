@@ -427,14 +427,18 @@ CREATE TABLE observer_app_operations (
   model TEXT NOT NULL DEFAULT '',
   tool_name TEXT NOT NULL DEFAULT '',
   session_id TEXT NOT NULL DEFAULT '',
+  agent_kind TEXT NOT NULL DEFAULT '' CHECK (agent_kind IN ('', 'claude', 'codex')),
+  turn_id TEXT NOT NULL DEFAULT '',
+  tool_call_id TEXT NOT NULL DEFAULT '',
+  run_id BIGINT REFERENCES observer_app_operations(id) ON DELETE SET NULL,
+  source_operation_id BIGINT REFERENCES observer_app_operations(id) ON DELETE SET NULL,
+  result_id BIGINT,
   input_tokens BIGINT,
   output_tokens BIGINT,
   reasoning_tokens BIGINT,
   cached_input_tokens BIGINT,
   cached_write_tokens BIGINT,
   cost_usd DOUBLE PRECISION,
-  resource_attributes JSONB NOT NULL DEFAULT '{}'::JSONB,
-  span_attributes JSONB NOT NULL DEFAULT '{}'::JSONB,
   ingested_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (organization_id, workspace_id, client_id, trace_id, span_id, start_time)
 );
@@ -453,21 +457,17 @@ CREATE TABLE observer_app_operation_payloads (
   tool_error JSONB NOT NULL DEFAULT 'null'::JSONB
 );
 
-ALTER TABLE observer_app_operations
-  ADD COLUMN agent_kind TEXT NOT NULL DEFAULT '' CHECK (agent_kind IN ('', 'claude', 'codex')),
-  ADD COLUMN turn_id TEXT NOT NULL DEFAULT '',
-  ADD COLUMN tool_call_id TEXT NOT NULL DEFAULT '',
-  ADD COLUMN run_id BIGINT REFERENCES observer_app_operations(id) ON DELETE SET NULL,
-  ADD COLUMN source_operation_id BIGINT REFERENCES observer_app_operations(id) ON DELETE SET NULL,
-  ADD COLUMN result_id BIGINT,
-  ADD COLUMN membership_inferred BOOLEAN NOT NULL DEFAULT false;
-
 CREATE UNIQUE INDEX observer_app_operations_turn_idx
   ON observer_app_operations (organization_id, workspace_id, client_id, user_id, session_id, turn_id)
   WHERE resource_kind = 'turn';
 CREATE UNIQUE INDEX observer_app_operations_tool_idx
   ON observer_app_operations (organization_id, workspace_id, client_id, user_id, session_id, turn_id, tool_call_id)
-  WHERE resource_kind = 'tool';
+  WHERE resource_kind = 'tool' AND session_id <> '' AND turn_id <> '';
+-- Without a native turn, a call ID identifies an occurrence only within the
+-- emitting response. Independent app requests may reuse the same call ID.
+CREATE UNIQUE INDEX observer_app_operations_source_tool_idx
+  ON observer_app_operations (source_operation_id, tool_call_id)
+  WHERE resource_kind = 'tool' AND (session_id = '' OR turn_id = '');
 CREATE INDEX observer_app_operations_call_idx
   ON observer_app_operations (organization_id, workspace_id, client_id, user_id, tool_call_id)
   WHERE tool_call_id <> '';
@@ -491,7 +491,6 @@ CREATE TABLE observer_app_tool_results (
   client_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
   session_id TEXT NOT NULL,
-  source_turn_id TEXT NOT NULL,
   tool_call_id TEXT NOT NULL,
   source_operation_id BIGINT NOT NULL REFERENCES observer_app_operations(id) ON DELETE CASCADE,
   source_start_time TIMESTAMPTZ NOT NULL,

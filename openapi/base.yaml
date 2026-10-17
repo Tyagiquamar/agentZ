@@ -196,6 +196,12 @@ paths:
           $ref: '#/components/schemas/TraceID'
       - $ref: '#/components/parameters/LimitQuery'
       - $ref: '#/components/parameters/PageTokenQuery'
+      - name: include_recording
+        in: query
+        description: Include conversation content in page order, with only the initial page's first model request and model completion text. Full payloads remain available from the operation endpoint.
+        schema:
+          type: boolean
+          default: false
       security:
       - GatewayBearer:
         - observability.read
@@ -5332,6 +5338,8 @@ components:
           type: string
         name:
           type: string
+        user:
+          $ref: '#/components/schemas/ResourceActor'
         agent_kind:
           type: string
           enum: [claude, codex]
@@ -5614,9 +5622,15 @@ components:
             $ref: '#/components/schemas/AppSpan'
         next_page_token:
           type: string
+        recording:
+          type: array
+          description: Conversation content in page order when include_recording is true; otherwise empty. Model input histories are omitted except for the first model request on the initial page.
+          items:
+            $ref: '#/components/schemas/AppOperationResponse'
       required:
       - spans
       - next_page_token
+      - recording
     AppPayload:
       type: object
       additionalProperties: false

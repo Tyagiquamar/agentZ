@@ -216,6 +216,8 @@ manager:
     # Static AgentGateway trace target used when trace mode is static.
     agentgatewayTraceHost: ""
     agentgatewayTracePort: 4317
+    # Separate observer port restricted to delegated gateway exporters.
+    delegationTracePort: 4318
 
     # Name of each scope-local shared PVC used by agent package jobs.
     nixStorePVC: nix-store
@@ -650,6 +652,8 @@ observer:
 
     # OTLP/gRPC port exposed by the observer.
     otlpGrpcPort: 4317
+    # Requires the observer ingress policy; native agents cannot export here.
+    appGrpcPort: 4318
 
   config:
     # Application log level passed to `agentz observer serve`.

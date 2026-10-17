@@ -122,7 +122,6 @@ func insertTraceEventBatch(ctx context.Context, tx pgx.Tx, traces []traceSpanEve
 	traceSessions := make([]observerdb.RefreshTraceSessionSummaryParams, 0, len(traces))
 	seenTraceIDs := make(map[string]struct{}, len(traces))
 	seenTraceSessions := make(map[string]struct{}, len(traces))
-	mcpLastCalledByKey := make(map[string]observerdb.UpsertMCPToolLastCalledParams, len(traces))
 	for _, ev := range traces {
 		spans = append(
 			spans,
@@ -186,20 +185,6 @@ func insertTraceEventBatch(ctx context.Context, tx pgx.Tx, traces []traceSpanEve
 					Failed:            call.failed,
 				},
 			)
-
-			lastCalledKey := ev.tenantNamespace + "\x00" + call.agentName +
-				"\x00" + call.mcpConnectionName + "\x00" + call.toolName
-			lastCalled := observerdb.UpsertMCPToolLastCalledParams{
-				TenantNamespace:   ev.tenantNamespace,
-				AgentName:         call.agentName,
-				McpConnectionName: call.mcpConnectionName,
-				ToolName:          call.toolName,
-				LastCalledAt:      call.startTime,
-			}
-			current, ok := mcpLastCalledByKey[lastCalledKey]
-			if !ok || call.startTime.After(current.LastCalledAt) {
-				mcpLastCalledByKey[lastCalledKey] = lastCalled
-			}
 		}
 
 		traceKey := string(ev.traceID)
@@ -241,11 +226,6 @@ func insertTraceEventBatch(ctx context.Context, tx pgx.Tx, traces []traceSpanEve
 		return fmt.Errorf("insert trace span payloads: %w", batchErr)
 	}
 
-	mcpLastCalled := make([]observerdb.UpsertMCPToolLastCalledParams, 0, len(mcpLastCalledByKey))
-	for _, item := range mcpLastCalledByKey {
-		mcpLastCalled = append(mcpLastCalled, item)
-	}
-
 	if len(mcpInvocations) > 0 {
 		q.InsertMCPToolInvocation(ctx, mcpInvocations).Exec(func(_ int, err error) {
 			if err != nil && batchErr == nil {
@@ -254,17 +234,6 @@ func insertTraceEventBatch(ctx context.Context, tx pgx.Tx, traces []traceSpanEve
 		})
 		if batchErr != nil {
 			return fmt.Errorf("insert mcp tool invocations: %w", batchErr)
-		}
-	}
-
-	if len(mcpLastCalled) > 0 {
-		q.UpsertMCPToolLastCalled(ctx, mcpLastCalled).Exec(func(_ int, err error) {
-			if err != nil && batchErr == nil {
-				batchErr = err
-			}
-		})
-		if batchErr != nil {
-			return fmt.Errorf("upsert mcp tool last-called summary: %w", batchErr)
 		}
 	}
 
@@ -320,9 +289,6 @@ func insertAppOperationBatch(ctx context.Context, q *observerdb.Queries, operati
 	lockKeys := make([]string, 0)
 	seen := make(map[appInvocation]bool)
 	for _, op := range operations {
-		if op.AgentKind == "" {
-			continue
-		}
 		ids := []string{op.ToolCallID}
 		var output appWireExchange
 		if json.Unmarshal(op.OutputMessages, &output) == nil {
@@ -363,7 +329,7 @@ func insertAppOperationBatch(ctx context.Context, q *observerdb.Queries, operati
 			}
 		}
 		for _, id := range ids {
-			if id == "" {
+			if id == "" || len(id) > 512 {
 				continue
 			}
 			invocation := appInvocation{

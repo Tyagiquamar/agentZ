@@ -6,7 +6,9 @@ import (
 	"testing"
 	"time"
 
+	tracev1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
+	resourcepb "go.opentelemetry.io/proto/otlp/resource/v1"
 	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
 )
 
@@ -40,7 +42,7 @@ func appSpanFixture(payloadSize int) *tracepb.Span {
 
 func TestAppOperationContentAndUsage(t *testing.T) {
 	span := appSpanFixture(1 << 20)
-	op, err := appOperationFromOTLPSpan(span, nil)
+	op, err := appOperationFromOTLPSpan(span)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,13 +55,8 @@ func TestAppOperationContentAndUsage(t *testing.T) {
 	if len(op.InputMessages) < 1<<20 || !bytes.Contains(op.OutputMessages, []byte("9007199254740993")) {
 		t.Fatal("full input or tool call output lost")
 	}
-	duplicatedPayload := bytes.Contains(op.SpanAttributes, []byte(attrLLMInputMessages)) ||
-		bytes.Contains(op.SpanAttributes, []byte(attrLLMOutputMessages))
-	if duplicatedPayload {
-		t.Fatal("payload duplicated in metadata")
-	}
 	span.Kind = tracepb.Span_SPAN_KIND_CLIENT
-	if _, err := appOperationFromOTLPSpan(span, nil); err == nil {
+	if _, err := appOperationFromOTLPSpan(span); err == nil {
 		t.Fatal("child span accepted as a second app operation")
 	}
 }
@@ -81,7 +78,7 @@ func TestAppMCPFailureAndAttribution(t *testing.T) {
 			Key: name, Value: &commonpb.AnyValue{Value: &commonpb.AnyValue_StringValue{StringValue: value}},
 		})
 	}
-	op, err := appOperationFromOTLPSpan(span, nil)
+	op, err := appOperationFromOTLPSpan(span)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +88,7 @@ func TestAppMCPFailureAndAttribution(t *testing.T) {
 	span.Attributes = append(span.Attributes, &commonpb.KeyValue{
 		Key: "agentz.workspace_id", Value: &commonpb.AnyValue{Value: &commonpb.AnyValue_StringValue{}},
 	})
-	if _, err := appOperationFromOTLPSpan(span, nil); err == nil {
+	if _, err := appOperationFromOTLPSpan(span); err == nil {
 		t.Fatal("unattributed app operation accepted")
 	}
 }
@@ -103,7 +100,7 @@ func BenchmarkAppOperationCapture(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(size))
 			for b.Loop() {
-				if _, err := appOperationFromOTLPSpan(span, nil); err != nil {
+				if _, err := appOperationFromOTLPSpan(span); err != nil {
 					b.Fatal(err)
 				}
 			}
@@ -127,7 +124,7 @@ func TestAppNativeIdentityRequiresRegistration(t *testing.T) {
 					Key: key, Value: &commonpb.AnyValue{Value: &commonpb.AnyValue_StringValue{StringValue: value}},
 				})
 			}
-			op, err := appOperationFromOTLPSpan(span, nil)
+			op, err := appOperationFromOTLPSpan(span)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -144,7 +141,7 @@ func TestAppNativeIdentityRequiresRegistration(t *testing.T) {
 			span.Attributes = append(span.Attributes, &commonpb.KeyValue{
 				Key: attrSessionID, Value: &commonpb.AnyValue{Value: &commonpb.AnyValue_IntValue{IntValue: 123}},
 			})
-			op, err = appOperationFromOTLPSpan(span, nil)
+			op, err = appOperationFromOTLPSpan(span)
 			if err != nil || op.SessionID != "" || op.TurnID != "native-turn" {
 				t.Fatal("malformed optional metadata discarded observation or adopted transport session")
 			}
@@ -168,7 +165,7 @@ func TestAppNativeOversizedIdentifiers(t *testing.T) {
 					Key: name, Value: &commonpb.AnyValue{Value: &commonpb.AnyValue_StringValue{StringValue: value}},
 				})
 			}
-			op, err := appOperationFromOTLPSpan(span, nil)
+			op, err := appOperationFromOTLPSpan(span)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -183,6 +180,67 @@ func TestAppNativeOversizedIdentifiers(t *testing.T) {
 			}
 			if op.AgentKind != "codex" || !bytes.Contains(op.InputMessages, []byte("messages")) {
 				t.Fatal("oversized optional metadata discarded identity or content")
+			}
+		})
+	}
+}
+
+type receiverScopeTest struct {
+	name    string
+	app     bool
+	gateway bool
+	accept  bool
+}
+
+func TestReceiverAttributionBoundary(t *testing.T) {
+	tests := []receiverScopeTest{
+		{name: "native rejects forged gateway", gateway: true},
+		{name: "app accepts gateway", app: true, gateway: true, accept: true},
+		{name: "app rejects native", app: true},
+		{name: "native accepts agent", accept: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			span := appSpanFixture(0)
+			labels := map[string]string{
+				attrAgentZAgentName: "test", attrAgentZTenantNamespace: "test", attrSessionID: "session",
+			}
+			for key, value := range labels {
+				span.Attributes = append(span.Attributes, &commonpb.KeyValue{
+					Key: key, Value: &commonpb.AnyValue{Value: &commonpb.AnyValue_StringValue{StringValue: value}},
+				})
+			}
+			service := "agentz"
+			if test.gateway {
+				service = "agentz-oauth-gateway"
+			}
+			request := &tracev1.ExportTraceServiceRequest{ResourceSpans: []*tracepb.ResourceSpans{{
+				Resource: &resourcepb.Resource{Attributes: []*commonpb.KeyValue{{
+					Key: "service.name", Value: &commonpb.AnyValue{Value: &commonpb.AnyValue_StringValue{StringValue: service}},
+				}}},
+				ScopeSpans: []*tracepb.ScopeSpans{{Spans: []*tracepb.Span{span}}},
+			}}}
+			events := make(chan event, 1)
+			receiver := traceReceiver{out: events, stats: &stats{}, app: test.app}
+			response, err := receiver.Export(t.Context(), request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if receiver.stats.received != 1 {
+				t.Fatal("export did not account for its span")
+			}
+			if !test.accept {
+				if len(events) != 0 || receiver.stats.filtered != 1 || response.GetPartialSuccess().GetRejectedSpans() != 1 {
+					t.Fatal("receiver accepted telemetry from the wrong trust boundary")
+				}
+				return
+			}
+			if len(events) != 1 || receiver.stats.filtered != 0 || response.GetPartialSuccess() != nil {
+				t.Fatal("receiver rejected telemetry from the expected source")
+			}
+			got := <-events
+			if (got.app != nil) != test.app || (got.trace != nil) == test.app {
+				t.Fatal("receiver routed telemetry to the wrong storage path")
 			}
 		})
 	}

@@ -10,6 +10,7 @@ CODING_GITHUB_CLIENT_ID ?=
 CODING_GITHUB_CLIENT_SECRET ?=
 CODING_GITHUB_ENCRYPTION_KEY ?=
 POSTGRES_DSN ?= postgresql://postgres:postgres@localhost:5432/postgres
+OBSERVER_APP_GRPC_ADDR ?= :4318
 K8S_NAMESPACE ?= default
 OPENBAO_TOKEN_PATH ?= /tmp/sa-token
 OPENBAO_AUTH_SERVICE_ACCOUNT ?= default
@@ -165,11 +166,13 @@ run-manager:
 		--agentgateway-trace-mode=static \
 		--agentgateway-trace-host=172.18.0.1 \
 		--agentgateway-trace-port=4317 \
+		--delegation-trace-port=4318 \
 		--gateway-url=http://172.18.0.1:8090
 
 .PHONY: run-observer
 run-observer:
-	go run ./cmd/agentz observer serve --postgres-dsn "$(POSTGRES_DSN)"
+	go run ./cmd/agentz observer serve --postgres-dsn "$(POSTGRES_DSN)" \
+		--otlp-app-grpc-addr="$(OBSERVER_APP_GRPC_ADDR)"
 
 .PHONY: run-extauth
 run-extauth:

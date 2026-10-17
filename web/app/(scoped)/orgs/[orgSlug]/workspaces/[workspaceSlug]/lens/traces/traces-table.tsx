@@ -12,13 +12,14 @@ import {
   Server,
   Wrench,
   Cpu,
+  MessageSquare,
 } from "lucide-react"
 import {
   getRuntimeTelemetryTabAction,
   getSpanDetailAction,
   listSpansAction,
 } from "@/data/lens.actions"
-import type { Error } from "@/lib/gateway/client"
+import type { AppSpan, Error } from "@/lib/gateway/client"
 import type {
   ListSpansActionData,
   ListTracesActionData,
@@ -55,6 +56,7 @@ import {
 } from "@/app/(scoped)/orgs/[orgSlug]/workspaces/[workspaceSlug]/lens/runtime-telemetry/telemetry-table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { formatCompactNumber } from "@/lib/format"
+import { TraceConversation } from "./trace-conversation"
 
 const layout: Record<string, AdminColumnLayout> = {
   trace: { minWidth: 160, contentMaxWidth: 256 },
@@ -328,6 +330,7 @@ export function TracesTable({
         />
       </div>
       <TraceInspector
+        key={selectedTrace?.traceId}
         workspaceId={workspaceId}
         trace={selectedTrace}
         spans={spans}
@@ -355,6 +358,7 @@ export function TracesTable({
         tab={tab}
         onTabChange={(nextTab) => {
           setTab(nextTab)
+          if (nextTab === "spans" && !spans) loadSpansPage()
           if (nextTab === "telemetry" && !telemetryPage) {
             loadTelemetryTab(telemetryTab)
           }
@@ -364,7 +368,7 @@ export function TracesTable({
   )
 }
 
-type TraceInspectorTab = "spans" | "telemetry"
+type TraceInspectorTab = "conversation" | "spans" | "telemetry"
 
 function TraceInspector({
   workspaceId,
@@ -407,23 +411,50 @@ function TraceInspector({
   tab: TraceInspectorTab
   onTabChange: (tab: TraceInspectorTab) => void
 }) {
+  const [focusedDetail, setFocusedDetail] = React.useState<SpanDetailActionData>()
+  const [focusError, setFocusError] = React.useState<Error>()
+  const [, startInspectTransition] = React.useTransition()
+
+  function inspect(span: AppSpan) {
+    if (!trace) return
+    startInspectTransition(async () => {
+      const result = await getSpanDetailAction(
+        {
+          subject: trace.subject,
+          traceID: span.trace_id,
+          spanID: span.span_id,
+          operationID: span.id,
+        },
+        workspaceId
+      )
+      setFocusError(result.error)
+      if (!result.data) return
+      setFocusedDetail(result.data)
+      onTabChange("spans")
+    })
+  }
+
   return (
-    <TraceInspectorSheet
-      title={
-        <span className="font-mono">
-          {trace?.traceId ? `Trace ID: ${trace.traceId}` : "Trace inspector"}
-        </span>
-      }
-      tabs={
-        <Tabs
-          value={tab}
-          onValueChange={(value) => {
-            if (value === "spans" || value === "telemetry") {
-              onTabChange(value)
-            }
-          }}
-        >
+    <Tabs
+      value={tab}
+      onValueChange={(value) => {
+        if (value === "conversation" || value === "spans" || value === "telemetry")
+          onTabChange(value)
+      }}
+    >
+      <TraceInspectorSheet
+        title={
+          <span className="font-mono">
+            {trace?.traceId ? `Trace ID: ${trace.traceId}` : "Trace inspector"}
+          </span>
+        }
+        tabs={
           <TabsList className="gap-2">
+            {trace && trace.subject.kind !== "agent" ? (
+              <TabsTrigger value="conversation" className="gap-2">
+                <MessageSquare /> Conversation
+              </TabsTrigger>
+            ) : null}
             <TabsTrigger value="spans" className="gap-2">
               <Route /> Spans
             </TabsTrigger>
@@ -433,36 +464,48 @@ function TraceInspector({
               </TabsTrigger>
             ) : null}
           </TabsList>
-        </Tabs>
-      }
-    >
-      {tab === "spans" ? (
-        <SpansInspectorContent
-          workspaceId={workspaceId}
-          key={trace?.traceId}
-          trace={trace}
-          data={spans}
-          error={spansError}
-          pending={pending}
-          pagePending={spansPending}
-          canGoPrevious={canGoPreviousSpans}
-          onNextPage={onNextSpans}
-          onPreviousPage={onPreviousSpans}
-        />
-      ) : (
-        <RuntimeTelemetryContent
-          key={trace?.traceId}
-          telemetryTab={telemetryTab}
-          telemetryPage={telemetryPage}
-          error={telemetryError}
-          pagePending={telemetryPending}
-          onTabChange={onTelemetryTabChange}
-          canGoPrevious={canGoPreviousTelemetry}
-          onNextPage={onNextTelemetry}
-          onPreviousPage={onPreviousTelemetry}
-        />
-      )}
-    </TraceInspectorSheet>
+        }
+      >
+        {focusError ? (
+          <Alert variant="destructive">
+            <AlertDescription>{focusError.message}</AlertDescription>
+          </Alert>
+        ) : null}
+        {trace && trace.subject.kind !== "agent" ? (
+          <TabsContent value="conversation" className="m-0 h-full min-h-0">
+            <TraceConversation trace={trace} workspaceId={workspaceId} onInspect={inspect} />
+          </TabsContent>
+        ) : null}
+        <TabsContent value="spans" className="m-0 h-full min-h-0">
+          <SpansInspectorContent
+            workspaceId={workspaceId}
+            key={trace?.traceId}
+            trace={trace}
+            data={spans}
+            error={spansError}
+            pending={pending}
+            pagePending={spansPending}
+            canGoPrevious={canGoPreviousSpans}
+            onNextPage={onNextSpans}
+            onPreviousPage={onPreviousSpans}
+            focusedDetail={focusedDetail}
+          />
+        </TabsContent>
+        <TabsContent value="telemetry" className="m-0 h-full min-h-0">
+          <RuntimeTelemetryContent
+            key={trace?.traceId}
+            telemetryTab={telemetryTab}
+            telemetryPage={telemetryPage}
+            error={telemetryError}
+            pagePending={telemetryPending}
+            onTabChange={onTelemetryTabChange}
+            canGoPrevious={canGoPreviousTelemetry}
+            onNextPage={onNextTelemetry}
+            onPreviousPage={onPreviousTelemetry}
+          />
+        </TabsContent>
+      </TraceInspectorSheet>
+    </Tabs>
   )
 }
 
@@ -476,6 +519,7 @@ function SpansInspectorContent({
   canGoPrevious,
   onNextPage,
   onPreviousPage,
+  focusedDetail,
 }: {
   workspaceId: string
   trace?: TraceListItem
@@ -486,6 +530,7 @@ function SpansInspectorContent({
   canGoPrevious: boolean
   onNextPage: () => void
   onPreviousPage: () => void
+  focusedDetail?: SpanDetailActionData
 }) {
   const [selectedOperationID, setSelectedOperationID] = React.useState<number | undefined>()
   const [detailState, setDetailState] = React.useState<{
@@ -494,14 +539,20 @@ function SpansInspectorContent({
     error?: Error
   }>({})
   const [detailPending, startDetailTransition] = React.useTransition()
-  const selectedSpan = data?.spans.find((span) => span.id === selectedOperationID) ?? data?.spans[0]
-  const detail = detailState.operationID === selectedSpan?.id ? detailState.data : undefined
+  const selectedID = selectedOperationID ?? focusedDetail?.span.id
+  let selectedSpan = data?.spans.find((span) => span.id === selectedID)
+  if (!selectedSpan && focusedDetail && focusedDetail.span.id === selectedID)
+    selectedSpan = focusedDetail.span
+  selectedSpan ??= data?.spans[0]
+  let detail = focusedDetail?.span.id === selectedSpan?.id ? focusedDetail : undefined
+  if (detailState.operationID === selectedSpan?.id) detail = detailState.data
   const detailError = detailState.operationID === selectedSpan?.id ? detailState.error : undefined
 
   React.useEffect(() => {
     if (!selectedSpan) {
       return
     }
+    if (focusedDetail?.span.id === selectedSpan.id) return
 
     let cancelled = false
 
@@ -527,9 +578,9 @@ function SpansInspectorContent({
     return () => {
       cancelled = true
     }
-  }, [selectedSpan, startDetailTransition, workspaceId])
+  }, [selectedSpan, focusedDetail, startDetailTransition, workspaceId])
 
-  if (pending && !data) {
+  if ((pending || pagePending) && !data) {
     return <TraceInspectorSkeleton />
   }
 
@@ -545,6 +596,8 @@ function SpansInspectorContent({
   if (!data) {
     return null
   }
+  const offPageSpan = focusedDetail?.span
+  const sourceOffPage = offPageSpan && !data.spans.some((span) => span.id === offPageSpan.id)
 
   return (
     <TraceInspectorLayout
@@ -559,25 +612,39 @@ function SpansInspectorContent({
         />
       }
       navigation={
-        data.spans.length > 0 ? (
-          data.spans.map((span) => (
-            <SpanTreeRow
-              key={span.id}
-              span={span}
-              selected={selectedSpan?.id === span.id}
-              onClick={() => {
-                if (selectedSpan?.id === span.id) {
-                  return
-                }
+        <>
+          {sourceOffPage ? (
+            <div className="mb-2 border-b pb-2">
+              <p className="px-4 py-2 text-xs text-muted-foreground lg:px-5">
+                Selected from conversation
+              </p>
+              <SpanTreeRow
+                span={offPageSpan}
+                selected={selectedSpan?.id === offPageSpan.id}
+                onClick={() => setSelectedOperationID(offPageSpan.id)}
+              />
+            </div>
+          ) : null}
+          {data.spans.length > 0 ? (
+            data.spans.map((span) => (
+              <SpanTreeRow
+                key={span.id}
+                span={span}
+                selected={selectedSpan?.id === span.id}
+                onClick={() => {
+                  if (selectedSpan?.id === span.id) {
+                    return
+                  }
 
-                setSelectedOperationID(span.id)
-                setDetailState({})
-              }}
-            />
-          ))
-        ) : (
-          <div className="px-4 py-10 text-sm text-muted-foreground lg:px-5">No spans</div>
-        )
+                  setSelectedOperationID(span.id)
+                  setDetailState({})
+                }}
+              />
+            ))
+          ) : (
+            <div className="px-4 py-10 text-sm text-muted-foreground lg:px-5">No spans</div>
+          )}
+        </>
       }
     >
       <SpanDetailViewer

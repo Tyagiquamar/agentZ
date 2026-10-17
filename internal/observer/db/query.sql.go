@@ -93,7 +93,7 @@ WITH affected AS MATERIALIZED (
     key->>'client_id' AS client_id, key->>'user_id' AS user_id, key->>'call_id' AS call_id
   FROM jsonb_array_elements($1::jsonb) AS key
 ), matches AS (
-  SELECT mcp.id, CASE WHEN COUNT(DISTINCT tool.run_id) = 1 THEN MIN(tool.run_id) END AS run_id
+  SELECT mcp.id, CASE WHEN COUNT(tool.run_id) = COUNT(tool.id) AND COUNT(DISTINCT tool.run_id) = 1 THEN MIN(tool.run_id) END AS run_id
   FROM affected key
   JOIN observer_app_operations mcp ON mcp.organization_id = key.organization_id AND mcp.workspace_id = key.workspace_id
     AND mcp.client_id = key.client_id AND mcp.user_id = key.user_id AND mcp.tool_call_id = key.call_id
@@ -109,7 +109,7 @@ WITH affected AS MATERIALIZED (
     AND (mcp.turn_id = '' OR tool.turn_id = mcp.turn_id)
   GROUP BY mcp.id
 )
-UPDATE observer_app_operations mcp SET run_id = matches.run_id, membership_inferred = matches.run_id IS NOT NULL
+UPDATE observer_app_operations mcp SET run_id = matches.run_id
 FROM matches WHERE mcp.id = matches.id AND mcp.run_id IS DISTINCT FROM matches.run_id
 `
 

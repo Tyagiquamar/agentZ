@@ -26,13 +26,6 @@ export type ListAgentActionResponse<TAgent = Agent> =
       error: Error
     }
 
-export type AgentSessionListItem = {
-  id: string
-  title: string
-  updatedAt: number
-  parentID?: string
-}
-
 export type LensSubject =
   | { kind: "agent"; name: string; sessionId?: string }
   | { kind: "app"; clientID: string; name: string }

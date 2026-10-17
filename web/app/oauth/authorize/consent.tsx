@@ -187,7 +187,7 @@ export function Consent({
           </AlertDescription>
         </Alert>
       ) : null}
-      <div className="rounded-xl border-2 border-dashed border-border/70 bg-card/40 p-5 text-sm">
+      <div className="rounded-xl border-2 border-dashed border-muted-foreground/50 bg-card/40 p-5 text-sm">
         <UserIdentity name={user.name} email={user.email} image={user.image} size="default" />
       </div>
       {requestedIdentityScopes.length ? (
@@ -343,7 +343,7 @@ export function Consent({
                           disabled={pending || loading || !catalog.models.length}
                           className={
                             !catalog.models.length
-                              ? "border-2 border-dashed border-border/70"
+                              ? "border-2 border-dashed border-muted-foreground/50"
                               : undefined
                           }
                           placeholder={
@@ -396,7 +396,7 @@ export function Consent({
                         <Select disabled>
                           <SelectTrigger
                             id={`mcp-empty-${id}`}
-                            className="w-full border-2 border-dashed border-border/70"
+                            className="w-full border-2 border-dashed border-muted-foreground/50"
                           >
                             <SelectValue placeholder="No MCP connections available" />
                           </SelectTrigger>

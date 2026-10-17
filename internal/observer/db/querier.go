@@ -24,7 +24,6 @@ type Querier interface {
 	RefreshAppToolResults(ctx context.Context, invocations []byte) error
 	RefreshTraceSessionSummary(ctx context.Context, arg []RefreshTraceSessionSummaryParams) *RefreshTraceSessionSummaryBatchResults
 	RefreshTraceSummary(ctx context.Context, traceID [][]byte) *RefreshTraceSummaryBatchResults
-	UpsertMCPToolLastCalled(ctx context.Context, arg []UpsertMCPToolLastCalledParams) *UpsertMCPToolLastCalledBatchResults
 }
 
 var _ Querier = (*Queries)(nil)

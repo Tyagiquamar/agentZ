@@ -89,16 +89,18 @@ type traceReceiver struct {
 
 	out   chan<- event
 	stats *stats
+	addr  string
+	app   bool
 }
 
 type mcpToolResult struct {
 	IsError bool `json:"isError"`
 }
 
-func runOTLPTraceReceiver(ctx context.Context, cfg Config, out chan<- event, s *stats) error {
-	lis, err := net.Listen("tcp", cfg.OTLPTraceGRPCAddr)
+func (r *traceReceiver) run(ctx context.Context, cfg Config) error {
+	lis, err := net.Listen("tcp", r.addr)
 	if err != nil {
-		return fmt.Errorf("listen otlp trace grpc %s: %w", cfg.OTLPTraceGRPCAddr, err)
+		return fmt.Errorf("listen otlp trace grpc %s: %w", r.addr, err)
 	}
 
 	maxMessageSize := cfg.OTLPTraceMaxMessageSize
@@ -106,23 +108,20 @@ func runOTLPTraceReceiver(ctx context.Context, cfg Config, out chan<- event, s *
 		maxMessageSize = DefaultOTLPTraceMaxMessageSize
 	}
 	srv := grpc.NewServer(grpc.MaxRecvMsgSize(maxMessageSize))
-	tracev1.RegisterTraceServiceServer(
-		srv,
-		&traceReceiver{
-			out:   out,
-			stats: s,
-		},
-	)
+	tracev1.RegisterTraceServiceServer(srv, r)
 
 	errCh := make(chan error, 1)
 	go func() {
-		slog.InfoContext(ctx, "starting OTLP trace receiver", slog.String("addr", cfg.OTLPTraceGRPCAddr))
+		slog.InfoContext(ctx, "starting OTLP trace receiver", slog.String("addr", r.addr), slog.Bool("app", r.app))
 		errCh <- srv.Serve(lis)
 	}()
 
 	select {
 	case <-ctx.Done():
+		// An unfinished export must not prevent accepted batches from draining.
+		stop := time.AfterFunc(5*time.Second, srv.Stop)
 		srv.GracefulStop()
+		stop.Stop()
 		err = <-errCh
 		if err != nil && err != grpc.ErrServerStopped {
 			return fmt.Errorf("serve otlp trace grpc: %w", err)
@@ -138,7 +137,7 @@ func runOTLPTraceReceiver(ctx context.Context, cfg Config, out chan<- event, s *
 
 // Export queues valid spans and accounts for rejected telemetry.
 func (r *traceReceiver) Export(ctx context.Context, req *tracev1.ExportTraceServiceRequest) (*tracev1.ExportTraceServiceResponse, error) {
-	events, rejected := traceEventsFromOTLPRequest(req)
+	events, rejected := traceEventsFromOTLPRequest(req, r.app)
 	for _, ev := range events {
 		if err := sendEvent(ctx, r.out, ev); err != nil {
 			return nil, err
@@ -148,10 +147,18 @@ func (r *traceReceiver) Export(ctx context.Context, req *tracev1.ExportTraceServ
 		atomic.AddUint64(&r.stats.filtered, uint64(rejected))
 	}
 	atomic.AddUint64(&r.stats.received, uint64(len(events)+rejected))
+	if rejected > 0 {
+		return &tracev1.ExportTraceServiceResponse{
+			PartialSuccess: &tracev1.ExportTracePartialSuccess{
+				RejectedSpans: int64(rejected),
+				ErrorMessage:  "spans do not match the receiver scope or telemetry contract",
+			},
+		}, nil
+	}
 	return &tracev1.ExportTraceServiceResponse{}, nil
 }
 
-func traceEventsFromOTLPRequest(req *tracev1.ExportTraceServiceRequest) ([]event, int) {
+func traceEventsFromOTLPRequest(req *tracev1.ExportTraceServiceRequest, app bool) ([]event, int) {
 	if req == nil {
 		return nil, 0
 	}
@@ -160,10 +167,17 @@ func traceEventsFromOTLPRequest(req *tracev1.ExportTraceServiceRequest) ([]event
 	rejected := 0
 	for _, rs := range req.GetResourceSpans() {
 		resourceAttrs := attrsMap(rs.GetResource().GetAttributes())
+		gateway := resourceAttrs["service.name"].GetStringValue() == "agentz-oauth-gateway"
 		for _, ss := range rs.GetScopeSpans() {
 			for _, sp := range ss.GetSpans() {
-				if resourceAttrs["service.name"].GetStringValue() == "agentz-oauth-gateway" {
-					operation, err := appOperationFromOTLPSpan(sp, resourceAttrs)
+				// Attribution is accepted only on the network-isolated listener.
+				// A resource label supplied to the native listener proves nothing.
+				if gateway != app {
+					rejected++
+					continue
+				}
+				if app {
+					operation, err := appOperationFromOTLPSpan(sp)
 					if err != nil {
 						rejected++
 						continue
@@ -183,7 +197,7 @@ func traceEventsFromOTLPRequest(req *tracev1.ExportTraceServiceRequest) ([]event
 	return events, rejected
 }
 
-func appOperationFromOTLPSpan(sp *tracepb.Span, resourceAttrs map[string]*commonpb.AnyValue) (observerdb.InsertAppOperationParams, error) {
+func appOperationFromOTLPSpan(sp *tracepb.Span) (observerdb.InsertAppOperationParams, error) {
 	invalidSpan := sp.GetKind() != tracepb.Span_SPAN_KIND_SERVER ||
 		len(sp.GetTraceId()) != 16 ||
 		len(sp.GetSpanId()) != 8
@@ -206,11 +220,10 @@ func appOperationFromOTLPSpan(sp *tracepb.Span, resourceAttrs map[string]*common
 		TraceID:           sp.GetTraceId(), SpanID: sp.GetSpanId(), ParentSpanID: append([]byte{}, sp.GetParentSpanId()...),
 		StartTime: unixNano(sp.GetStartTimeUnixNano()), EndTime: unixNano(sp.GetEndTimeUnixNano()),
 		Name: sp.GetName(), StatusCode: statusCode(sp.GetStatus()),
-		ErrorType:          attrs[attrErrorType].GetStringValue(),
-		ErrorMessage:       cmp.Or(attrs[attrErrorMessage].GetStringValue(), sp.GetStatus().GetMessage()),
-		Model:              cmp.Or(attrs[attrGenAIResponseModel].GetStringValue(), attrs[attrGenAIRequestModel].GetStringValue()),
-		ToolName:           attrs[attrGenAIToolName].GetStringValue(),
-		ResourceAttributes: jsonObject(attrsForStorage(resourceAttrs)),
+		ErrorType:    attrs[attrErrorType].GetStringValue(),
+		ErrorMessage: cmp.Or(attrs[attrErrorMessage].GetStringValue(), sp.GetStatus().GetMessage()),
+		Model:        cmp.Or(attrs[attrGenAIResponseModel].GetStringValue(), attrs[attrGenAIRequestModel].GetStringValue()),
+		ToolName:     attrs[attrGenAIToolName].GetStringValue(),
 	}
 	switch kind := attrs["agentz.agent_kind"].GetStringValue(); kind {
 	case "claude", "codex":
@@ -241,12 +254,11 @@ func appOperationFromOTLPSpan(sp *tracepb.Span, resourceAttrs map[string]*common
 		}
 	}
 	operation.DurationNs = max(operation.EndTime.Sub(operation.StartTime).Nanoseconds(), 0)
-	stored := attrsForStorage(attrs)
-	operation.InputMessages = extractJSONPayload(stored, attrLLMInputMessages)
-	operation.OutputMessages = extractJSONPayload(stored, attrLLMOutputMessages)
-	operation.ToolArguments = extractJSONPayload(stored, attrToolParameters)
-	operation.ToolResult = extractJSONPayload(stored, attrOutputValue)
-	operation.ToolError = extractJSONPayload(stored, attrToolError)
+	operation.InputMessages = jsonValue(anyValue(attrs[attrLLMInputMessages]))
+	operation.OutputMessages = jsonValue(anyValue(attrs[attrLLMOutputMessages]))
+	operation.ToolArguments = jsonValue(anyValue(attrs[attrToolParameters]))
+	operation.ToolResult = jsonValue(anyValue(attrs[attrOutputValue]))
+	operation.ToolError = jsonValue(anyValue(attrs[attrToolError]))
 	switch operation.ResourceKind {
 	case "inference":
 		operation.SpanClass, operation.OperationName = spanClassLLM, operationChat
@@ -293,7 +305,6 @@ func appOperationFromOTLPSpan(sp *tracepb.Span, resourceAttrs map[string]*common
 	if requestFailed {
 		operation.StatusCode = statusError
 	}
-	operation.SpanAttributes = jsonObject(stored)
 	return operation, nil
 }
 

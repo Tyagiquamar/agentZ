@@ -67,7 +67,7 @@ type Querier interface {
 	GatewayGetAgentOwner(ctx context.Context, arg GatewayGetAgentOwnerParams) (AgentOwner, error)
 	GatewayGetAgentShare(ctx context.Context, arg GatewayGetAgentShareParams) (AgentShare, error)
 	GatewayGetAppMCPGraph(ctx context.Context, arg GatewayGetAppMCPGraphParams) ([]GatewayGetAppMCPGraphRow, error)
-	GatewayGetAppOperation(ctx context.Context, arg GatewayGetAppOperationParams) (GatewayGetAppOperationRow, error)
+	GatewayGetAppOperations(ctx context.Context, arg GatewayGetAppOperationsParams) ([]GatewayGetAppOperationsRow, error)
 	GatewayGetAppTraceChart(ctx context.Context, arg GatewayGetAppTraceChartParams) ([]GatewayGetAppTraceChartRow, error)
 	GatewayGetChatInput(ctx context.Context, arg GatewayGetChatInputParams) (ChatInput, error)
 	GatewayGetChatSessionGroup(ctx context.Context, arg GatewayGetChatSessionGroupParams) (GatewayGetChatSessionGroupRow, error)

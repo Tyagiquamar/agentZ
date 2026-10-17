@@ -2762,8 +2762,13 @@ WITH subjects AS (
 ), kinds AS (
  SELECT client_id, MAX(NULLIF(agent_kind, ''))::text AS agent_kind FROM subjects GROUP BY client_id
 )
-SELECT latest.client_id, COALESCE(c.name, latest.name)::text AS name, COALESCE(kinds.agent_kind, '')::text AS agent_kind
+SELECT latest.client_id, COALESCE(c.name, latest.name)::text AS name, COALESCE(kinds.agent_kind, '')::text AS agent_kind,
+ COALESCE(owner.user_id, '')::text AS user_id, COALESCE(u.name, '')::text AS user_name,
+ COALESCE(u.email, '')::text AS user_email, u.image AS user_image
 FROM latest JOIN kinds ON kinds.client_id = latest.client_id LEFT JOIN oauth_clients c ON c.client_id = latest.client_id
+LEFT JOIN external_agents owner ON owner.client_id = latest.client_id
+ AND owner.organization_id = sqlc.arg(organization_id) AND owner.workspace_id = sqlc.arg(workspace_id)
+LEFT JOIN users u ON u.id = owner.user_id
 ORDER BY COALESCE(c.name, latest.name), latest.client_id;
 
 -- name: GatewayLensAppExists :one
@@ -2835,7 +2840,7 @@ WITH identities AS (
  SELECT op.id AS root_id, op.trace_id, op.start_time AS started_at
  FROM observer_app_operations op
  WHERE op.organization_id = sqlc.arg(organization_id) AND op.workspace_id = sqlc.arg(workspace_id)
-   AND op.client_id = sqlc.arg(client_id) AND op.resource_kind = 'turn'
+   AND op.client_id = sqlc.arg(client_id) AND op.resource_kind = 'turn' AND op.run_id IS NULL
    AND (sqlc.arg(session_id)::text = '' OR op.session_id = sqlc.arg(session_id))
    AND op.start_time >= sqlc.arg(started_after)::timestamptz AND op.start_time <= sqlc.arg(started_before)::timestamptz
  UNION ALL
@@ -2843,9 +2848,22 @@ WITH identities AS (
  FROM observer_app_operations op
  WHERE op.organization_id = sqlc.arg(organization_id) AND op.workspace_id = sqlc.arg(workspace_id)
    AND op.client_id = sqlc.arg(client_id) AND op.run_id IS NULL AND op.resource_kind IN ('inference', 'mcp')
+   AND op.start_time >= sqlc.arg(started_after)::timestamptz AND op.start_time <= sqlc.arg(started_before)::timestamptz
  GROUP BY op.trace_id
- HAVING MIN(op.start_time) >= sqlc.arg(started_after)::timestamptz AND MIN(op.start_time) <= sqlc.arg(started_before)::timestamptz
-   AND (sqlc.arg(session_id)::text = '' OR BOOL_OR(op.session_id = sqlc.arg(session_id)))
+ -- Limit aggregation to the selected range without moving a trace's true start.
+ HAVING NOT EXISTS (
+   SELECT 1 FROM observer_app_operations earlier
+   WHERE earlier.organization_id = sqlc.arg(organization_id) AND earlier.workspace_id = sqlc.arg(workspace_id)
+     AND earlier.client_id = sqlc.arg(client_id) AND earlier.trace_id = op.trace_id
+     AND earlier.run_id IS NULL AND earlier.resource_kind IN ('inference', 'mcp')
+     AND earlier.start_time < sqlc.arg(started_after)::timestamptz
+ ) AND (sqlc.arg(session_id)::text = '' OR EXISTS (
+   SELECT 1 FROM observer_app_operations session
+   WHERE session.organization_id = sqlc.arg(organization_id) AND session.workspace_id = sqlc.arg(workspace_id)
+     AND session.client_id = sqlc.arg(client_id) AND session.trace_id = op.trace_id
+     AND session.run_id IS NULL AND session.resource_kind IN ('inference', 'mcp')
+     AND session.session_id = sqlc.arg(session_id)
+ ))
 ), candidates AS MATERIALIZED (
  SELECT * FROM identities
  WHERE NOT sqlc.arg(cursor_set)::boolean
@@ -2894,7 +2912,7 @@ WITH identities AS (
  SELECT op.id AS root_id, op.trace_id, op.start_time AS started_at
  FROM observer_app_operations op
  WHERE op.organization_id = sqlc.arg(organization_id) AND op.workspace_id = sqlc.arg(workspace_id)
-   AND op.client_id = sqlc.arg(client_id) AND op.resource_kind = 'turn'
+   AND op.client_id = sqlc.arg(client_id) AND op.resource_kind = 'turn' AND op.run_id IS NULL
    AND (sqlc.arg(session_id)::text = '' OR op.session_id = sqlc.arg(session_id))
    AND op.start_time >= sqlc.arg(started_after)::timestamptz AND op.start_time <= sqlc.arg(started_before)::timestamptz
  UNION ALL
@@ -2902,9 +2920,22 @@ WITH identities AS (
  FROM observer_app_operations op
  WHERE op.organization_id = sqlc.arg(organization_id) AND op.workspace_id = sqlc.arg(workspace_id)
    AND op.client_id = sqlc.arg(client_id) AND op.run_id IS NULL AND op.resource_kind IN ('inference', 'mcp')
+   AND op.start_time >= sqlc.arg(started_after)::timestamptz AND op.start_time <= sqlc.arg(started_before)::timestamptz
  GROUP BY op.trace_id
- HAVING MIN(op.start_time) >= sqlc.arg(started_after)::timestamptz AND MIN(op.start_time) <= sqlc.arg(started_before)::timestamptz
-   AND (sqlc.arg(session_id)::text = '' OR BOOL_OR(op.session_id = sqlc.arg(session_id)))
+ -- Limit aggregation to the selected range without moving a trace's true start.
+ HAVING NOT EXISTS (
+   SELECT 1 FROM observer_app_operations earlier
+   WHERE earlier.organization_id = sqlc.arg(organization_id) AND earlier.workspace_id = sqlc.arg(workspace_id)
+     AND earlier.client_id = sqlc.arg(client_id) AND earlier.trace_id = op.trace_id
+     AND earlier.run_id IS NULL AND earlier.resource_kind IN ('inference', 'mcp')
+     AND earlier.start_time < sqlc.arg(started_after)::timestamptz
+ ) AND (sqlc.arg(session_id)::text = '' OR EXISTS (
+   SELECT 1 FROM observer_app_operations session
+   WHERE session.organization_id = sqlc.arg(organization_id) AND session.workspace_id = sqlc.arg(workspace_id)
+     AND session.client_id = sqlc.arg(client_id) AND session.trace_id = op.trace_id
+     AND session.run_id IS NULL AND session.resource_kind IN ('inference', 'mcp')
+     AND session.session_id = sqlc.arg(session_id)
+ ))
 )
 SELECT date_trunc('hour', started_at)::timestamptz AS time, COUNT(*)::bigint AS count
 FROM identities GROUP BY time ORDER BY time;
@@ -2929,10 +2960,14 @@ WHERE span.visible AND (NOT sqlc.arg(cursor_set)::boolean
     > (sqlc.arg(cursor_non_root)::boolean, sqlc.arg(cursor_start_time)::timestamptz, sqlc.arg(cursor_id)::bigint))
 ORDER BY span.resource_kind <> 'turn', span.start_time, span.id LIMIT sqlc.arg(page_size);
 
--- name: GatewayGetAppOperation :one
+-- name: GatewayGetAppOperations :many
 SELECT sqlc.embed(span),
- COALESCE(payload.input_messages, 'null'::jsonb)::jsonb AS input_messages,
- COALESCE(payload.output_messages, 'null'::jsonb)::jsonb AS output_messages,
+ CASE WHEN NOT sqlc.arg(recording)::boolean OR span.id = sqlc.arg(prompt_operation_id)::bigint
+   THEN COALESCE(payload.input_messages, 'null'::jsonb) ELSE 'null'::jsonb END::jsonb AS input_messages,
+ CASE WHEN sqlc.arg(recording)::boolean AND span.resource_kind = 'inference'
+   AND payload.output_messages <> 'null'::jsonb
+   THEN jsonb_build_object('completion', payload.output_messages->'completion')
+   ELSE COALESCE(payload.output_messages, 'null'::jsonb) END::jsonb AS output_messages,
  COALESCE(payload.tool_arguments, 'null'::jsonb)::jsonb AS tool_arguments,
  CASE WHEN span.resource_kind = 'tool' THEN COALESCE(
    CASE result.protocol
@@ -2950,7 +2985,8 @@ LEFT JOIN observer_app_operation_payloads payload ON payload.operation_id = span
 LEFT JOIN observer_app_tool_results result ON result.id = span.result_id
 LEFT JOIN observer_app_operation_payloads result_payload ON result_payload.operation_id = result.source_operation_id
 WHERE span.organization_id = sqlc.arg(organization_id) AND span.workspace_id = sqlc.arg(workspace_id)
-  AND span.client_id = sqlc.arg(client_id) AND span.id = sqlc.arg(operation_id);
+  AND span.client_id = sqlc.arg(client_id) AND span.id = ANY(sqlc.arg(operation_ids)::bigint[])
+ORDER BY array_position(sqlc.arg(operation_ids)::bigint[], span.id);
 
 -- name: GatewayGetAppMCPGraph :many
 WITH selected AS (

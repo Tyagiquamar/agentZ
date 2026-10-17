@@ -119,6 +119,7 @@ config:
   agentgatewayTraceServicePort: 4317
   agentgatewayTraceHost: ""
   agentgatewayTracePort: 4317
+  delegationTracePort: 4318
   nixStorePVC: nix-store
   nixStoreSize: 5Gi
   nixStoreAccessModes:

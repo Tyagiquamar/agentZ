@@ -2,19 +2,9 @@
 
 import * as z from "zod"
 
-export const zLensApp = z.object({
-  client_id: z.string(),
-  name: z.string(),
-  agent_kind: z.enum(["claude", "codex"]).optional(),
-})
-
-export const zListLensAppsResponse = z.object({
-  apps: z.array(zLensApp),
-})
-
 export const zAppSession = z.object({
   session_id: z.string(),
-  last_seen: z.iso.datetime(),
+  last_seen: z.iso.datetime({ offset: true }),
 })
 
 export const zListAppSessionsResponse = z.object({
@@ -34,7 +24,7 @@ export const zAppPayload = z.object({
 })
 
 export const zAppTraceChartPoint = z.object({
-  time: z.iso.datetime(),
+  time: z.iso.datetime({ offset: true }),
   count: z.coerce
     .bigint()
     .min(BigInt("-9223372036854775808"), {
@@ -177,7 +167,7 @@ export const zEventTrailEvent = z.object({
   result: zEventTrailResult,
   before: z.array(zEventTrailField),
   after: z.array(zEventTrailField),
-  created_at: z.iso.datetime(),
+  created_at: z.iso.datetime({ offset: true }),
 })
 
 export const zEventTrailActorFilter = z.object({
@@ -254,8 +244,8 @@ export const zOptionalSpanId = z
 export const zAppTrace = z.object({
   trace_id: zTraceId,
   root_span_id: zOptionalSpanId,
-  started_at: z.iso.datetime(),
-  ended_at: z.iso.datetime(),
+  started_at: z.iso.datetime({ offset: true }),
+  ended_at: z.iso.datetime({ offset: true }),
   duration_ns: z.coerce.bigint().gte(BigInt(0)).max(BigInt("9223372036854775807"), {
     error: "Invalid value: Expected int64 to be <= 9223372036854775807",
   }),
@@ -302,7 +292,7 @@ export const zAppTrace = z.object({
     .nullable(),
   cost_usd: z.number().gte(0).nullable(),
   status_code: z.string(),
-  updated_at: z.iso.datetime(),
+  updated_at: z.iso.datetime({ offset: true }),
 })
 
 export const zAppSpan = z.object({
@@ -313,8 +303,8 @@ export const zAppSpan = z.object({
   trace_id: zTraceId,
   span_id: zSpanId,
   parent_span_id: zOptionalSpanId,
-  start_time: z.iso.datetime(),
-  end_time: z.iso.datetime(),
+  start_time: z.iso.datetime({ offset: true }),
+  end_time: z.iso.datetime({ offset: true }),
   duration_ns: z.coerce
     .bigint()
     .gte(BigInt(0))
@@ -361,7 +351,7 @@ export const zAppSpan = z.object({
     })
     .nullable(),
   cost_usd: z.number().gte(0).nullable(),
-  ingested_at: z.iso.datetime(),
+  ingested_at: z.iso.datetime({ offset: true }),
   grant_id: z.string(),
   user_id: z.string(),
   resource_namespace: z.string(),
@@ -385,11 +375,6 @@ export const zListAppTracesResponse = z.object({
   next_page_token: z.string(),
 })
 
-export const zListAppSpansResponse = z.object({
-  spans: z.array(zAppSpan),
-  next_page_token: z.string(),
-})
-
 /**
  * Content fields contain serialized JSON, including the JSON literal null for absent values.
  */
@@ -397,6 +382,12 @@ export const zAppOperationResponse = z.object({
   span: zAppSpan,
   payload: zAppPayload,
   tool_error: z.string(),
+})
+
+export const zListAppSpansResponse = z.object({
+  spans: z.array(zAppSpan),
+  next_page_token: z.string(),
+  recording: z.array(zAppOperationResponse),
 })
 
 export const zTenantPhase = z.enum(["BOOTSTRAPPING", "READY", "FAILED"])
@@ -422,6 +413,17 @@ export const zResourceActor = z.object({
   image: z.string().nullable(),
 })
 
+export const zLensApp = z.object({
+  client_id: z.string(),
+  name: z.string(),
+  user: zResourceActor.optional(),
+  agent_kind: z.enum(["claude", "codex"]).optional(),
+})
+
+export const zListLensAppsResponse = z.object({
+  apps: z.array(zLensApp),
+})
+
 export const zChatInput = z.object({
   id: z.uuid(),
   author: zResourceActor,
@@ -436,7 +438,7 @@ export const zChatInput = z.object({
     .max(BigInt("9223372036854775807"), {
       error: "Invalid value: Expected int64 to be <= 9223372036854775807",
     }),
-  created_at: z.iso.datetime(),
+  created_at: z.iso.datetime({ offset: true }),
   message_id: z.string().optional(),
   error: z.string(),
 })
@@ -495,8 +497,8 @@ export const zWorkspace = z.object({
   workspace_admin_count: z.coerce.bigint().gte(BigInt(0)).max(BigInt("9223372036854775807"), {
     error: "Invalid value: Expected int64 to be <= 9223372036854775807",
   }),
-  created_at: z.iso.datetime(),
-  updated_at: z.iso.datetime(),
+  created_at: z.iso.datetime({ offset: true }),
+  updated_at: z.iso.datetime({ offset: true }),
 })
 
 export const zListWorkspacesResponse = z.object({
@@ -591,8 +593,8 @@ export const zChatSession = z.object({
   title: z.string(),
   kind: zChatSessionKind,
   status: zChatSessionStatus,
-  created_at: z.iso.datetime(),
-  updated_at: z.iso.datetime(),
+  created_at: z.iso.datetime({ offset: true }),
+  updated_at: z.iso.datetime({ offset: true }),
   participants: z.array(zChatSessionParticipant),
 })
 
@@ -627,7 +629,7 @@ export const zAgentFileMetadata = z.object({
     error: "Invalid value: Expected int64 to be <= 9223372036854775807",
   }),
   media_type: z.string(),
-  modified_at: z.iso.datetime(),
+  modified_at: z.iso.datetime({ offset: true }),
   version: z.string(),
   type: zAgentFileType,
 })
@@ -821,8 +823,8 @@ export const zAgentOwner = z.object({
   agent_name: zAgentName,
   creator_user_id: z.string(),
   owner_user_id: z.string(),
-  created_at: z.iso.datetime(),
-  updated_at: z.iso.datetime(),
+  created_at: z.iso.datetime({ offset: true }),
+  updated_at: z.iso.datetime({ offset: true }),
 })
 
 export const zAgentShareCapability = z.enum([
@@ -840,7 +842,7 @@ export const zAgentShare = z.object({
   target_team_id: z.string().nullable(),
   created_by: z.string(),
   capabilities: z.array(zAgentShareCapability),
-  created_at: z.iso.datetime(),
+  created_at: z.iso.datetime({ offset: true }),
 })
 
 export const zListAgentSharesResponse = z.object({
@@ -876,7 +878,7 @@ export const zSkill = z.object({
   storage_path: z.string().min(1),
   agents: z.array(zAgentName),
   sandboxes: z.array(zSandboxName),
-  created_at: z.iso.datetime(),
+  created_at: z.iso.datetime({ offset: true }),
   can_modify: z.boolean(),
   can_delete: z.boolean(),
 })
@@ -892,7 +894,7 @@ export const zSkillFileSummary = z.object({
   size_bytes: z.coerce.bigint().gte(BigInt(0)).max(BigInt("9223372036854775807"), {
     error: "Invalid value: Expected int64 to be <= 9223372036854775807",
   }),
-  modified_at: z.iso.datetime().nullable(),
+  modified_at: z.iso.datetime({ offset: true }).nullable(),
 })
 
 export const zMutableSkillSummary = zSkillFileSummary
@@ -1074,9 +1076,9 @@ export const zWorkflowRunSummary = z.object({
   timeout_seconds: z.int().gte(1).lte(604800),
   status: zWorkflowRunStatus,
   reason: z.string(),
-  created_at: z.iso.datetime(),
-  started_at: z.iso.datetime().optional(),
-  completed_at: z.iso.datetime().optional(),
+  created_at: z.iso.datetime({ offset: true }),
+  started_at: z.iso.datetime({ offset: true }).optional(),
+  completed_at: z.iso.datetime({ offset: true }).optional(),
   duration_seconds: z.coerce
     .bigint()
     .gte(BigInt(0))
@@ -1095,14 +1097,14 @@ export const zWorkflowRunNodeStatus = z.object({
   name: zWorkflowNodeName,
   phase: zWorkflowRunNodePhase,
   message: z.string(),
-  started_at: z.iso.datetime().optional(),
-  completed_at: z.iso.datetime().optional(),
+  started_at: z.iso.datetime({ offset: true }).optional(),
+  completed_at: z.iso.datetime({ offset: true }).optional(),
 })
 
 export const zWorkflowWebhookTrigger = z.object({
   workflow_name: zWorkflowName,
   api_key_id: zApiKeyId,
-  last_triggered_at: z.iso.datetime(),
+  last_triggered_at: z.iso.datetime({ offset: true }),
 })
 
 export const zListWorkflowWebhookTriggersResponse = z.object({
@@ -1114,7 +1116,7 @@ export const zWorkflowSummary = z.object({
   workflow_name: zWorkflowName,
   title: z.string(),
   summary: z.string(),
-  updated_at: z.iso.datetime(),
+  updated_at: z.iso.datetime({ offset: true }),
 })
 
 export const zWorkflowNode = z.object({
@@ -1201,11 +1203,11 @@ export const zAgent = z.object({
   sandbox: zResourceReference,
   created_by: zResourceActor,
   last_modified_by: zResourceActor,
-  last_activity: z.iso.datetime(),
+  last_activity: z.iso.datetime({ offset: true }),
   memory: zAgentMemoryConfig,
   opencode: zAgentOpencodeConfig.optional(),
-  created_at: z.iso.datetime(),
-  modified_at: z.iso.datetime(),
+  created_at: z.iso.datetime({ offset: true }),
+  modified_at: z.iso.datetime({ offset: true }),
   skills: z.array(zResourceReference),
   status: zAgentStatus,
   capabilities: zAgentCapabilities,
@@ -1237,8 +1239,8 @@ export const zTrace = z.object({
   trace_id: zTraceId,
   agent_name: zAgentName,
   root_span_id: zOptionalSpanId,
-  started_at: z.iso.datetime(),
-  ended_at: z.iso.datetime(),
+  started_at: z.iso.datetime({ offset: true }),
+  ended_at: z.iso.datetime({ offset: true }),
   duration_ns: z.coerce.bigint().gte(BigInt(0)).max(BigInt("9223372036854775807"), {
     error: "Invalid value: Expected int64 to be <= 9223372036854775807",
   }),
@@ -1269,7 +1271,7 @@ export const zTrace = z.object({
   }),
   cost_usd: z.number().gte(0),
   status_code: z.string(),
-  updated_at: z.iso.datetime(),
+  updated_at: z.iso.datetime({ offset: true }),
 })
 
 export const zListTracesResponse = z.object({
@@ -1282,8 +1284,8 @@ export const zTraceSession = z.object({
   session_id: z.string(),
   agent_name: zAgentName,
   root_span_id: zOptionalSpanId,
-  started_at: z.iso.datetime(),
-  ended_at: z.iso.datetime(),
+  started_at: z.iso.datetime({ offset: true }),
+  ended_at: z.iso.datetime({ offset: true }),
   duration_ns: z.coerce.bigint().gte(BigInt(0)).max(BigInt("9223372036854775807"), {
     error: "Invalid value: Expected int64 to be <= 9223372036854775807",
   }),
@@ -1314,7 +1316,7 @@ export const zTraceSession = z.object({
   }),
   cost_usd: z.number().gte(0),
   status_code: z.string(),
-  updated_at: z.iso.datetime(),
+  updated_at: z.iso.datetime({ offset: true }),
 })
 
 export const zListTraceSessionsResponse = z.object({
@@ -1331,8 +1333,8 @@ export const zSpan = z.object({
   trace_id: zTraceId,
   span_id: zSpanId,
   parent_span_id: zOptionalSpanId,
-  start_time: z.iso.datetime(),
-  end_time: z.iso.datetime(),
+  start_time: z.iso.datetime({ offset: true }),
+  end_time: z.iso.datetime({ offset: true }),
   duration_ns: z.coerce.bigint().gte(BigInt(0)).max(BigInt("9223372036854775807"), {
     error: "Invalid value: Expected int64 to be <= 9223372036854775807",
   }),
@@ -1360,7 +1362,7 @@ export const zSpan = z.object({
   }),
   cost_usd: z.number().gte(0),
   llm_finish_reason: z.string(),
-  ingested_at: z.iso.datetime(),
+  ingested_at: z.iso.datetime({ offset: true }),
 })
 
 export const zListSpansResponse = z.object({
@@ -1405,7 +1407,7 @@ export const zMcpGraphEdge = z.object({
       error: "Invalid value: Expected int64 to be <= 9223372036854775807",
     })
     .optional(),
-  last_called_at: z.iso.datetime().optional(),
+  last_called_at: z.iso.datetime({ offset: true }).optional(),
 })
 
 export const zAppMcpGraphResponse = z.object({
@@ -1427,8 +1429,8 @@ export const zProcessObservabilityEvent = z.object({
     error: "Invalid value: Expected int64 to be <= 9223372036854775807",
   }),
   agent_name: zAgentName,
-  event_time: z.iso.datetime(),
-  ingested_at: z.iso.datetime(),
+  event_time: z.iso.datetime({ offset: true }),
+  ingested_at: z.iso.datetime({ offset: true }),
   pod_namespace: z.string(),
   pod_name: z.string(),
   process: z.string(),
@@ -1445,7 +1447,7 @@ export const zListProcessObservabilityResponse = z.object({
 
 export const zProcessObservabilityEventAggregated = z.object({
   agent_name: zAgentName,
-  last_seen: z.iso.datetime(),
+  last_seen: z.iso.datetime({ offset: true }),
   process: z.string(),
   parent_process: z.string(),
   command_invocation: z.string(),
@@ -1466,8 +1468,8 @@ export const zFileObservabilityEvent = z.object({
     error: "Invalid value: Expected int64 to be <= 9223372036854775807",
   }),
   agent_name: zAgentName,
-  event_time: z.iso.datetime(),
-  ingested_at: z.iso.datetime(),
+  event_time: z.iso.datetime({ offset: true }),
+  ingested_at: z.iso.datetime({ offset: true }),
   pod_namespace: z.string(),
   pod_name: z.string(),
   file_path_accessed: z.string(),
@@ -1484,7 +1486,7 @@ export const zListFileObservabilityResponse = z.object({
 
 export const zFileObservabilityEventAggregated = z.object({
   agent_name: zAgentName,
-  last_seen: z.iso.datetime(),
+  last_seen: z.iso.datetime({ offset: true }),
   file_path_accessed: z.string(),
   process: z.string(),
   command_invocation: z.string(),
@@ -1505,8 +1507,8 @@ export const zNetworkObservabilityEvent = z.object({
     error: "Invalid value: Expected int64 to be <= 9223372036854775807",
   }),
   agent_name: zAgentName,
-  event_time: z.iso.datetime(),
-  ingested_at: z.iso.datetime(),
+  event_time: z.iso.datetime({ offset: true }),
+  ingested_at: z.iso.datetime({ offset: true }),
   pod_namespace: z.string(),
   pod_name: z.string(),
   destination_domain: z.string(),
@@ -1526,7 +1528,7 @@ export const zListNetworkObservabilityResponse = z.object({
 
 export const zNetworkObservabilityEventAggregated = z.object({
   agent_name: zAgentName,
-  last_seen: z.iso.datetime(),
+  last_seen: z.iso.datetime({ offset: true }),
   destination_domain: z.string(),
   destination_ip: z.string(),
   destination_port: z.coerce.bigint().gte(BigInt(0)).max(BigInt("9223372036854775807"), {
@@ -1588,7 +1590,7 @@ export const zWorkflowSchedule = z.object({
   suspend: z.boolean(),
   successful_runs_history_limit: z.int().gte(1).lte(10),
   failed_runs_history_limit: z.int().gte(1).lte(10),
-  created_at: z.iso.datetime(),
+  created_at: z.iso.datetime({ offset: true }),
 })
 
 export const zListWorkflowSchedulesResponse = z.object({
@@ -1620,9 +1622,9 @@ export const zWorkflowRunDetail = z.object({
   reason: z.string(),
   message: z.string(),
   session_id: z.string().optional(),
-  created_at: z.iso.datetime(),
-  started_at: z.iso.datetime().optional(),
-  completed_at: z.iso.datetime().optional(),
+  created_at: z.iso.datetime({ offset: true }),
+  started_at: z.iso.datetime({ offset: true }).optional(),
+  completed_at: z.iso.datetime({ offset: true }).optional(),
   duration_seconds: z.coerce
     .bigint()
     .gte(BigInt(0))
@@ -1682,8 +1684,8 @@ export const zWorkflow = z.object({
   arbitrary_json: zWorkflowArbitraryJson.optional(),
   nodes: z.array(zWorkflowNode),
   edges: z.array(zWorkflowEdge),
-  created_at: z.iso.datetime(),
-  updated_at: z.iso.datetime(),
+  created_at: z.iso.datetime({ offset: true }),
+  updated_at: z.iso.datetime({ offset: true }),
 })
 
 export const zSpanPayload = z.object({
@@ -1743,7 +1745,7 @@ export const zSecretOAuthCredentials = z.object({
   client_secret: z.string().optional(),
   access_token: z.string().optional(),
   refresh_token: z.string().optional(),
-  expires_at: z.iso.datetime().optional(),
+  expires_at: z.iso.datetime({ offset: true }).optional(),
   token_type: z.string().optional(),
   scopes: z.array(z.string().min(1)).optional(),
   registration: zJsonObject.optional(),
@@ -1774,9 +1776,9 @@ export const zSecretListItem = z.object({
   status: zSecretState,
   reason: z.string(),
   message: z.string(),
-  created_at: z.iso.datetime(),
-  last_refresh_time: z.iso.datetime().optional(),
-  token_expiry_time: z.iso.datetime().optional(),
+  created_at: z.iso.datetime({ offset: true }),
+  last_refresh_time: z.iso.datetime({ offset: true }).optional(),
+  token_expiry_time: z.iso.datetime({ offset: true }).optional(),
 })
 
 export const zSecretWarning = z.object({
@@ -1981,7 +1983,7 @@ export const zInferenceProviderOAuthCredentials = z.object({
   access_token: z.string().min(1).max(49152),
   refresh_token: z.string().min(1).max(49152).optional(),
   id_token: z.string().min(1).max(49152).optional(),
-  expires_at: z.iso.datetime().optional(),
+  expires_at: z.iso.datetime({ offset: true }).optional(),
 })
 
 export const zCreateInferenceProviderOAuthTicketRequest = z.object({
@@ -2165,8 +2167,8 @@ export const zInferenceProvider = zInferenceProviderReadFields
       usage_count: z.int().gte(0),
       can_modify: z.boolean(),
       can_delete: z.boolean(),
-      created_at: z.iso.datetime(),
-      updated_at: z.iso.datetime(),
+      created_at: z.iso.datetime({ offset: true }),
+      updated_at: z.iso.datetime({ offset: true }),
     })
   )
 
@@ -2249,8 +2251,8 @@ export const zInferencePool = z.object({
   usage_count: z.int().gte(0),
   can_modify: z.boolean(),
   can_delete: z.boolean(),
-  created_at: z.iso.datetime(),
-  updated_at: z.iso.datetime(),
+  created_at: z.iso.datetime({ offset: true }),
+  updated_at: z.iso.datetime({ offset: true }),
 })
 
 export const zListInferencePoolsResponse = z.object({
@@ -2297,7 +2299,7 @@ export const zInferenceModelSuggestionsProvenance = z.enum(["live", "cache", "sn
 
 export const zCreateInferenceProviderOAuthTicketResponse = z.object({
   ticket: z.string().min(1).max(256),
-  expires_at: z.iso.datetime(),
+  expires_at: z.iso.datetime({ offset: true }),
   models: z.array(zInferenceModelSuggestion).max(500),
   provenance: zInferenceModelSuggestionsProvenance,
 })
@@ -2330,7 +2332,7 @@ export const zSandbox = z.object({
   inference: zSandboxInference,
   can_modify: z.boolean(),
   can_delete: z.boolean(),
-  created_at: z.iso.datetime(),
+  created_at: z.iso.datetime({ offset: true }),
   metadata: z.object({
     package_count: z
       .int()
@@ -2438,7 +2440,7 @@ export const zMcpConnectionDetail = z.object({
   last_modified_by: zResourceActor,
   endpoint: zMcpConnectionEndpoint,
   auth: zMcpConnectionAuth,
-  created_at: z.iso.datetime(),
+  created_at: z.iso.datetime({ offset: true }),
   status: zMcpConnectionLifecycle,
   reason: zMcpConnectionReason,
   message: z.string(),
@@ -2454,7 +2456,7 @@ export const zMcpConnectionSummary = z.object({
   last_modified_by: zResourceActor,
   auth_mode: z.string(),
   endpoint_url: z.string(),
-  created_at: z.iso.datetime(),
+  created_at: z.iso.datetime({ offset: true }),
   status: zMcpConnectionLifecycle,
   reason: zMcpConnectionReason,
   message: z.string(),
@@ -2486,7 +2488,7 @@ export const zMcpConnectionOAuthCredentials = z.object({
   client_secret: z.string().optional(),
   refresh_token: z.string().optional(),
   access_token: z.string().optional(),
-  expires_at: z.iso.datetime().optional(),
+  expires_at: z.iso.datetime({ offset: true }).optional(),
   token_type: z.string().optional(),
   scopes: z.array(z.string().min(1)).optional(),
   registration: zJsonObject.optional(),
@@ -2608,7 +2610,7 @@ export const zDashboard = z.object({
   title: z.string().min(1).max(80),
   agent_name: zAgentName,
   widgets: z.array(zDashboardWidget),
-  created_at: z.iso.datetime(),
+  created_at: z.iso.datetime({ offset: true }),
 })
 
 export const zDashboardSummary = z.object({
@@ -2619,7 +2621,7 @@ export const zDashboardSummary = z.object({
     .int()
     .gte(0)
     .max(2147483647, { error: "Invalid value: Expected int32 to be <= 2147483647" }),
-  created_at: z.iso.datetime(),
+  created_at: z.iso.datetime({ offset: true }),
 })
 
 export const zListDashboardsResponse = z.object({
@@ -2637,11 +2639,11 @@ export const zDashboardCell = z.object({
   text: z.string().max(1024).optional(),
   number: z.number().optional(),
   boolean: z.boolean().optional(),
-  datetime: z.iso.datetime().optional(),
+  datetime: z.iso.datetime({ offset: true }).optional(),
 })
 
 export const zDashboardDataRecord = z.object({
-  recorded_at: z.iso.datetime().optional(),
+  recorded_at: z.iso.datetime({ offset: true }).optional(),
   category: z.string().min(1).max(120).optional(),
   series: z.int().gte(0).lte(4).optional(),
   values: z.array(z.number()).max(5).optional(),
@@ -2660,7 +2662,7 @@ export const zPublishDashboardDataRequest = z.object({
 })
 
 export const zPublishDashboardDataResponse = z.object({
-  received_at: z.iso.datetime(),
+  received_at: z.iso.datetime({ offset: true }),
   accepted_records: z
     .int()
     .gte(0)
@@ -2669,14 +2671,14 @@ export const zPublishDashboardDataResponse = z.object({
 })
 
 export const zQueryDashboardRequest = z.object({
-  from: z.iso.datetime(),
-  to: z.iso.datetime(),
+  from: z.iso.datetime({ offset: true }),
+  to: z.iso.datetime({ offset: true }),
   max_points: z.int().gte(1).lte(1000).optional().default(240),
   widgets: z.array(zDashboardWidgetName).max(48).optional(),
 })
 
 export const zDashboardTimePoint = z.object({
-  at: z.iso.datetime(),
+  at: z.iso.datetime({ offset: true }),
   values: z.array(z.number().nullable()).max(5),
 })
 
@@ -2751,13 +2753,13 @@ export const zDashboardWidgetQueryResult = z.object({
 })
 
 export const zQueryDashboardResponse = z.object({
-  from: z.iso.datetime(),
-  to: z.iso.datetime(),
+  from: z.iso.datetime({ offset: true }),
+  to: z.iso.datetime({ offset: true }),
   widgets: z.array(zDashboardWidgetQueryResult),
 })
 
 export const zDashboardTableRow = z.object({
-  at: z.iso.datetime(),
+  at: z.iso.datetime({ offset: true }),
   cells: z.array(zDashboardCell).max(12),
 })
 
@@ -2783,7 +2785,7 @@ export const zCodingProject = z.object({
     }),
   repository: z.string(),
   default_branch: z.string(),
-  created_at: z.iso.datetime(),
+  created_at: z.iso.datetime({ offset: true }),
 })
 
 export const zChatSessionGroup = z.object({
@@ -2965,7 +2967,7 @@ export const zCodingGitStash = z.object({
   oid: z.string(),
   reference: z.string(),
   message: z.string(),
-  created_at: z.iso.datetime(),
+  created_at: z.iso.datetime({ offset: true }),
 })
 
 export const zCodingRef = z.object({
@@ -3000,7 +3002,7 @@ export const zCodingRepositorySnapshot = z.object({
   refs: z.array(zCodingRef),
   worktrees: z.array(zCodingDiscoveredWorktree),
   revision: z.string(),
-  updated_at: z.iso.datetime().optional(),
+  updated_at: z.iso.datetime({ offset: true }).optional(),
   refreshing: z.boolean(),
   error: z.string().optional(),
   total_count: z.int(),
@@ -3080,8 +3082,8 @@ export const zCodingOperation = z.object({
   action: zCodingAction,
   state: z.enum(["queued", "running", "succeeded", "failed", "interrupted"]),
   stage: z.string(),
-  created_at: z.iso.datetime(),
-  updated_at: z.iso.datetime(),
+  created_at: z.iso.datetime({ offset: true }),
+  updated_at: z.iso.datetime({ offset: true }),
   commit: z.string().optional(),
   pushed: z.boolean(),
   pull_request: zCodingPullRequest.optional(),
@@ -3627,8 +3629,8 @@ export const zWorkflowEvaluation = z.object({
   executions: z.array(zEvaluationExecution),
   state: zWorkflowEvaluationState,
   message: z.string().optional(),
-  created_at: z.iso.datetime(),
-  updated_at: z.iso.datetime(),
+  created_at: z.iso.datetime({ offset: true }),
+  updated_at: z.iso.datetime({ offset: true }),
   scoring_version: z.enum(["trace-v1"]),
   references: zEvaluationReferences.optional(),
 })
@@ -3638,7 +3640,7 @@ export const zWorkflowEvaluationSummary = z.object({
   judge: zEvaluationModel,
   executions: z.array(zEvaluationExecution),
   state: zWorkflowEvaluationState,
-  created_at: z.iso.datetime(),
+  created_at: z.iso.datetime({ offset: true }),
 })
 
 export const zJsonValueWritable = z
@@ -3979,32 +3981,32 @@ export const zSessionIdQuery = z.string().min(1)
 /**
  * Inclusive lower bound for trace start time.
  */
-export const zStartedAfterQuery = z.iso.datetime()
+export const zStartedAfterQuery = z.iso.datetime({ offset: true })
 
 /**
  * Inclusive upper bound for trace start time.
  */
-export const zStartedBeforeQuery = z.iso.datetime()
+export const zStartedBeforeQuery = z.iso.datetime({ offset: true })
 
 /**
  * Inclusive lower bound for event time.
  */
-export const zEventTimeAfterQuery = z.iso.datetime()
+export const zEventTimeAfterQuery = z.iso.datetime({ offset: true })
 
 /**
  * Inclusive upper bound for event time.
  */
-export const zEventTimeBeforeQuery = z.iso.datetime()
+export const zEventTimeBeforeQuery = z.iso.datetime({ offset: true })
 
 /**
  * Inclusive lower bound for event time.
  */
-export const zEventTimeAfterRequiredQuery = z.iso.datetime()
+export const zEventTimeAfterRequiredQuery = z.iso.datetime({ offset: true })
 
 /**
  * Inclusive upper bound for event time.
  */
-export const zEventTimeBeforeRequiredQuery = z.iso.datetime()
+export const zEventTimeBeforeRequiredQuery = z.iso.datetime({ offset: true })
 
 /**
  * Optional observability action filter.

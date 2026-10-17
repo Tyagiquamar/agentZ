@@ -33,6 +33,7 @@ type Config struct {
 	KubeArmorRelayAddr      string
 	HubbleRelayAddr         string
 	OTLPTraceGRPCAddr       string
+	OTLPAppGRPCAddr         string
 	OTLPTraceMaxMessageSize int
 	BatchSize               int
 	FlushInterval           time.Duration
@@ -51,6 +52,9 @@ func (c Config) Validate() error {
 	}
 	if c.OTLPTraceGRPCAddr == "" {
 		return errOTLPTraceGRPCAddrEmpty
+	}
+	if c.OTLPAppGRPCAddr == "" || c.OTLPAppGRPCAddr == c.OTLPTraceGRPCAddr {
+		return errors.New("app OTLP listener must have a separate address")
 	}
 	if c.OTLPTraceMaxMessageSize < 0 {
 		return errors.New("otlp trace max message size must not be negative")
@@ -72,6 +76,8 @@ func Serve(ctx context.Context, cfg Config) error {
 
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
 
 	pool, err := pgxpool.New(ctx, cfg.PostgresDSN)
 	if err != nil {
@@ -111,11 +117,17 @@ func Serve(ctx context.Context, cfg Config) error {
 	wg.Go(func() {
 		runHubbleWatcher(ctx, cfg, res, evCh, stats)
 	})
-	wg.Go(func() {
-		if err := runOTLPTraceReceiver(ctx, cfg, evCh, stats); err != nil {
-			slog.ErrorContext(ctx, "otlp trace receiver failed", slog.Any("error", err))
-		}
-	})
+	receivers := []*traceReceiver{
+		{addr: cfg.OTLPTraceGRPCAddr, out: evCh, stats: stats},
+		{addr: cfg.OTLPAppGRPCAddr, app: true, out: evCh, stats: stats},
+	}
+	for _, receiver := range receivers {
+		wg.Go(func() {
+			if err := receiver.run(ctx, cfg); err != nil {
+				cancel(err)
+			}
+		})
+	}
 	wg.Go(func() {
 		logStats(ctx, stats)
 	})
@@ -124,6 +136,9 @@ func Serve(ctx context.Context, cfg Config) error {
 	wg.Wait()
 	close(evCh)
 	<-sinkDone
+	if err := context.Cause(ctx); !errors.Is(err, context.Canceled) {
+		return err
+	}
 	return nil
 }
 

@@ -182,6 +182,22 @@ func (installed *installation) claude(ctx context.Context, command *cli.Command,
 	settings["forceLoginMethod"] = json.RawMessage(`"gateway"`)
 	settings["forceLoginGatewayUrl"] = gateway
 	settings["disableAutoMode"] = json.RawMessage(`"disable"`)
+	// Persist correlation hints so native sessions that reuse this profile
+	// also supply prompt IDs when started without the launcher environment.
+	env := make(map[string]json.RawMessage)
+	if raw := settings["env"]; len(raw) > 0 {
+		if err := json.Unmarshal(raw, &env); err != nil {
+			return fmt.Errorf("read Claude environment settings: %w", err)
+		}
+		if env == nil {
+			env = make(map[string]json.RawMessage)
+		}
+	}
+	env["CLAUDE_CODE_GATEWAY_HINT_HEADERS"] = json.RawMessage(`"1"`)
+	settings["env"], err = json.Marshal(env)
+	if err != nil {
+		return err
+	}
 	data, err = json.MarshalIndent(settings, "", "  ")
 	if err != nil {
 		return err

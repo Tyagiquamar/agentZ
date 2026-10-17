@@ -108,6 +108,7 @@ var (
 	agentgatewayTraceServicePort                  int
 	agentgatewayTraceHost                         string
 	agentgatewayTracePort                         int
+	delegationTracePort                           int
 	nixStorePVC                                   string
 	agentInitImage                                string
 	openBaoAddr                                   string
@@ -396,6 +397,12 @@ var managerCmd = &cli.Command{
 			Config: cli.StringConfig{
 				TrimSpace: true,
 			},
+		},
+		&cli.IntFlag{
+			Name:        "delegation-trace-port",
+			Usage:       "Network-isolated app OTLP port on the configured trace backend",
+			Value:       4318,
+			Destination: &delegationTracePort,
 		},
 		&cli.IntFlag{
 			Name:        "agentgateway-trace-port",
@@ -1038,6 +1045,22 @@ var managerCmd = &cli.Command{
 		if err != nil {
 			return err
 		}
+		if delegationTracePort < 1 || delegationTracePort > 65535 {
+			return fmt.Errorf("delegation trace port must be between 1 and 65535")
+		}
+		appTraceBackend := traceBackend
+		switch appTraceBackend.Mode {
+		case sandboxcontroller.TraceBackendModeService:
+			if delegationNamespace != "" && delegationTracePort == agentgatewayTraceServicePort {
+				return fmt.Errorf("delegated app traces require a separate collector port")
+			}
+			appTraceBackend.ServicePort = gwv1.PortNumber(delegationTracePort)
+		case sandboxcontroller.TraceBackendModeStatic:
+			if delegationNamespace != "" && delegationTracePort == agentgatewayTracePort {
+				return fmt.Errorf("delegated app traces require a separate collector port")
+			}
+			appTraceBackend.Port = gwv1.PortNumber(delegationTracePort)
+		}
 		skillStoreConfig := skillpkg.Config{
 			Endpoint:        skillsS3Endpoint,
 			Region:          skillsS3Region,
@@ -1466,7 +1489,7 @@ var managerCmd = &cli.Command{
 			os.Exit(1)
 		}
 		extAuthRuntimeReconciler := &mcpconn.ExtAuthRuntimeReconciler{
-			TraceBackend: traceBackend,
+			TraceBackend: appTraceBackend,
 			// Clear inherited image parts so Repository is the complete reference.
 			DelegationImage: agentgatewayv1alpha1.Image{
 				Registry:   new(""),

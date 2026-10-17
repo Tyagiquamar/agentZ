@@ -4862,6 +4862,8 @@ components:
           type: string
         name:
           type: string
+        user:
+          $ref: '#/components/schemas/ResourceActor'
       required:
       - client_id
       - name
@@ -4923,6 +4925,11 @@ components:
       properties:
         next_page_token:
           type: string
+        recording:
+          description: Conversation content in page order when include_recording is true; otherwise empty. Model input histories are omitted except for the first model request on the initial page.
+          items:
+            $ref: '#/components/schemas/AppOperationResponse'
+          type: array
         spans:
           items:
             $ref: '#/components/schemas/AppSpan'
@@ -4930,6 +4937,7 @@ components:
       required:
       - spans
       - next_page_token
+      - recording
       type: object
     ListAppTracesResponse:
       additionalProperties: false
@@ -30035,6 +30043,12 @@ paths:
           $ref: '#/components/schemas/TraceID'
       - $ref: '#/components/parameters/LimitQuery'
       - $ref: '#/components/parameters/PageTokenQuery'
+      - description: Include conversation content in page order, with only the initial page's first model request and model completion text. Full payloads remain available from the operation endpoint.
+        in: query
+        name: include_recording
+        schema:
+          default: false
+          type: boolean
       responses:
         "200":
           content:

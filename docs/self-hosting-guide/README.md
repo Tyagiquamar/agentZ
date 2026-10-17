@@ -559,4 +559,13 @@ kubectl wait certificate/agentz-tls -n agentz-system --for=condition=Ready --tim
 kubectl get deployments,pods,ingress -n agentz-system
 ```
 
+The observer receives native agent traces on port 4317. Delegated inference and
+MCP gateways export app traces to port 4318. The chart installs a mandatory
+Cilium ingress policy matching gateway Pods, their ServiceAccounts, and
+controller-managed namespaces. Native agents cannot use this port, and the
+native listener rejects app observations regardless of their attributes. Keep
+`manager.config.delegationTracePort` and `observer.service.appGrpcPort` equal
+when changing this port. Standalone collectors require equivalent isolation;
+the command defaults the app listener to `127.0.0.1:4318`.
+
 Open `https://agentz.example.com/signup` and register with `ADMIN_EMAIL`.

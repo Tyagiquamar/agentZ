@@ -7,6 +7,7 @@ export type ClientOptions = {
 export type LensApp = {
   client_id: string
   name: string
+  user?: ResourceActor
   agent_kind?: "claude" | "codex"
 }
 
@@ -88,6 +89,10 @@ export type ListAppTracesResponse = {
 export type ListAppSpansResponse = {
   spans: Array<AppSpan>
   next_page_token: string
+  /**
+   * Conversation content in page order when include_recording is true; otherwise empty. Model input histories are omitted except for the first model request on the initial page.
+   */
+  recording: Array<AppOperationResponse>
 }
 
 /**
@@ -3900,6 +3905,10 @@ export type ListAppSpansData = {
      * Opaque pagination token from a previous response.
      */
     page_token?: string
+    /**
+     * Include conversation content in page order, with only the initial page's first model request and model completion text. Full payloads remain available from the operation endpoint.
+     */
+    include_recording?: boolean
   }
   url: "/api/lens/apps/{clientID}/traces/{traceID}/spans"
 }

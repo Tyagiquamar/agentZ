@@ -46,15 +46,15 @@ export function TraceInspectorSheet({
     <SheetContent
       size="full"
       aria-describedby={description ? descriptionId : undefined}
-      className="gap-0 overflow-x-hidden overflow-y-auto border-l bg-background p-0 text-sm shadow-2xl md:w-[89vw] lg:w-[84vw] lg:overflow-hidden [&_svg]:size-4"
+      className="gap-0 overflow-hidden border-l bg-background p-0 text-sm shadow-2xl md:w-[89vw] lg:w-[84vw] [&_svg]:size-4"
     >
       <SheetHeader>
         <SheetTitle className="text-md truncate">{title}</SheetTitle>
         {description ? <SheetDescription id={descriptionId}>{description}</SheetDescription> : null}
       </SheetHeader>
-      <div className="flex flex-col bg-background lg:grid lg:min-h-0 lg:flex-1 lg:grid-rows-[auto_1fr]">
+      <div className="grid min-h-0 flex-1 grid-rows-[auto_1fr] bg-background">
         <div className="bg-muted/50 px-4 py-2">{tabs}</div>
-        <div className="lg:min-h-0 lg:overflow-hidden">{children}</div>
+        <div className="min-h-0 overflow-auto lg:overflow-hidden">{children}</div>
       </div>
     </SheetContent>
   )

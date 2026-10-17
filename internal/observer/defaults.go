@@ -9,6 +9,8 @@ const (
 	DefaultHubbleRelayAddr = "localhost:4245"
 	// DefaultOTLPTraceGRPCAddr is the OTLP/gRPC trace receiver address.
 	DefaultOTLPTraceGRPCAddr = ":4317"
+	// DefaultOTLPAppGRPCAddr stays local until network isolation is configured.
+	DefaultOTLPAppGRPCAddr = "127.0.0.1:4318"
 	// DefaultOTLPTraceMaxMessageSize accommodates measured full input/output exports.
 	DefaultOTLPTraceMaxMessageSize = 128 << 20
 	// DefaultBatchSize balances COPY throughput with bounded shutdown drain.

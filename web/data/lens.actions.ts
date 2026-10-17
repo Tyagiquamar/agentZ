@@ -1,7 +1,5 @@
 "use server"
 
-import { z } from "zod"
-
 import {
   getMcpGraph,
   getAppMcpGraph,
@@ -34,7 +32,6 @@ import {
   type ListTraceSessionsData,
   type Span,
   type AppPayload,
-  type JsonValue,
   type TraceSession,
   type WorkspaceType,
 } from "@/lib/gateway/client"
@@ -66,10 +63,10 @@ import type {
 import { dayjs, formatDurationMs, formatRecentTimestamp } from "@/lib/format"
 import { getGatewayServerClient } from "@/lib/gateway/server-client"
 import { createAgentOpencodeClient } from "@/lib/opencode/server-client"
+import { readTraceRecording, readToolContent } from "@/lib/trace-recording"
 
 const maxChartPoints = 25
 const chartSourceLimit = 100
-const toolTextPart = z.strictObject({ type: z.enum(["text", "input_text"]), text: z.string() })
 type DayjsDate = ReturnType<typeof dayjs>
 type AggregatedTelemetryEvent = {
   last_seen: string
@@ -300,6 +297,28 @@ export async function getSpanDetailAction(
         payloadSection("tool_result", "Tool result", payload.tool_result),
         payloadSection("tool_error", "Tool error", toolError),
       ],
+    },
+    error: undefined,
+  }
+}
+
+/** getTraceRecordingAction fetches one bounded page of captured activity. */
+export async function getTraceRecordingAction(
+  clientID: string,
+  traceID: string,
+  workspaceId: string,
+  pageToken?: string
+) {
+  const page = await listAppSpans({
+    path: { clientID, traceID },
+    query: { limit: 50, page_token: pageToken, include_recording: true },
+    client: getGatewayServerClient(workspaceId),
+  })
+  if (page.error) return { data: undefined, error: page.error }
+  return {
+    data: {
+      steps: readTraceRecording(page.data.recording, !pageToken),
+      nextPageToken: page.data.next_page_token,
     },
     error: undefined,
   }
@@ -680,75 +699,50 @@ function traceListItems(
   traces: readonly (TraceSession | AppTrace)[],
   subject: TraceSubject
 ): TraceListItem[] {
-  const durations = traces.map((trace) => trace.duration_ns / 1_000_000)
-  const totalDurationMs = durations.reduce((total, durationMs) => total + durationMs, 0)
+  const totalDurationMs = traces.reduce((total, trace) => total + trace.duration_ns / 1_000_000, 0)
   let cumulativeDurationMs = 0
-
   return traces.map((trace, index) => {
-    cumulativeDurationMs += durations[index] ?? 0
+    const startedAt = dayjs(trace.started_at)
+    const endedAt = dayjs(trace.ended_at)
+    const totalTokens =
+      trace.input_tokens === null || trace.output_tokens === null
+        ? null
+        : trace.input_tokens + trace.output_tokens
+    const durationMs = trace.duration_ns / 1_000_000
+    cumulativeDurationMs += durationMs
+    const startedDate = startedAt.isValid()
+      ? formatRecentTimestamp(trace.started_at, "MMM D, YYYY")
+      : trace.started_at
+    const startedTime = startedAt.isValid() ? startedAt.format("h:mm A") : trace.started_at
+    const endedTime = endedAt.isValid() ? endedAt.format("h:mm A") : trace.ended_at
 
-    return traceListItem({
-      trace,
+    return {
       subject,
+      traceId: trace.trace_id,
+      startedAt: trace.started_at,
+      endedAt: trace.ended_at,
+      startedDate,
+      startedTime,
+      endedTime,
+      duration: formatDurationMs(durationMs),
+      durationMs,
       cumulativeDurationMs,
       cumulativeDurationPercent:
         totalDurationMs === 0 ? 0 : (cumulativeDurationMs / totalDurationMs) * 100,
       waterfallDelayMs: index * 70,
-    })
+      spanCount: trace.span_count,
+      errorCount: trace.error_count,
+      toolCount: trace.tool_count,
+      modelCount: trace.model_count,
+      inputTokens: trace.input_tokens,
+      outputTokens: trace.output_tokens,
+      totalTokens,
+      tokenRatio:
+        totalTokens === null || totalTokens === 0 || trace.output_tokens === null
+          ? 0
+          : trace.output_tokens / totalTokens,
+    }
   })
-}
-
-function traceListItem({
-  trace,
-  subject,
-  cumulativeDurationMs,
-  cumulativeDurationPercent,
-  waterfallDelayMs,
-}: {
-  trace: TraceSession | AppTrace
-  subject: TraceSubject
-  cumulativeDurationMs: number
-  cumulativeDurationPercent: number
-  waterfallDelayMs: number
-}): TraceListItem {
-  const startedAt = dayjs(trace.started_at)
-  const endedAt = dayjs(trace.ended_at)
-  const totalTokens =
-    trace.input_tokens === null || trace.output_tokens === null
-      ? null
-      : trace.input_tokens + trace.output_tokens
-  const durationMs = trace.duration_ns / 1_000_000
-  const startedDate = startedAt.isValid()
-    ? formatRecentTimestamp(trace.started_at, "MMM D, YYYY")
-    : trace.started_at
-  const startedTime = startedAt.isValid() ? startedAt.format("h:mm A") : trace.started_at
-  const endedTime = endedAt.isValid() ? endedAt.format("h:mm A") : trace.ended_at
-
-  return {
-    subject,
-    traceId: trace.trace_id,
-    startedAt: trace.started_at,
-    endedAt: trace.ended_at,
-    startedDate,
-    startedTime,
-    endedTime,
-    duration: formatDurationMs(durationMs),
-    durationMs,
-    cumulativeDurationMs,
-    cumulativeDurationPercent,
-    waterfallDelayMs,
-    spanCount: trace.span_count,
-    errorCount: trace.error_count,
-    toolCount: trace.tool_count,
-    modelCount: trace.model_count,
-    inputTokens: trace.input_tokens,
-    outputTokens: trace.output_tokens,
-    totalTokens,
-    tokenRatio:
-      totalTokens === null || totalTokens === 0 || trace.output_tokens === null
-        ? 0
-        : trace.output_tokens / totalTokens,
-  }
 }
 
 function spanListItems<T extends Span | AppSpan>(
@@ -823,7 +817,7 @@ function spanListItem({
     endLabel,
     duration: durationMs === null ? undefined : formatDurationMs(durationMs),
     durationMs,
-    displayName: displayName(span),
+    displayName: operationLabel(span),
     operationLabel: operationLabel(span),
     spanClass: span.span_class,
     kind: span.kind,
@@ -844,22 +838,12 @@ function spanListItem({
 }
 
 function payloadSection(key: string, label: string, json: string): SpanDetailPayloadSection {
-  let content: SpanDetailPayloadSection["content"] = { code: json }
-  if (key === "tool_arguments" || key === "tool_result") {
-    // Decode the protocol's scalar/text-block forms once. Structured payloads
-    // keep the original JSON bytes, including exact integer digits.
-    const value: JsonValue = JSON.parse(json)
-    if (typeof value === "string") content = { text: value }
-    if (key === "tool_result" && Array.isArray(value) && value.length > 0) {
-      const parts: string[] = []
-      for (const part of value) {
-        const text = toolTextPart.safeParse(part)
-        if (!text.success) break
-        parts.push(text.data.text)
-      }
-      if (parts.length === value.length) content = { text: parts.join("\n\n") }
-    }
-  }
+  let kind: "arguments" | "result" | "error" | undefined
+  if (key === "tool_arguments") kind = "arguments"
+  if (key === "tool_result") kind = "result"
+  if (key === "tool_error") kind = "error"
+  const tool = kind ? readToolContent(json, kind) : undefined
+  const content = tool?.format === "text" ? { text: tool.text } : { code: json }
   return { key, label, content, empty: json === "null" || json === "[]" || json === "{}" }
 }
 
@@ -955,22 +939,6 @@ function operationLabel(span: Span | AppSpan) {
   }
 
   return span.operation_name || span.name
-}
-
-function displayName(span: Span | AppSpan) {
-  if (span.operation_name === "invoke_agent") {
-    return "Agent run"
-  }
-
-  if (span.tool_name) {
-    return span.tool_name
-  }
-
-  if (span.model) {
-    return "Model call"
-  }
-
-  return span.name
 }
 
 function spanType(span: Span | AppSpan): SpanListItem["spanType"] {

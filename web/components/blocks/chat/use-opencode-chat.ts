@@ -623,11 +623,7 @@ function sessionTreeQueryOptions(agentName: string, workspaceId: string, directo
   })
 }
 
-export function sessionStatusQueryOptions(
-  agentName: string,
-  workspaceId: string,
-  directory: string
-) {
+function sessionStatusQueryOptions(agentName: string, workspaceId: string, directory: string) {
   return queryOptions({
     queryFn: async () => {
       const client = await createAgentOpencodeClient(agentName, workspaceId)
