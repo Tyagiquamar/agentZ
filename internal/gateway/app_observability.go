@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -17,12 +18,6 @@ import (
 	gatewayapi "github.com/accuknox/agentz/internal/gateway/openapi"
 	agentzv1alpha1 "github.com/accuknox/agentz/pkg/apis/agentz/v1alpha1"
 )
-
-type appObservabilityRequest struct {
-	resourceAccess
-	app  gatewayapi.LensApp
-	apps []gatewayapi.LensApp
-}
 
 type appPageScope struct {
 	OrganizationID string    `json:"organization_id"`
@@ -54,15 +49,15 @@ type appTracePageCursor struct {
 	TraceID   string       `json:"trace_id"`
 }
 
-func (s *Service) appObservability(w http.ResponseWriter, r *http.Request, clientID string) (appObservabilityRequest, bool) {
+func (s *Service) appObservability(w http.ResponseWriter, r *http.Request, clientID string) (resourceAccess, bool) {
 	claims, apiErr := externalWorkspaceClaims(r.Context())
 	if apiErr != nil {
 		apiutil.WriteError(w, r, apiErr)
-		return appObservabilityRequest{}, false
+		return resourceAccess{}, false
 	}
 	if claims.WorkspaceID == "" {
 		apiutil.WriteError(w, r, resourceForbidden(errors.New("app telemetry requires a selected Workspace")))
-		return appObservabilityRequest{}, false
+		return resourceAccess{}, false
 	}
 	access, apiErr := s.resolveResourceAccess(r.Context(), resourceAccessRequest{
 		resource: "Observability", workspaceID: claims.WorkspaceID,
@@ -70,38 +65,24 @@ func (s *Service) appObservability(w http.ResponseWriter, r *http.Request, clien
 	})
 	if apiErr != nil {
 		apiutil.WriteError(w, r, apiErr)
-		return appObservabilityRequest{}, false
+		return resourceAccess{}, false
 	}
-	req := appObservabilityRequest{resourceAccess: access, apps: []gatewayapi.LensApp{}}
-	if clientID != "" {
-		row, err := s.queries.GatewayGetLensApp(r.Context(), gatewaydb.GatewayGetLensAppParams{
-			OrganizationID: claims.OrganizationID, WorkspaceID: claims.WorkspaceID, ClientID: clientID,
-		})
-		if err != nil {
-			apiutil.WriteError(w, r, mapGatewayStoreError("get app telemetry", err))
-			return req, false
-		}
-		req.app = gatewayapi.LensApp{ClientId: row.ClientID, Name: row.Name}
-		if row.AgentKind != "" {
-			req.app.AgentKind = new(gatewayapi.LensAppAgentKind(row.AgentKind))
-		}
-		return req, true
+	if clientID == "" {
+		return access, true
 	}
-	rows, err := s.queries.GatewayListLensApps(r.Context(), gatewaydb.GatewayListLensAppsParams{
-		OrganizationID: claims.OrganizationID, WorkspaceID: claims.WorkspaceID,
+	// Data endpoints need availability without aggregating app metadata history.
+	exists, err := s.queries.GatewayLensAppExists(r.Context(), gatewaydb.GatewayLensAppExistsParams{
+		OrganizationID: claims.OrganizationID, WorkspaceID: claims.WorkspaceID, ClientID: clientID,
 	})
 	if err != nil {
-		apiutil.WriteInternalError(w, r, err)
-		return req, false
+		apiutil.WriteError(w, r, mapGatewayStoreError("get app telemetry", err))
+		return access, false
 	}
-	for _, row := range rows {
-		app := gatewayapi.LensApp{ClientId: row.ClientID, Name: row.Name}
-		if row.AgentKind != "" {
-			app.AgentKind = new(gatewayapi.LensAppAgentKind(row.AgentKind))
-		}
-		req.apps = append(req.apps, app)
+	if !exists {
+		apiutil.WriteError(w, r, mapGatewayStoreError("get app telemetry", pgx.ErrNoRows))
+		return access, false
 	}
-	return req, true
+	return access, true
 }
 
 // ListLensApps lists apps with approved selections or telemetry in the active Workspace.
@@ -110,7 +91,22 @@ func (s *Service) ListLensApps(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	apiutil.WriteJSON(w, http.StatusOK, gatewayapi.ListLensAppsResponse{Apps: req.apps})
+	rows, err := s.queries.GatewayListLensApps(r.Context(), gatewaydb.GatewayListLensAppsParams{
+		OrganizationID: req.claims.OrganizationID, WorkspaceID: req.workspaceID,
+	})
+	if err != nil {
+		apiutil.WriteInternalError(w, r, err)
+		return
+	}
+	apps := make([]gatewayapi.LensApp, 0, len(rows))
+	for _, row := range rows {
+		app := gatewayapi.LensApp{ClientId: row.ClientID, Name: row.Name}
+		if row.AgentKind != "" {
+			app.AgentKind = new(gatewayapi.LensAppAgentKind(row.AgentKind))
+		}
+		apps = append(apps, app)
+	}
+	apiutil.WriteJSON(w, http.StatusOK, gatewayapi.ListLensAppsResponse{Apps: apps})
 }
 
 // ListAppSessions lists native conversation IDs using workspace observability authorization.
@@ -427,9 +423,21 @@ func appSpan(row gatewaydb.ObserverAppSpan) gatewayapi.AppSpan {
 
 // GetAppMCPGraph counts actual native tool executions within the selected Workspace.
 func (s *Service) GetAppMCPGraph(w http.ResponseWriter, r *http.Request, clientID string, params gatewayapi.GetAppMCPGraphParams) {
-	req, ok := s.appObservability(w, r, clientID)
+	// The metadata lookup below also verifies app availability.
+	req, ok := s.appObservability(w, r, "")
 	if !ok {
 		return
+	}
+	appRow, err := s.queries.GatewayGetLensApp(r.Context(), gatewaydb.GatewayGetLensAppParams{
+		OrganizationID: req.claims.OrganizationID, WorkspaceID: req.workspaceID, ClientID: clientID,
+	})
+	if err != nil {
+		apiutil.WriteError(w, r, mapGatewayStoreError("get app telemetry", err))
+		return
+	}
+	app := gatewayapi.LensApp{ClientId: appRow.ClientID, Name: appRow.Name}
+	if appRow.AgentKind != "" {
+		app.AgentKind = new(gatewayapi.LensAppAgentKind(appRow.AgentKind))
 	}
 	after, before := params.From.UTC(), params.To.Time.UTC().Add(24*time.Hour)
 	if !after.Before(before) {
@@ -449,7 +457,7 @@ func (s *Service) GetAppMCPGraph(w http.ResponseWriter, r *http.Request, clientI
 		return
 	}
 	graph := gatewayapi.AppMCPGraphResponse{
-		App: req.app, Connections: []gatewayapi.MCPGraphConnection{}, Tools: []gatewayapi.MCPGraphTool{}, Edges: []gatewayapi.MCPGraphEdge{},
+		App: app, Connections: []gatewayapi.MCPGraphConnection{}, Tools: []gatewayapi.MCPGraphTool{}, Edges: []gatewayapi.MCPGraphEdge{},
 	}
 	connections := map[string]bool{}
 	for _, row := range rows {

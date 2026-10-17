@@ -2830,6 +2830,39 @@ func (q *Queries) GatewayIsActiveSuperadmin(ctx context.Context, arg GatewayIsAc
 	return exists, err
 }
 
+const gatewayLensAppExists = `-- name: GatewayLensAppExists :one
+SELECT EXISTS (
+ SELECT 1 FROM observer_app_operations op
+ WHERE op.organization_id = $1 AND op.workspace_id = $2
+   AND op.client_id = $3
+ UNION ALL
+ SELECT 1 FROM delegation_grants g JOIN oauth_clients c ON c.client_id = g.client_id
+ WHERE g.organization_id = $1 AND g.client_id = $3
+   AND g.approved_at IS NOT NULL AND g.revoked_at IS NULL AND c.disabled IS NOT TRUE
+   AND EXISTS (
+    SELECT 1 FROM jsonb_array_elements((g.selection->'models') || (g.selection->'mcp')) AS selected
+    WHERE selected->>'workspace_id' = $2
+   )
+ UNION ALL
+ SELECT 1 FROM external_agents e
+ WHERE e.organization_id = $1 AND e.workspace_id = $2
+   AND e.client_id = $3
+) AS exists
+`
+
+type GatewayLensAppExistsParams struct {
+	OrganizationID string `json:"organization_id"`
+	WorkspaceID    string `json:"workspace_id"`
+	ClientID       string `json:"client_id"`
+}
+
+func (q *Queries) GatewayLensAppExists(ctx context.Context, arg GatewayLensAppExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, gatewayLensAppExists, arg.OrganizationID, arg.WorkspaceID, arg.ClientID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const gatewayListAPIKeyTargets = `-- name: GatewayListAPIKeyTargets :many
 SELECT target_type, agent_name, workflow_name
 FROM api_key_targets

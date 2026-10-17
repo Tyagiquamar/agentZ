@@ -90,6 +90,7 @@ type Querier interface {
 	GatewayInvalidateCodingSnapshots(ctx context.Context, projectID string) error
 	GatewayIsActiveOrganizationMember(ctx context.Context, arg GatewayIsActiveOrganizationMemberParams) (bool, error)
 	GatewayIsActiveSuperadmin(ctx context.Context, arg GatewayIsActiveSuperadminParams) (bool, error)
+	GatewayLensAppExists(ctx context.Context, arg GatewayLensAppExistsParams) (bool, error)
 	GatewayListAPIKeyTargets(ctx context.Context, apiKeyID string) ([]GatewayListAPIKeyTargetsRow, error)
 	GatewayListAccessibleWorkspaces(ctx context.Context, arg GatewayListAccessibleWorkspacesParams) ([]GatewayListAccessibleWorkspacesRow, error)
 	GatewayListAgentAccessTargets(ctx context.Context, arg GatewayListAgentAccessTargetsParams) ([]GatewayListAgentAccessTargetsRow, error)

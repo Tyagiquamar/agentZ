@@ -2766,6 +2766,25 @@ SELECT latest.client_id, COALESCE(c.name, latest.name)::text AS name, COALESCE(k
 FROM latest JOIN kinds ON kinds.client_id = latest.client_id LEFT JOIN oauth_clients c ON c.client_id = latest.client_id
 ORDER BY COALESCE(c.name, latest.name), latest.client_id;
 
+-- name: GatewayLensAppExists :one
+SELECT EXISTS (
+ SELECT 1 FROM observer_app_operations op
+ WHERE op.organization_id = sqlc.arg(organization_id) AND op.workspace_id = sqlc.arg(workspace_id)
+   AND op.client_id = sqlc.arg(client_id)
+ UNION ALL
+ SELECT 1 FROM delegation_grants g JOIN oauth_clients c ON c.client_id = g.client_id
+ WHERE g.organization_id = sqlc.arg(organization_id) AND g.client_id = sqlc.arg(client_id)
+   AND g.approved_at IS NOT NULL AND g.revoked_at IS NULL AND c.disabled IS NOT TRUE
+   AND EXISTS (
+    SELECT 1 FROM jsonb_array_elements((g.selection->'models') || (g.selection->'mcp')) AS selected
+    WHERE selected->>'workspace_id' = sqlc.arg(workspace_id)
+   )
+ UNION ALL
+ SELECT 1 FROM external_agents e
+ WHERE e.organization_id = sqlc.arg(organization_id) AND e.workspace_id = sqlc.arg(workspace_id)
+   AND e.client_id = sqlc.arg(client_id)
+) AS exists;
+
 -- name: GatewayGetLensApp :one
 WITH subjects AS (
  SELECT op.client_id, op.app_name AS name, op.agent_kind, MAX(op.start_time) AS last_seen
