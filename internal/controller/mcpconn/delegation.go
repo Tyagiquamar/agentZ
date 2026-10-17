@@ -79,7 +79,10 @@ func (r *ExtAuthRuntimeReconciler) reconcileDelegationRuntime(ctx context.Contex
 			}
 			consumed = true
 			_, delegated := route.Labels[authorization.DelegationLabel]
-			needed = needed || delegated
+			if delegated {
+				needed = true
+				break
+			}
 		}
 		err := r.reconcileDelegationTracing(ctx, ns, desired.Name, needed, ownerRefs)
 		if err != nil {

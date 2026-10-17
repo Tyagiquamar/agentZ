@@ -123,16 +123,12 @@ func (r *traceReceiver) run(ctx context.Context, cfg Config) error {
 		srv.GracefulStop()
 		stop.Stop()
 		err = <-errCh
-		if err != nil && err != grpc.ErrServerStopped {
-			return fmt.Errorf("serve otlp trace grpc: %w", err)
-		}
-		return nil
 	case err = <-errCh:
-		if err != nil && err != grpc.ErrServerStopped {
-			return fmt.Errorf("serve otlp trace grpc: %w", err)
-		}
-		return nil
 	}
+	if err != nil && err != grpc.ErrServerStopped {
+		return fmt.Errorf("serve otlp trace grpc: %w", err)
+	}
+	return nil
 }
 
 // Export queues valid spans and accounts for rejected telemetry.
@@ -159,10 +155,6 @@ func (r *traceReceiver) Export(ctx context.Context, req *tracev1.ExportTraceServ
 }
 
 func traceEventsFromOTLPRequest(req *tracev1.ExportTraceServiceRequest, app bool) ([]event, int) {
-	if req == nil {
-		return nil, 0
-	}
-
 	events := make([]event, 0)
 	rejected := 0
 	for _, rs := range req.GetResourceSpans() {
@@ -345,13 +337,9 @@ func traceEventFromOTLPSpan(sp *tracepb.Span, resourceAttrs map[string]*commonpb
 
 	spanClass, operationName := classifySpan(sp.GetName(), spanAttrs)
 	status := statusCode(sp.GetStatus())
-	var statusMessage string
-	if sp.GetStatus() != nil {
-		statusMessage = sp.GetStatus().GetMessage()
-	}
 	errorMessage := cmp.Or(
 		firstStringAttr(spanAttrs, resourceAttrs, attrErrorMessage),
-		statusMessage,
+		sp.GetStatus().GetMessage(),
 		firstStringAttr(spanAttrs, resourceAttrs, attrError),
 	)
 
@@ -370,8 +358,8 @@ func traceEventFromOTLPSpan(sp *tracepb.Span, resourceAttrs map[string]*commonpb
 	storedResourceAttrs := attrsForStorage(resourceAttrs)
 	delete(storedResourceAttrs, "os.type")
 	delete(storedResourceAttrs, "host.arch")
-	resourceJSON := jsonObject(storedResourceAttrs)
-	spanJSON := jsonObject(strippedAttrs)
+	resourceJSON := marshalJSON(storedResourceAttrs)
+	spanJSON := marshalJSON(strippedAttrs)
 	var mcpToolCall *mcpToolCallEvent
 	if spanClass == spanClassTool && toolName != "" {
 		connectionName := cmp.Or(
@@ -581,17 +569,10 @@ func jsonValue(v any) []byte {
 			return raw
 		}
 	}
-	return mustJSON(v)
+	return marshalJSON(v)
 }
 
-func jsonObject(v map[string]any) []byte {
-	if len(v) == 0 {
-		return []byte("{}")
-	}
-	return mustJSON(v)
-}
-
-func mustJSON(v any) []byte {
+func marshalJSON(v any) []byte {
 	data, err := json.Marshal(v)
 	if err != nil {
 		return []byte(null)
@@ -655,9 +636,6 @@ func spanKind(kind tracepb.Span_SpanKind) string {
 }
 
 func statusCode(status *tracepb.Status) string {
-	if status == nil {
-		return ""
-	}
 	switch status.GetCode() {
 	case tracepb.Status_STATUS_CODE_OK:
 		return statusOK

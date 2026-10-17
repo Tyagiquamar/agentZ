@@ -541,15 +541,16 @@ index 2895b0a..592f530 100644
  					sequence_number += 1;
  					return vec![(
 diff --git a/crates/llm/src/conversion/completions.rs b/crates/llm/src/conversion/completions.rs
-index c9ce063..fde6efe 100644
+index c9ce063..9bae031 100644
 --- a/crates/llm/src/conversion/completions.rs
 +++ b/crates/llm/src/conversion/completions.rs
-@@ -5,10 +5,18 @@ use agent_http::Body;
+@@ -5,10 +5,19 @@ use agent_http::Body;
  use bytes::Bytes;
  use http::Response;
  use itertools::Itertools;
 -use tracing::debug;
  
++use crate::parse::sse::SseJsonEvent;
  use crate::{StreamingUsageGuard, logged_response_parsing, parse, types};
  
 +#[derive(serde::Deserialize)]
@@ -564,7 +565,7 @@ index c9ce063..fde6efe 100644
  #[cfg(test)]
  #[path = "completions_tests.rs"]
  mod tests;
-@@ -125,6 +133,7 @@ pub mod from_messages {
+@@ -125,6 +134,7 @@ pub mod from_messages {
  		});
  		let anthropic = translate_response_internal(resp)?;
  		Ok(Box::new(super::super::ResponseWithProviderUsage {
@@ -572,7 +573,7 @@ index c9ce063..fde6efe 100644
  			response: anthropic,
  			provider_usage,
  		}))
-@@ -574,17 +583,38 @@ pub mod from_messages {
+@@ -574,17 +584,38 @@ pub mod from_messages {
  			}
  		}
  
@@ -613,7 +614,7 @@ index c9ce063..fde6efe 100644
  					flush_message_end(&mut state, &mut events, &log, true, log_content.tool_calls);
  					return events;
  				},
-@@ -595,7 +625,22 @@ pub mod from_messages {
+@@ -595,7 +626,22 @@ pub mod from_messages {
  					);
  					return events;
  				},
@@ -637,7 +638,7 @@ index c9ce063..fde6efe 100644
  					if !state.sent_message_start {
  						state.sent_message_start = true;
  						push_event(
-@@ -662,6 +707,14 @@ pub mod from_messages {
+@@ -662,6 +708,14 @@ pub mod from_messages {
  							state.thinking_signature = Some(signature.to_string());
  						}
  						if let Some(content) = choice.delta.content.as_deref().filter(|s| !s.is_empty()) {
@@ -652,7 +653,7 @@ index c9ce063..fde6efe 100644
  							let index = open_text_block(&mut state, &mut events);
  							maybe_set_first_token(&mut state, &log);
  							push_event(
-@@ -733,6 +786,7 @@ pub mod from_messages {
+@@ -733,6 +787,7 @@ pub mod from_messages {
  						}
  
  						if let Some(finish_reason) = &choice.finish_reason {
@@ -660,7 +661,7 @@ index c9ce063..fde6efe 100644
  							let mut stop_reason = match finish_reason {
  								completions::FinishReason::Stop => messages::StopReason::EndTurn,
  								completions::FinishReason::Length => messages::StopReason::MaxTokens,
-@@ -1349,131 +1403,176 @@ pub fn passthrough_stream(
+@@ -1349,131 +1404,183 @@ pub fn passthrough_stream(
  		arguments: String,
  	}
  
@@ -758,6 +759,13 @@ index c9ce063..fde6efe 100644
 +			if terminal {
 +				return;
 +			}
++			let f = match f {
++				SseJsonEvent::Data(result) => Some(result),
++				SseJsonEvent::Done => None,
++				SseJsonEvent::Eof | SseJsonEvent::Error => Some(Err(anyhow::anyhow!(
++					"stream interrupted before terminal event"
++				))),
++			};
 +			let f = match f {
 +				Some(Ok(CapturedStreamEvent::Chunk(chunk))) => chunk,
 +				Some(Ok(CapturedStreamEvent::Error { error })) => {
@@ -952,10 +960,18 @@ index c9ce063..fde6efe 100644
  	})
  }
 diff --git a/crates/llm/src/conversion/messages.rs b/crates/llm/src/conversion/messages.rs
-index 76685f5..36eb4de 100644
+index 76685f5..f45f1c5 100644
 --- a/crates/llm/src/conversion/messages.rs
 +++ b/crates/llm/src/conversion/messages.rs
-@@ -539,6 +539,7 @@ pub mod from_completions {
+@@ -5,6 +5,7 @@ use agent_core::strng::{self, Strng};
+ use agent_http::Body;
+ use bytes::Bytes;
+ 
++use crate::parse::sse::SseJsonEvent;
+ use crate::types::completions::typed as completions;
+ use crate::types::messages::typed as messages;
+ use crate::{AIError, StreamingUsageGuard, parse};
+@@ -539,6 +540,7 @@ pub mod from_completions {
  		let passthrough = json::convert::<_, types::completions::Response>(&openai)
  			.map_err(AIError::ResponseParsing)?;
  		Ok(Box::new(super::super::ResponseWithProviderUsage {
@@ -963,7 +979,7 @@ index 76685f5..36eb4de 100644
  			response: passthrough,
  			provider_usage,
  		}))
-@@ -727,6 +728,7 @@ pub mod from_completions {
+@@ -727,6 +729,7 @@ pub mod from_completions {
  		let mut tool_calls = super::StreamingToolCalls::new(log_content.tool_calls);
  
  		// https://docs.anthropic.com/en/docs/build-with-claude/streaming
@@ -971,7 +987,7 @@ index 76685f5..36eb4de 100644
  		let body = parse::sse::json_transform::<
  			messages::MessagesStreamEvent,
  			completions::StreamResponse,
-@@ -747,8 +749,23 @@ pub mod from_completions {
+@@ -747,8 +750,23 @@ pub mod from_completions {
  					usage,
  				})
  			};
@@ -997,7 +1013,7 @@ index 76685f5..36eb4de 100644
  
  			// Extract info we need
  			match f {
-@@ -986,7 +1003,9 @@ pub mod from_completions {
+@@ -986,7 +1004,9 @@ pub mod from_completions {
  					}
  				},
  				messages::MessagesStreamEvent::MessageStop => {
@@ -1007,7 +1023,7 @@ index 76685f5..36eb4de 100644
  						if let Some(completion) = completion.take() {
  							r.response.completion = Some(vec![completion]);
  						}
-@@ -998,6 +1017,14 @@ pub mod from_completions {
+@@ -998,6 +1018,14 @@ pub mod from_completions {
  				},
  				messages::MessagesStreamEvent::Ping => None,
  				messages::MessagesStreamEvent::Error { error } => {
@@ -1022,16 +1038,42 @@ index 76685f5..36eb4de 100644
  					tracing::warn!(
  						"Messages stream error during completions translation: {}",
  						error.message
-@@ -1113,7 +1140,33 @@ pub fn passthrough_stream(
+@@ -1113,20 +1141,36 @@ pub fn passthrough_stream(
  	let mut completion = log_content.completion.then(String::new);
  	let mut tool_calls = StreamingToolCalls::new(log_content.tool_calls);
  	// https://platform.claude.com/docs/en/build-with-claude/streaming
 +	let mut terminal = false;
  	parse::sse::json_passthrough::<messages::MessagesStreamEvent>(b, buffer_limit, move |f| {
+-		// ignore errors... what else can we do?
+-		let Some(Ok(f)) = f else {
+-			// Stream ended ([DONE]): flush completion if not already set via MessageDelta
+-			if f.is_none() {
+-				log.update(|r| {
+-					if let Some(c) = completion.take() {
+-						r.response.completion = Some(vec![c]);
+-					}
+-					if r.response.output_messages.is_none() {
+-						r.response.output_messages = tool_calls.take_output_messages(None);
+-					}
+-				});
+-			}
 +		if terminal {
 +			return;
 +		}
-+		if let Some(Err(error)) = &f {
++		let f = match f {
++			SseJsonEvent::Data(result) => result,
++			SseJsonEvent::Done | SseJsonEvent::Eof | SseJsonEvent::Error => {
++				Err(anyhow::anyhow!("stream interrupted before terminal event"))
++			},
++		};
++		let failure = match f {
++			Err(ref error) => Some(("stream_error".to_owned(), error.to_string())),
++			Ok(messages::MessagesStreamEvent::Error { ref error }) => {
++				Some((error.r#type.clone(), error.message.clone()))
++			},
++			_ => None,
++		};
++		if let Some((kind, message)) = failure {
 +			terminal = true;
 +			log.update(|r| {
 +				if let Some(c) = completion.take() {
@@ -1039,24 +1081,14 @@ index 76685f5..36eb4de 100644
 +				}
 +				r.response.output_messages = tool_calls.take_output_messages(None);
 +			});
-+			log.fail("stream_error", error.to_string());
++			log.fail(kind, message);
 +			return;
 +		}
-+		if let Some(Ok(messages::MessagesStreamEvent::Error { error })) = &f {
-+			terminal = true;
-+			log.update(|r| {
-+				if let Some(c) = completion.take() {
-+					r.response.completion = Some(vec![c]);
-+				}
-+				r.response.output_messages = tool_calls.take_output_messages(None);
-+			});
-+			log.fail(error.r#type.clone(), error.message.clone());
-+			return;
-+		}
- 		// ignore errors... what else can we do?
- 		let Some(Ok(f)) = f else {
- 			// Stream ended ([DONE]): flush completion if not already set via MessageDelta
-@@ -1206,7 +1259,12 @@ pub fn passthrough_stream(
++		let Ok(f) = f else {
+ 			return;
+ 		};
+ 
+@@ -1206,7 +1250,12 @@ pub fn passthrough_stream(
  				});
  			},
  			messages::MessagesStreamEvent::MessageStop => {
@@ -1197,10 +1229,18 @@ index 7daf173..861abec 100644
  						// Fall through to namespace restoration for the terminal events too.
  						if !flushed {
 diff --git a/crates/llm/src/conversion/responses.rs b/crates/llm/src/conversion/responses.rs
-index 24540d8..90882e4 100644
+index 24540d8..1466251 100644
 --- a/crates/llm/src/conversion/responses.rs
 +++ b/crates/llm/src/conversion/responses.rs
-@@ -25,107 +25,297 @@ pub fn passthrough_stream(
+@@ -5,6 +5,7 @@ use agent_core::strng::{self, Strng};
+ use agent_http::Body;
+ use serde::Deserialize;
+ 
++use crate::parse::sse::SseJsonEvent;
+ use crate::types::detect;
+ use crate::{OutputMessage, OutputMessagePart, StreamingUsageGuard, parse, types};
+ 
+@@ -25,107 +26,291 @@ pub fn passthrough_stream(
  	mut log: StreamingUsageGuard,
  	log_content: crate::LogContentFields,
  ) -> Body {
@@ -1291,12 +1331,17 @@ index 24540d8..90882e4 100644
 -			}
 +		if terminal {
  			return;
--		};
 +		}
++		let event = match event {
++			SseJsonEvent::Data(result) => result,
++			SseJsonEvent::Done | SseJsonEvent::Eof | SseJsonEvent::Error => {
++				Err(anyhow::anyhow!("stream interrupted before terminal event"))
++			},
+ 		};
  		let event = match event {
 -			StreamResponse::Typed(e) => e,
 -			StreamResponse::Raw(raw) => {
-+			Some(Err(error)) => {
++			Err(error) => {
 +				terminal = true;
 +				flush_capture(
 +					&log,
@@ -1308,23 +1353,11 @@ index 24540d8..90882e4 100644
 +				log.fail("stream_error", error.to_string());
 +				return;
 +			},
-+			None => {
-+				terminal = true;
-+				flush_capture(
-+					&log,
-+					&mut completion,
-+					&mut tool_calls,
-+					&mut pending_tool_calls,
-+					None,
-+				);
-+				log.update(|r| r.response.stream_complete = true);
-+				return;
-+			},
-+			Some(Ok(StreamResponse::Raw(raw))) => {
++			Ok(StreamResponse::Raw(raw)) => {
  				detect::amend_from_stream_response(&mut log, &raw);
  				return;
  			},
-+			Some(Ok(StreamResponse::Typed(event))) => event,
++			Ok(StreamResponse::Typed(event)) => event,
  		};
 -		match event {
 -			types::responses::typed::ResponseStreamEvent::ResponseCreated(created) => {
@@ -1428,8 +1461,7 @@ index 24540d8..90882e4 100644
 +					event.message,
 +				);
 +				return;
- 			},
--			_ => {},
++			},
 +			other => {
 +				match other {
 +					types::responses::typed::ResponseStreamEvent::ResponseCreated(event) => {
@@ -1537,7 +1569,8 @@ index 24540d8..90882e4 100644
 +					_ => {},
 +				}
 +				return;
-+			},
+ 			},
+-			_ => {},
 +		};
 +		terminal = true;
 +		record_response(&log, &response);
@@ -1582,7 +1615,7 @@ index 24540d8..90882e4 100644
  
  fn take_output_messages(
  	tool_calls: &mut Option<BTreeMap<u32, OutputMessagePart>>,
-@@ -738,6 +928,7 @@ pub mod from_messages {
+@@ -738,6 +923,7 @@ pub mod from_messages {
  		});
  		let anthropic = translate_response_internal(resp)?;
  		Ok(Box::new(super::super::ResponseWithProviderUsage {
@@ -1590,7 +1623,7 @@ index 24540d8..90882e4 100644
  			response: anthropic,
  			provider_usage,
  		}))
-@@ -1248,6 +1439,7 @@ pub mod from_messages {
+@@ -1248,6 +1434,7 @@ pub mod from_messages {
  		}
  
  		let mut state = StreamState::default();
@@ -1598,7 +1631,7 @@ index 24540d8..90882e4 100644
  		let mut completion = log_content.completion.then(String::new);
  		let mut tool_calls = log_content.tool_calls.then(BTreeMap::new);
  
-@@ -1261,7 +1453,19 @@ pub mod from_messages {
+@@ -1261,7 +1448,19 @@ pub mod from_messages {
  				return events;
  			}
  			match evt {
@@ -1619,7 +1652,7 @@ index 24540d8..90882e4 100644
  				SseJsonEvent::Done => {
  					flush_message_end(
  						&mut state,
-@@ -1485,6 +1689,7 @@ pub mod from_messages {
+@@ -1485,6 +1684,7 @@ pub mod from_messages {
  						},
  					},
  					responses::ResponseStreamEvent::ResponseCompleted(completed) => {
@@ -1627,7 +1660,7 @@ index 24540d8..90882e4 100644
  						record_response_metadata(&mut state, &log, &completed.response);
  						state.pending_stop_reason = Some(if state.saw_tool_call {
  							messages::StopReason::ToolUse
-@@ -1503,6 +1708,7 @@ pub mod from_messages {
+@@ -1503,6 +1703,7 @@ pub mod from_messages {
  						);
  					},
  					responses::ResponseStreamEvent::ResponseIncomplete(incomplete) => {
@@ -1635,7 +1668,7 @@ index 24540d8..90882e4 100644
  						record_response_metadata(&mut state, &log, &incomplete.response);
  						state.pending_stop_reason = incomplete
  							.response
-@@ -1519,6 +1725,16 @@ pub mod from_messages {
+@@ -1519,6 +1720,16 @@ pub mod from_messages {
  						);
  					},
  					responses::ResponseStreamEvent::ResponseFailed(failed) => {
@@ -1652,7 +1685,7 @@ index 24540d8..90882e4 100644
  						record_response_metadata(&mut state, &log, &failed.response);
  						tracing::warn!(
  							"Responses stream failed during messages translation; emitting error event"
-@@ -1548,6 +1764,13 @@ pub mod from_messages {
+@@ -1548,6 +1759,13 @@ pub mod from_messages {
  						);
  					},
  					responses::ResponseStreamEvent::ResponseError(error) => {
@@ -1666,7 +1699,7 @@ index 24540d8..90882e4 100644
  						tracing::warn!(
  							"Responses stream error during messages translation: {}",
  							error.message
-@@ -1578,6 +1801,9 @@ pub mod from_messages {
+@@ -1578,6 +1796,9 @@ pub mod from_messages {
  					r.response.output_messages = super::take_output_messages(&mut tool_calls, None);
  				});
  			}
@@ -1677,10 +1710,18 @@ index 24540d8..90882e4 100644
  		})
  	}
 diff --git a/crates/llm/src/conversion/vertex_gemini.rs b/crates/llm/src/conversion/vertex_gemini.rs
-index ca54e0a..92189a2 100644
+index ca54e0a..08c7014 100644
 --- a/crates/llm/src/conversion/vertex_gemini.rs
 +++ b/crates/llm/src/conversion/vertex_gemini.rs
-@@ -44,11 +44,27 @@ pub fn passthrough_stream(
+@@ -2,6 +2,7 @@ use agent_core::prelude::Strng;
+ use agent_core::strng;
+ use bytes::Bytes;
+ 
++use crate::parse::sse::SseJsonEvent;
+ use crate::types::{ResponseType, vertex_gemini as vg};
+ use crate::{AIError, logged_response_parsing, types};
+ 
+@@ -44,11 +45,25 @@ pub fn passthrough_stream(
  	use std::time::Instant;
  	let mut saw_token = false;
  	crate::parse::sse::json_passthrough::<vg::GenerateContentResponse>(b, buffer_limit, move |f| {
@@ -1690,17 +1731,15 @@ index ca54e0a..92189a2 100644
 -			return;
 +		// Gemini has no [DONE] sentinel; clean HTTP EOF completes the stream.
 +		let chunk = match f {
-+			Some(Ok(chunk)) => chunk,
-+			Some(Err(error)) => {
-+				if error.is::<serde_json::Error>() {
-+					return;
-+				}
++			SseJsonEvent::Data(Ok(chunk)) => chunk,
++			SseJsonEvent::Data(Err(_)) => return,
++			SseJsonEvent::Error => {
 +				if !log.is_terminal() {
-+					log.fail("stream_error", error.to_string());
++					log.fail("stream_error", "stream interrupted before terminal event");
 +				}
 +				return;
 +			},
-+			None => {
++			SseJsonEvent::Eof | SseJsonEvent::Done => {
 +				log.update(|r| r.response.stream_complete = true);
 +				return;
 +			},
@@ -1712,7 +1751,7 @@ index ca54e0a..92189a2 100644
  		if !saw_token {
  			saw_token = true;
  			log.update(|r| r.response.first_token = Some(Instant::now()));
-@@ -1142,7 +1158,11 @@ pub mod to_completions {
+@@ -1142,7 +1157,11 @@ pub mod to_completions {
  		let typed = build_response(&resp);
  		let inner =
  			json::convert::<_, types::completions::Response>(&typed).map_err(AIError::ResponseParsing)?;
@@ -1725,7 +1764,7 @@ index ca54e0a..92189a2 100644
  	}
  
  	#[derive(Default)]
-@@ -1513,14 +1533,46 @@ pub mod to_completions {
+@@ -1513,14 +1532,46 @@ pub mod to_completions {
  			let chunk = match ev {
  				parse::sse::SseJsonEvent::Data(Ok(c)) => c,
  				parse::sse::SseJsonEvent::Data(Err(e)) => {
@@ -2060,7 +2099,7 @@ index 12d15bb..4131f79 100644
  		}
  	}
 diff --git a/crates/llm/src/parse/sse.rs b/crates/llm/src/parse/sse.rs
-index e762205..a2a6fac 100644
+index e762205..e3aa73c 100644
 --- a/crates/llm/src/parse/sse.rs
 +++ b/crates/llm/src/parse/sse.rs
 @@ -7,7 +7,7 @@ use serde::de::DeserializeOwned;
@@ -2072,36 +2111,21 @@ index e762205..a2a6fac 100644
  use super::transform::{TransformEvent, parser as transform_parser};
  
  /// Append an OpenAI `[DONE]` event after a body closes successfully.
-@@ -33,27 +33,58 @@ pub fn append_done_on_success(body: Body) -> Body {
+@@ -33,27 +33,43 @@ pub fn append_done_on_success(body: Body) -> Body {
  	})
  }
  
 -pub fn json_passthrough<F: DeserializeOwned>(
-+struct FinalizeCallback<T, F: FnMut(Option<anyhow::Result<T>>)> {
-+	callback: F,
-+	done: bool,
-+	marker: std::marker::PhantomData<fn(T)>,
-+}
-+impl<T, F: FnMut(Option<anyhow::Result<T>>)> Drop for FinalizeCallback<T, F> {
-+	fn drop(&mut self) {
-+		if !self.done {
-+			(self.callback)(Some(Err(anyhow::anyhow!(
-+				"stream interrupted before terminal event"
-+			))));
-+		}
-+	}
-+}
-+
 +pub fn json_passthrough<F: DeserializeOwned + 'static>(
  	b: Body,
  	buffer_limit: usize,
 -	mut f: impl FnMut(Option<anyhow::Result<F>>) + Send + 'static,
-+	f: impl FnMut(Option<anyhow::Result<F>>) + Send + 'static,
++	f: impl FnMut(SseJsonEvent<F>) + Send + 'static,
  ) -> Body {
  	let decoder = SseDecoder::<Bytes>::with_max_size(buffer_limit);
  
 -	passthrough_parser(b, decoder, move |o| {
-+	let mut finalizer = FinalizeCallback {
++	let mut finalizer = MultiFinalizer {
 +		callback: f,
 +		done: false,
 +		marker: std::marker::PhantomData,
@@ -2112,7 +2136,7 @@ index e762205..a2a6fac 100644
 +			PassthroughEvent::Eof => {
 +				if !finalizer.done {
 +					finalizer.done = true;
-+					(finalizer.callback)(None);
++					(finalizer.callback)(SseJsonEvent::Eof);
 +				}
 +				return;
 +			},
@@ -2123,12 +2147,12 @@ index e762205..a2a6fac 100644
  		if data.as_ref() == b"[DONE]" {
 -			f(None);
 +			finalizer.done = true;
-+			(finalizer.callback)(None);
++			(finalizer.callback)(SseJsonEvent::Done);
  			return;
  		}
  		let obj = serde_json::from_slice::<F>(&data);
 -		f(Some(obj.map_err(anyhow::Error::from)))
-+		(finalizer.callback)(Some(obj.map_err(anyhow::Error::from)))
++		(finalizer.callback)(SseJsonEvent::Data(obj.map_err(anyhow::Error::from)))
  	})
  }
  
@@ -2137,7 +2161,7 @@ index e762205..a2a6fac 100644
  	b: Body,
  	buffer_limit: usize,
  	mut f: impl FnMut(Option<anyhow::Result<F>>) + Send + 'static,
-@@ -73,20 +104,41 @@ pub fn permissive_json_passthrough<F: DeserializeOwned>(
+@@ -73,20 +89,41 @@ pub fn permissive_json_passthrough<F: DeserializeOwned>(
  	})
  }
  
@@ -2182,7 +2206,7 @@ index e762205..a2a6fac 100644
  				let json_bytes = serde_json::to_vec(&transformed).ok()?;
  				return Some(crate::parse::encode_sse_event("", Bytes::from(json_bytes)));
  			},
-@@ -99,7 +151,7 @@ pub fn json_transform<I: DeserializeOwned, O: Serialize>(
+@@ -99,7 +136,7 @@ pub fn json_transform<I: DeserializeOwned, O: Serialize>(
  			));
  		}
  		let obj = serde_json::from_slice::<I>(&data);
@@ -2191,7 +2215,7 @@ index e762205..a2a6fac 100644
  		let json_bytes = serde_json::to_vec(&transformed).ok()?;
  		Some(crate::parse::encode_sse_event("", Bytes::from(json_bytes)))
  	})
-@@ -112,10 +164,23 @@ pub enum SseJsonEvent<I> {
+@@ -112,10 +149,23 @@ pub enum SseJsonEvent<I> {
  	Error,
  }
  
@@ -2217,7 +2241,7 @@ index e762205..a2a6fac 100644
  ) -> Body
  where
  	It: IntoIterator<Item = (&'static str, O)>,
-@@ -124,6 +189,11 @@ where
+@@ -124,6 +174,11 @@ where
  	let decoder = SseDecoder::<Bytes>::with_max_size(buffer_limit);
  	let encoder = BytesCodec::new();
  
@@ -2229,7 +2253,7 @@ index e762205..a2a6fac 100644
  	transform_parser(b, decoder, encoder, move |event| {
  		let event = match event {
  			TransformEvent::Eof => SseJsonEvent::Eof,
-@@ -140,7 +210,13 @@ where
+@@ -140,7 +195,13 @@ where
  				}
  			},
  		};

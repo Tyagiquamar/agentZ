@@ -10,6 +10,7 @@ import (
 	observerdb "github.com/accuknox/agentz/internal/observer/db"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/tidwall/gjson"
 )
 
 type dbStore struct {
@@ -268,64 +269,24 @@ type appInvocation struct {
 	CallID         string `json:"call_id"`
 }
 
-type appWireItem struct {
-	Type       string          `json:"type"`
-	Role       string          `json:"role"`
-	ID         string          `json:"id"`
-	CallID     string          `json:"call_id"`
-	ToolCallID string          `json:"tool_call_id"`
-	ToolUseID  string          `json:"tool_use_id"`
-	Content    json.RawMessage `json:"content"`
-}
-
-type appWireExchange struct {
-	ToolCalls []appWireItem   `json:"tool_calls"`
-	Messages  []appWireItem   `json:"messages"`
-	Input     json.RawMessage `json:"input"`
-}
-
 func insertAppOperationBatch(ctx context.Context, q *observerdb.Queries, operations []observerdb.InsertAppOperationParams) error {
 	invocations := make([]appInvocation, 0)
 	lockKeys := make([]string, 0)
 	seen := make(map[appInvocation]bool)
 	for _, op := range operations {
 		ids := []string{op.ToolCallID}
-		var output appWireExchange
-		if json.Unmarshal(op.OutputMessages, &output) == nil {
-			for _, call := range output.ToolCalls {
-				ids = append(ids, call.ID)
-			}
+		for _, id := range gjson.GetBytes(op.OutputMessages, "tool_calls.#.id").Array() {
+			ids = append(ids, id.Str)
 		}
-		var input appWireExchange
-		if json.Unmarshal(op.InputMessages, &input) == nil {
-			for _, message := range input.Messages {
-				if message.Role == "tool" {
-					ids = append(ids, message.ToolCallID)
-					continue
-				}
-				if message.Role != "user" || len(message.Content) == 0 || message.Content[0] != '[' {
-					continue
-				}
-				var blocks []appWireItem
-				if json.Unmarshal(message.Content, &blocks) != nil {
-					continue
-				}
-				for _, block := range blocks {
-					if block.Type == "tool_result" {
-						ids = append(ids, block.ToolUseID)
-					}
-				}
-			}
-			// Responses accepts either text or an array of input items.
-			if len(input.Input) > 0 && input.Input[0] == '[' {
-				var items []appWireItem
-				if json.Unmarshal(input.Input, &items) == nil {
-					for _, item := range items {
-						if item.Type == "function_call_output" || item.Type == "custom_tool_call_output" {
-							ids = append(ids, item.CallID)
-						}
-					}
-				}
+		inputPaths := []string{
+			`messages.#(role=="user")#.content.#(type=="tool_result")#.tool_use_id|@flatten`,
+			`input.#(type=="function_call_output")#.call_id`,
+			`input.#(type=="custom_tool_call_output")#.call_id`,
+			`messages.#(role=="tool")#.tool_call_id`,
+		}
+		for _, path := range inputPaths {
+			for _, id := range gjson.GetBytes(op.InputMessages, path).Array() {
+				ids = append(ids, id.Str)
 			}
 		}
 		for _, id := range ids {
@@ -350,7 +311,6 @@ func insertAppOperationBatch(ctx context.Context, q *observerdb.Queries, operati
 	}
 	// Every writer takes the same ordered transaction locks before inserting any
 	// affected observations. Repair statements then see the preceding commit.
-	slices.Sort(lockKeys)
 	if len(lockKeys) > 0 {
 		if err := q.LockAppInvocationKeys(ctx, lockKeys); err != nil {
 			return fmt.Errorf("lock app invocations: %w", err)

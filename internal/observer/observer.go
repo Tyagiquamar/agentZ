@@ -270,13 +270,15 @@ func newKubeArmorRelayClient(ctx context.Context, addr string) (*grpc.ClientConn
 	}
 
 	client := pb.NewLogServiceClient(conn)
-	nonce := time.Now().UnixNano()
-	reply, err := client.HealthCheck(ctx, &pb.NonceMessage{Nonce: int32(nonce)})
+	nonce := int32(time.Now().UnixNano())
+	checkCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	reply, err := client.HealthCheck(checkCtx, &pb.NonceMessage{Nonce: nonce})
 	if err != nil {
 		_ = conn.Close()
 		return nil, nil, fmt.Errorf("kubearmor relay healthcheck: %w", err)
 	}
-	if reply.GetRetval() != int32(nonce) {
+	if reply.GetRetval() != nonce {
 		_ = conn.Close()
 		return nil, nil, fmt.Errorf("kubearmor relay healthcheck nonce mismatch")
 	}
@@ -290,7 +292,9 @@ func newHubbleRelayClient(ctx context.Context, addr string) (*grpc.ClientConn, o
 	}
 
 	client := observerpb.NewObserverClient(conn)
-	_, err = client.ServerStatus(ctx, &observerpb.ServerStatusRequest{})
+	checkCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	_, err = client.ServerStatus(checkCtx, &observerpb.ServerStatusRequest{})
 	if err != nil {
 		_ = conn.Close()
 		return nil, nil, fmt.Errorf("hubble relay status: %w", err)

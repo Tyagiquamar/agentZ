@@ -19,11 +19,16 @@ import {
   getSpanDetailAction,
   listSpansAction,
 } from "@/data/lens.actions"
-import type { AppSpan, Error } from "@/lib/gateway/client"
+import type {
+  AppSpan,
+  Error,
+  ProcessObservabilityEvent,
+  FileObservabilityEvent,
+  NetworkObservabilityEvent,
+} from "@/lib/gateway/client"
 import type {
   ListSpansActionData,
   ListTracesActionData,
-  RuntimeTelemetryEventItem,
   RuntimeTelemetryTab,
   RuntimeTelemetryTabActionData,
   SpanDetailActionData,
@@ -55,7 +60,7 @@ import {
   type TelemetryTableColumn,
 } from "@/app/(scoped)/orgs/[orgSlug]/workspaces/[workspaceSlug]/lens/runtime-telemetry/telemetry-table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { formatCompactNumber } from "@/lib/format"
+import { formatCompactNumber, formatRecentTimestamp } from "@/lib/format"
 import { TraceConversation } from "./trace-conversation"
 
 const layout: Record<string, AdminColumnLayout> = {
@@ -787,7 +792,7 @@ function SpanJSONSections({
     ["span.class", span.spanClass],
     ["kind", span.kind],
     ["status_code", span.statusCode],
-    ["operation", span.operationLabel],
+    ["operation", span.displayName],
   ]
   const usage = [
     ["input_tokens", span.inputTokens],
@@ -858,7 +863,14 @@ function RuntimeTelemetryContent({
     return null
   }
 
-  const events = telemetryPage.events
+  const pagination = {
+    hasNextPage: telemetryPage.hasNextPage,
+    nextPageToken: telemetryPage.nextPageToken,
+    canGoPrevious,
+    onNextPage,
+    onPreviousPage,
+    pending: pagePending,
+  }
 
   return (
     <Tabs
@@ -883,37 +895,34 @@ function RuntimeTelemetryContent({
       </TabsList>
       <div className="min-h-0 flex-1 overflow-auto px-1 pt-4 pb-8">
         <TabsContent value="process">
-          <ProcessTelemetryTable
-            events={telemetryTab === "process" ? events : []}
-            hasNextPage={telemetryTab === "process" && telemetryPage.hasNextPage}
-            nextPageToken={telemetryTab === "process" ? telemetryPage.nextPageToken : ""}
-            canGoPrevious={canGoPrevious}
-            onNextPage={onNextPage}
-            onPreviousPage={onPreviousPage}
-            pending={pagePending}
-          />
+          {telemetryPage.tab === "process" ? (
+            <SharedTelemetryTable
+              data={telemetryPage.events}
+              columns={processTelemetryColumns}
+              emptyText="No process events were recorded in this trace window."
+              {...pagination}
+            />
+          ) : null}
         </TabsContent>
         <TabsContent value="file">
-          <FileTelemetryTable
-            events={telemetryTab === "file" ? events : []}
-            hasNextPage={telemetryTab === "file" && telemetryPage.hasNextPage}
-            nextPageToken={telemetryTab === "file" ? telemetryPage.nextPageToken : ""}
-            canGoPrevious={canGoPrevious}
-            onNextPage={onNextPage}
-            onPreviousPage={onPreviousPage}
-            pending={pagePending}
-          />
+          {telemetryPage.tab === "file" ? (
+            <SharedTelemetryTable
+              data={telemetryPage.events}
+              columns={fileTelemetryColumns}
+              emptyText="No file events were recorded in this trace window."
+              {...pagination}
+            />
+          ) : null}
         </TabsContent>
         <TabsContent value="network">
-          <NetworkTelemetryTable
-            events={telemetryTab === "network" ? events : []}
-            hasNextPage={telemetryTab === "network" && telemetryPage.hasNextPage}
-            nextPageToken={telemetryTab === "network" ? telemetryPage.nextPageToken : ""}
-            canGoPrevious={canGoPrevious}
-            onNextPage={onNextPage}
-            onPreviousPage={onPreviousPage}
-            pending={pagePending}
-          />
+          {telemetryPage.tab === "network" ? (
+            <SharedTelemetryTable
+              data={telemetryPage.events}
+              columns={networkTelemetryColumns}
+              emptyText="No network events were recorded in this trace window."
+              {...pagination}
+            />
+          ) : null}
         </TabsContent>
       </div>
     </Tabs>
@@ -973,18 +982,18 @@ function spanTimelineClass(span: SpanListItem) {
   return "bg-chart-2"
 }
 
-const processTelemetryColumns: TelemetryTableColumn<RuntimeTelemetryEventItem>[] = [
+const processTelemetryColumns: TelemetryTableColumn<ProcessObservabilityEvent>[] = [
   {
     key: "process",
     header: "Process",
     layout: { minWidth: 144, contentMaxWidth: 256 },
-    render: (event) => <TruncateCell value={event.primary} />,
+    render: (event) => <TruncateCell value={event.process} />,
   },
   {
     key: "command",
     header: "Command",
     layout: { minWidth: 320, contentMaxWidth: 448 },
-    render: (event) => <TruncateCell value={event.secondary} />,
+    render: (event) => <TruncateCell value={event.command_invocation || event.parent_process} />,
   },
   {
     key: "action",
@@ -996,54 +1005,26 @@ const processTelemetryColumns: TelemetryTableColumn<RuntimeTelemetryEventItem>[]
     key: "time",
     header: "Seen at",
     layout: { minWidth: 160, width: 160 },
-    render: (event) => <TelemetryTimestamp value={event.time} />,
+    render: (event) => (
+      <span className="text-sm text-muted-foreground">
+        {formatRecentTimestamp(event.event_time)}
+      </span>
+    ),
   },
 ]
 
-function ProcessTelemetryTable({
-  events,
-  hasNextPage,
-  nextPageToken,
-  canGoPrevious,
-  onNextPage,
-  onPreviousPage,
-  pending,
-}: {
-  events: RuntimeTelemetryEventItem[]
-  hasNextPage: boolean
-  nextPageToken: string
-  canGoPrevious: boolean
-  onNextPage: () => void
-  onPreviousPage: () => void
-  pending: boolean
-}) {
-  return (
-    <SharedTelemetryTable
-      data={events}
-      columns={processTelemetryColumns}
-      emptyText="No process events were recorded in this trace window."
-      hasNextPage={hasNextPage}
-      nextPageToken={nextPageToken}
-      canGoPrevious={canGoPrevious}
-      onNextPage={onNextPage}
-      onPreviousPage={onPreviousPage}
-      pending={pending}
-    />
-  )
-}
-
-const fileTelemetryColumns: TelemetryTableColumn<RuntimeTelemetryEventItem>[] = [
+const fileTelemetryColumns: TelemetryTableColumn<FileObservabilityEvent>[] = [
   {
     key: "file",
     header: "File path accessed",
     layout: { minWidth: 320, contentMaxWidth: 448 },
-    render: (event) => <TruncateCell value={event.primary} />,
+    render: (event) => <TruncateCell value={event.file_path_accessed} />,
   },
   {
     key: "process",
     header: "Process",
     layout: { minWidth: 288, contentMaxWidth: 448 },
-    render: (event) => <TruncateCell value={event.secondary} />,
+    render: (event) => <TruncateCell value={event.command_invocation || event.process} />,
   },
   {
     key: "action",
@@ -1055,66 +1036,38 @@ const fileTelemetryColumns: TelemetryTableColumn<RuntimeTelemetryEventItem>[] = 
     key: "time",
     header: "Seen at",
     layout: { minWidth: 160, width: 160 },
-    render: (event) => <TelemetryTimestamp value={event.time} />,
+    render: (event) => (
+      <span className="text-sm text-muted-foreground">
+        {formatRecentTimestamp(event.event_time)}
+      </span>
+    ),
   },
 ]
 
-function FileTelemetryTable({
-  events,
-  hasNextPage,
-  nextPageToken,
-  canGoPrevious,
-  onNextPage,
-  onPreviousPage,
-  pending,
-}: {
-  events: RuntimeTelemetryEventItem[]
-  hasNextPage: boolean
-  nextPageToken: string
-  canGoPrevious: boolean
-  onNextPage: () => void
-  onPreviousPage: () => void
-  pending: boolean
-}) {
-  return (
-    <SharedTelemetryTable
-      data={events}
-      columns={fileTelemetryColumns}
-      emptyText="No file events were recorded in this trace window."
-      hasNextPage={hasNextPage}
-      nextPageToken={nextPageToken}
-      canGoPrevious={canGoPrevious}
-      onNextPage={onNextPage}
-      onPreviousPage={onPreviousPage}
-      pending={pending}
-    />
-  )
-}
-
-const networkTelemetryColumns: TelemetryTableColumn<RuntimeTelemetryEventItem>[] = [
+const networkTelemetryColumns: TelemetryTableColumn<NetworkObservabilityEvent>[] = [
   {
     key: "domain",
     header: "Destination domain",
     layout: { minWidth: 208, contentMaxWidth: 320 },
-    render: (event) => <TruncateCell value={networkDestinationDomain(event)} />,
+    render: (event) => <TruncateCell value={event.destination_domain} />,
   },
   {
     key: "ip",
     header: "Destination IP",
     layout: { minWidth: 160, width: 160 },
-    render: (event) => <TruncateCell value={networkDestinationIP(event)} />,
+    render: (event) => <TruncateCell value={event.destination_ip} />,
   },
   {
     key: "port",
     header: "Destination port",
     layout: { minWidth: 128, width: 128 },
-    render: (event) => <TruncateCell value={networkDestinationPort(event)} />,
+    render: (event) => <TruncateCell value={event.destination_port.toString()} />,
   },
   {
     key: "protocol",
     header: "Protocol",
     layout: { minWidth: 128, width: 128 },
-    render: (event) => <TruncateCell value={networkProtocol(event)} />,
+    render: (event) => <TruncateCell value={event.protocol} />,
   },
   {
     key: "action",
@@ -1126,68 +1079,13 @@ const networkTelemetryColumns: TelemetryTableColumn<RuntimeTelemetryEventItem>[]
     key: "time",
     header: "Seen at",
     layout: { minWidth: 160, width: 160 },
-    render: (event) => <TelemetryTimestamp value={event.time} />,
+    render: (event) => (
+      <span className="text-sm text-muted-foreground">
+        {formatRecentTimestamp(event.event_time)}
+      </span>
+    ),
   },
 ]
-
-function NetworkTelemetryTable({
-  events,
-  hasNextPage,
-  nextPageToken,
-  canGoPrevious,
-  onNextPage,
-  onPreviousPage,
-  pending,
-}: {
-  events: RuntimeTelemetryEventItem[]
-  hasNextPage: boolean
-  nextPageToken: string
-  canGoPrevious: boolean
-  onNextPage: () => void
-  onPreviousPage: () => void
-  pending: boolean
-}) {
-  return (
-    <SharedTelemetryTable
-      data={events}
-      columns={networkTelemetryColumns}
-      emptyText="No network events were recorded in this trace window."
-      hasNextPage={hasNextPage}
-      nextPageToken={nextPageToken}
-      canGoPrevious={canGoPrevious}
-      onNextPage={onNextPage}
-      onPreviousPage={onPreviousPage}
-      pending={pending}
-    />
-  )
-}
-
-function TelemetryTimestamp({ value }: { value: string }) {
-  return <span className="text-sm text-muted-foreground">{value}</span>
-}
-
-function networkDestinationDomain(event: RuntimeTelemetryEventItem) {
-  const domain = /^(?!-)(?:[a-zA-Z0-9-]{1,63}\.)+[a-zA-Z]{2,63}$/
-  if (domain.test(event.primary)) return event.primary
-  return ""
-}
-
-function networkDestinationIP(event: RuntimeTelemetryEventItem) {
-  if (!networkDestinationDomain(event)) {
-    return event.primary
-  }
-  return ""
-}
-
-function networkDestinationPort(event: RuntimeTelemetryEventItem) {
-  const match = event.secondary.match(/:(\d+)$/)
-
-  return match?.[1] ?? ""
-}
-
-function networkProtocol(event: RuntimeTelemetryEventItem) {
-  return event.secondary.split(" ")[0] ?? ""
-}
 
 function JSONPanel({ title, rows }: { title: string; rows: [string, string][] }) {
   return (

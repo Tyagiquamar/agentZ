@@ -1,5 +1,5 @@
-import type { LensApp } from "@/lib/gateway/client"
 import type {
+  LensApp,
   Agent,
   Sandbox,
   Error,
@@ -8,6 +8,9 @@ import type {
   SecretWarning,
   WorkflowArbitraryJson,
   WorkflowInputs,
+  ProcessObservabilityEvent,
+  FileObservabilityEvent,
+  NetworkObservabilityEvent,
 } from "@/lib/gateway/client"
 
 export type WorkspacePath = `/orgs/${string}/workspaces/${string}`
@@ -86,26 +89,16 @@ export type TraceSessionFilterActionResponse =
       error: Error
     }
 
-export type RuntimeTelemetryEventItem = {
-  id: number
-  kind: "process" | "file" | "network"
-  eventTime: string
-  time: string
-  action: string
-  primary: string
-  secondary: string
-  source: string
-  namespace: string
-  pod: string
-}
-
 export type RuntimeTelemetryTab = "process" | "file" | "network"
 
 export type RuntimeTelemetryTabActionData = {
-  events: RuntimeTelemetryEventItem[]
   nextPageToken: string
   hasNextPage: boolean
-}
+} & (
+  | { tab: "process"; events: ProcessObservabilityEvent[] }
+  | { tab: "file"; events: FileObservabilityEvent[] }
+  | { tab: "network"; events: NetworkObservabilityEvent[] }
+)
 
 export type RuntimeTelemetryTabActionResponse =
   | {
@@ -227,7 +220,6 @@ export type SpanListItem = {
   duration: string | undefined
   durationMs: number | null
   displayName: string
-  operationLabel: string
   spanClass: string
   kind: string
   statusCode: string

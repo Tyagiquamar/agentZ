@@ -108,7 +108,7 @@ export async function resolvePageSelection(
   }
   state.agents = agentsResult.agents ?? []
   if (isLens) {
-    state.agents.sort((a, b) => a.name.localeCompare(b.name))
+    state.agents = state.agents.toSorted((a, b) => a.name.localeCompare(b.name))
     if (search.agent_name && !state.agents.some((agent) => agent.name === search.agent_name)) {
       return { ...state, error: { code: "not_found", message: "Agent is unavailable" } }
     }

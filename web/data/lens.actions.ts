@@ -24,9 +24,6 @@ import {
   type ProcessObservabilityEventAggregated,
   type FileObservabilityEventAggregated,
   type NetworkObservabilityEventAggregated,
-  type ProcessObservabilityEvent,
-  type FileObservabilityEvent,
-  type NetworkObservabilityEvent,
   type GetMcpGraphData,
   type ListSpansData,
   type ListTraceSessionsData,
@@ -49,7 +46,6 @@ import type {
   ProcessTelemetryRow,
   RuntimeTelemetryTab,
   RuntimeTelemetryTabActionResponse,
-  RuntimeTelemetryEventItem,
   SpanDetailActionResponse,
   SpanDetailPayloadSection,
   SpanListItem,
@@ -377,10 +373,10 @@ export async function getRuntimeTelemetryTabAction({
       return { data: undefined, error: result.error }
     }
 
-    const events = result.data.events.map(processTelemetryEventItem)
     return {
       data: {
-        events,
+        tab,
+        events: result.data.events,
         nextPageToken: result.data.next_page_token,
         hasNextPage: result.data.next_page_token.length > 0,
       },
@@ -398,10 +394,10 @@ export async function getRuntimeTelemetryTabAction({
       return { data: undefined, error: result.error }
     }
 
-    const events = result.data.events.map(fileTelemetryEventItem)
     return {
       data: {
-        events,
+        tab,
+        events: result.data.events,
         nextPageToken: result.data.next_page_token,
         hasNextPage: result.data.next_page_token.length > 0,
       },
@@ -418,10 +414,10 @@ export async function getRuntimeTelemetryTabAction({
     return { data: undefined, error: result.error }
   }
 
-  const events = result.data.events.map(networkTelemetryEventItem)
   return {
     data: {
-      events,
+      tab: "network",
+      events: result.data.events,
       nextPageToken: result.data.next_page_token,
       hasNextPage: result.data.next_page_token.length > 0,
     },
@@ -465,18 +461,14 @@ function networkTelemetryEvent(event: NetworkObservabilityEventAggregated): Netw
 }
 
 function computeTelemetryChartFromAggregated(events: AggregatedTelemetryEvent[]): EventsChartData {
-  if (events.length === 0) {
-    return { points: [], total: 0 }
-  }
-
-  const [firstEvent, ...restEvents] = events
+  const [firstEvent] = events
   if (!firstEvent) {
     return { points: [], total: 0 }
   }
 
   let minTime = dayjs(firstEvent.last_seen)
   let maxTime = minTime
-  for (const event of restEvents) {
+  for (const event of events) {
     const seenAt = dayjs(event.last_seen)
     if (seenAt.isBefore(minTime)) {
       minTime = seenAt
@@ -486,6 +478,7 @@ function computeTelemetryChartFromAggregated(events: AggregatedTelemetryEvent[])
     }
   }
 
+  const total = events.reduce((sum, event) => sum + event.occurrences, 0)
   const from = minTime
   const to = maxTime
   const totalMs = to.valueOf() - from.valueOf()
@@ -496,10 +489,10 @@ function computeTelemetryChartFromAggregated(events: AggregatedTelemetryEvent[])
       points: [
         {
           label: from.format("MMM D, h:mm A"),
-          count: events.length,
+          count: total,
         },
       ],
-      total: events.length,
+      total,
     }
   }
 
@@ -528,7 +521,7 @@ function computeTelemetryChartFromAggregated(events: AggregatedTelemetryEvent[])
 
   return {
     points,
-    total: events.reduce((sum, event) => sum + event.occurrences, 0),
+    total,
   }
 }
 
@@ -762,12 +755,18 @@ function spanListItems<T extends Span | AppSpan>(
   const traceEndMs = Math.max(...times)
   const traceDurationMs = Math.max(traceEndMs - traceStartMs, 0)
 
-  const depths = spanDepths(spans)
+  const byID = new Map(spans.map((span) => [span.span_id, span]))
 
   return spans.map((span) => {
     const startMs = dayjs(span.start_time).valueOf()
     const durationMs = span.duration_ns === null ? null : span.duration_ns / 1_000_000
     const offsetMs = Math.max(startMs - traceStartMs, 0)
+    let depth = 0
+    let parent = byID.get(span.parent_span_id)
+    while (parent && depth < 4) {
+      depth++
+      parent = byID.get(parent.parent_span_id)
+    }
 
     return spanListItem({
       span,
@@ -776,7 +775,7 @@ function spanListItems<T extends Span | AppSpan>(
       offsetPercent: percent(offsetMs, traceDurationMs),
       durationMs,
       durationPercent: durationMs === null ? 0 : percent(durationMs, traceDurationMs),
-      depth: depths.get(span.span_id) ?? 0,
+      depth,
     })
   })
 }
@@ -818,7 +817,6 @@ function spanListItem({
     duration: durationMs === null ? undefined : formatDurationMs(durationMs),
     durationMs,
     displayName: operationLabel(span),
-    operationLabel: operationLabel(span),
     spanClass: span.span_class,
     kind: span.kind,
     statusCode: span.status_code,
@@ -845,84 +843,6 @@ function payloadSection(key: string, label: string, json: string): SpanDetailPay
   const tool = kind ? readToolContent(json, kind) : undefined
   const content = tool?.format === "text" ? { text: tool.text } : { code: json }
   return { key, label, content, empty: json === "null" || json === "[]" || json === "{}" }
-}
-
-function processTelemetryEventItem(event: ProcessObservabilityEvent): RuntimeTelemetryEventItem {
-  const eventTime = dayjs(event.event_time)
-  const time = eventTime.isValid() ? formatRecentTimestamp(event.event_time) : event.event_time
-
-  return {
-    id: event.id,
-    kind: "process",
-    eventTime: event.event_time,
-    time,
-    action: event.action,
-    primary: event.process,
-    secondary: event.command_invocation || event.parent_process,
-    source: event.source,
-    namespace: event.pod_namespace,
-    pod: event.pod_name,
-  }
-}
-
-function fileTelemetryEventItem(event: FileObservabilityEvent): RuntimeTelemetryEventItem {
-  const eventTime = dayjs(event.event_time)
-  const time = eventTime.isValid() ? formatRecentTimestamp(event.event_time) : event.event_time
-
-  return {
-    id: event.id,
-    kind: "file",
-    eventTime: event.event_time,
-    time,
-    action: event.action,
-    primary: event.file_path_accessed,
-    secondary: event.command_invocation || event.process,
-    source: event.source,
-    namespace: event.pod_namespace,
-    pod: event.pod_name,
-  }
-}
-
-function networkTelemetryEventItem(event: NetworkObservabilityEvent): RuntimeTelemetryEventItem {
-  const eventTime = dayjs(event.event_time)
-  const time = eventTime.isValid() ? formatRecentTimestamp(event.event_time) : event.event_time
-
-  return {
-    id: event.id,
-    kind: "network",
-    eventTime: event.event_time,
-    time,
-    action: event.action,
-    primary: event.destination_domain || event.destination_ip,
-    secondary: `${event.protocol} ${event.destination_ip}:${event.destination_port}`,
-    source: event.source,
-    namespace: event.pod_namespace,
-    pod: event.pod_name,
-  }
-}
-
-function spanDepths(spans: (Span | AppSpan)[]) {
-  const byID = new Map(spans.map((span) => [span.span_id, span]))
-  const depths = new Map<string, number>()
-
-  function depth(span: Span | AppSpan): number {
-    const cached = depths.get(span.span_id)
-    if (cached !== undefined) {
-      return cached
-    }
-
-    const parent = byID.get(span.parent_span_id)
-    const value = parent ? Math.min(depth(parent) + 1, 4) : 0
-    depths.set(span.span_id, value)
-
-    return value
-  }
-
-  for (const span of spans) {
-    depth(span)
-  }
-
-  return depths
 }
 
 function operationLabel(span: Span | AppSpan) {

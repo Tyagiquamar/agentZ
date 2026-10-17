@@ -383,7 +383,7 @@ export function ToolCard({
           <button className="min-w-0 flex-1 rounded-sm text-left" type="button">
             <div className="flex items-center">
               <div className="min-w-0 flex-1">
-                <TriggerLine {...{ ...trigger, action: undefined }} />
+                <TriggerLine {...trigger} action={undefined} />
               </div>
               <span className="flex size-6 shrink-0 items-center justify-center text-muted-foreground">
                 {open ? (

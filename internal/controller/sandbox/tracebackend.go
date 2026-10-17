@@ -77,24 +77,19 @@ func ParseTraceBackend(mode string, svcName string, svcNS string, svcPort int, h
 }
 
 // BackendRef identifies the configured collector from a gateway namespace.
-func (cfg TraceBackend) BackendRef(name string) *gwv1.BackendObjectReference {
-	if cfg.Mode == TraceBackendModeService {
-		kind := gwv1.Kind("Service")
-		namespace := gwv1.Namespace(cfg.ServiceNamespace)
-		port := cfg.ServicePort
+func (c TraceBackend) BackendRef(name string) *gwv1.BackendObjectReference {
+	if c.Mode == TraceBackendModeService {
 		return &gwv1.BackendObjectReference{
-			Kind:      &kind,
-			Name:      gwv1.ObjectName(cfg.ServiceName),
-			Namespace: &namespace,
-			Port:      &port,
+			Kind:      new(gwv1.Kind("Service")),
+			Name:      gwv1.ObjectName(c.ServiceName),
+			Namespace: new(gwv1.Namespace(c.ServiceNamespace)),
+			Port:      new(c.ServicePort),
 		}
 	}
 
-	group := gwv1.Group("agentgateway.dev")
-	kind := gwv1.Kind("AgentgatewayBackend")
 	return &gwv1.BackendObjectReference{
-		Group: &group,
-		Kind:  &kind,
+		Group: new(gwv1.Group("agentgateway.dev")),
+		Kind:  new(gwv1.Kind("AgentgatewayBackend")),
 		Name:  gwv1.ObjectName(name),
 	}
 }

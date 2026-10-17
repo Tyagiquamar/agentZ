@@ -23,7 +23,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { mcpConnectionFallbackIcon, renderMcpServerIcon } from "@/app/(app)/mcps/catalog"
 import { formatAge } from "@/lib/format"
-import type { McpGraphEdge, McpGraphResponse } from "@/lib/gateway/client"
+import type { McpGraphResponse } from "@/lib/gateway/client"
 
 import { LensSourceIcon } from "../lens-filters"
 import type { LensSubject } from "@/data/types"
@@ -75,54 +75,39 @@ const mcpNodeTypes = {
  */
 export function McpGraph({ graph, subject }: McpGraphProps) {
   const rootID = subject.kind !== "agent" ? `app:${subject.clientID}` : `agent:${subject.name}`
-  const edgeCounts = React.useMemo(() => {
-    return graph.edges.reduce(
-      (counts, edge) => {
-        const sourceID = flowSourceID(edge)
-        const targetID = flowTargetID(edge)
-        counts.source.set(sourceID, (counts.source.get(sourceID) ?? 0) + 1)
-        counts.target.set(targetID, (counts.target.get(targetID) ?? 0) + 1)
-        return counts
-      },
-      {
-        source: new Map<string, number>(),
-        target: new Map<string, number>(),
+  const { edges, sources, targets, toolMetrics } = React.useMemo(() => {
+    const sources = new Set<string>()
+    const targets = new Set<string>()
+    const toolMetrics = new Map<string, ToolMetrics>()
+    const edges = graph.edges.map((edge, index): McpCanvasEdge => {
+      const source = edge.kind === "connection_tool" ? `connection:${edge.source}` : edge.source
+      const target = `${edge.kind === "connection_tool" ? "tool" : "connection"}:${edge.target}`
+      sources.add(source)
+      targets.add(target)
+      if (edge.kind === "connection_tool") {
+        toolMetrics.set(target, {
+          lastCall: edge.last_called_at ? formatAge(edge.last_called_at) : undefined,
+          latencyMs: edge.avg_latency_ms,
+        })
       }
-    )
-  }, [graph])
-  const toolMetricsByID = React.useMemo(() => {
-    return graph.edges.reduce((metrics, edge) => {
-      if (edge.kind !== "connection_tool") {
-        return metrics
+      return {
+        id: `${edge.kind}:${edge.source}:${edge.target}:${index}`,
+        source,
+        target,
+        type: "animated",
       }
-
-      metrics.set(toolID(edge.target), {
-        lastCall: edge.last_called_at ? formatAge(edge.last_called_at) : undefined,
-        latencyMs: edge.avg_latency_ms,
-      })
-      return metrics
-    }, new Map<string, ToolMetrics>())
+    })
+    return { edges, sources, targets, toolMetrics }
   }, [graph.edges])
-  const edges = React.useMemo(() => {
-    return graph.edges.map(
-      (edge, index) =>
-        ({
-          id: `${edge.kind}:${edge.source}:${edge.target}:${index}`,
-          source: flowSourceID(edge),
-          target: flowTargetID(edge),
-          type: "animated",
-        }) satisfies McpCanvasEdge
-    )
-  }, [graph])
   const initialNodes = React.useMemo(() => {
-    return applyLayout(graph, [
+    return applyLayout(edges, [
       {
         data: {
           kind: "subject",
           subject,
           label: subject.name,
           handles: {
-            source: (edgeCounts.source.get(rootID) ?? 0) > 0,
+            source: sources.has(rootID),
             target: false,
           },
         },
@@ -140,12 +125,12 @@ export function McpGraph({ graph, subject }: McpGraphProps) {
               kind: "connection",
               label: connection.name,
               handles: {
-                source: (edgeCounts.source.get(connectionID(connection.id)) ?? 0) > 0,
-                target: (edgeCounts.target.get(connectionID(connection.id)) ?? 0) > 0,
+                source: sources.has(`connection:${connection.id}`),
+                target: targets.has(`connection:${connection.id}`),
               },
               serverURL: connection.server_url,
             },
-            id: connectionID(connection.id),
+            id: `connection:${connection.id}`,
             position: {
               x: 0,
               y: 0,
@@ -161,11 +146,11 @@ export function McpGraph({ graph, subject }: McpGraphProps) {
               label: tool.name,
               handles: {
                 source: false,
-                target: (edgeCounts.target.get(toolID(tool.id)) ?? 0) > 0,
+                target: targets.has(`tool:${tool.id}`),
               },
-              metrics: toolMetricsByID.get(toolID(tool.id)) ?? {},
+              metrics: toolMetrics.get(`tool:${tool.id}`) ?? {},
             },
-            id: toolID(tool.id),
+            id: `tool:${tool.id}`,
             position: {
               x: 0,
               y: 0,
@@ -174,7 +159,7 @@ export function McpGraph({ graph, subject }: McpGraphProps) {
           }) satisfies McpCanvasNode
       ),
     ])
-  }, [edgeCounts, graph, rootID, subject, toolMetricsByID])
+  }, [edges, graph.connections, graph.tools, rootID, sources, subject, targets, toolMetrics])
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
 
   return (
@@ -192,7 +177,7 @@ export function McpGraph({ graph, subject }: McpGraphProps) {
         nodeTypes={mcpNodeTypes}
         onNodesChange={onNodesChange}
       >
-        <McpAutoLayout graph={graph} setNodes={setNodes} />
+        <McpAutoLayout edges={edges} setNodes={setNodes} />
         <Controls position="bottom-left" showInteractive={false} />
       </Canvas>
     </div>
@@ -246,10 +231,10 @@ export function McpEmptyState({ subjectName }: { subjectName: string }) {
 }
 
 function McpAutoLayout({
-  graph,
+  edges,
   setNodes,
 }: {
-  graph: McpGraphData
+  edges: McpCanvasEdge[]
   setNodes: ReturnType<typeof useNodesState<McpCanvasNode>>[1]
 }) {
   const nodesInitialized = useNodesInitialized()
@@ -265,7 +250,7 @@ function McpAutoLayout({
 
   React.useEffect(() => {
     lastLayoutRef.current = null
-  }, [graph])
+  }, [edges])
 
   React.useEffect(() => {
     if (!nodesInitialized) {
@@ -291,17 +276,16 @@ function McpAutoLayout({
     }
 
     lastLayoutRef.current = signature
-    setNodes(applyLayout(graph, measuredNodes))
+    setNodes(applyLayout(edges, measuredNodes))
     requestAnimationFrame(() => {
       void fitViewport()
     })
-  }, [graph, nodesInitialized, reactFlow, setNodes])
+  }, [edges, nodesInitialized, reactFlow, setNodes])
 
   return null
 }
 
 function McpNodeCircle({ data }: FlowNodeProps<McpCanvasNode>) {
-  const serverURL = data.kind === "connection" ? data.serverURL : undefined
   let icon: React.ReactNode
   switch (data.kind) {
     case "subject":
@@ -316,7 +300,7 @@ function McpNodeCircle({ data }: FlowNodeProps<McpCanvasNode>) {
       break
     case "connection":
       icon = renderMcpServerIcon(
-        serverURL ?? "",
+        data.serverURL ?? "",
         { className: "size-8" },
         mcpConnectionFallbackIcon
       )
@@ -359,7 +343,7 @@ function McpNodeCircle({ data }: FlowNodeProps<McpCanvasNode>) {
 }
 
 function ToolMetricsView({ metrics }: { metrics: ToolMetrics }) {
-  if (!hasToolMetrics(metrics)) {
+  if (metrics.latencyMs === undefined && metrics.lastCall === undefined) {
     return null
   }
 
@@ -391,7 +375,7 @@ function ToolMetricsView({ metrics }: { metrics: ToolMetrics }) {
   )
 }
 
-function applyLayout(graph: McpGraphData, nodes: McpCanvasNode[]): McpCanvasNode[] {
+function applyLayout(edges: McpCanvasEdge[], nodes: McpCanvasNode[]): McpCanvasNode[] {
   const dagreGraph = new dagre.graphlib.Graph<DagreGraphLabel, DagrePositionedNode>()
 
   dagreGraph.setDefaultEdgeLabel(() => ({}))
@@ -412,8 +396,8 @@ function applyLayout(graph: McpGraphData, nodes: McpCanvasNode[]): McpCanvasNode
     })
   }
 
-  for (const edge of graph.edges) {
-    dagreGraph.setEdge(flowSourceID(edge), flowTargetID(edge))
+  for (const edge of edges) {
+    dagreGraph.setEdge(edge.source, edge.target)
   }
 
   dagre.layout(dagreGraph)
@@ -437,26 +421,4 @@ function nodeSize(node: McpCanvasNode): { height: number; width: number } {
     height: node.measured?.height ?? fallbackNodeHeight,
     width: node.measured?.width ?? fallbackNodeWidth,
   }
-}
-
-function flowSourceID(edge: McpGraphEdge): string {
-  if (edge.kind === "connection_tool") return connectionID(edge.source)
-  return edge.source
-}
-
-function flowTargetID(edge: McpGraphEdge): string {
-  if (edge.kind === "connection_tool") return toolID(edge.target)
-  return connectionID(edge.target)
-}
-
-function connectionID(id: string): string {
-  return `connection:${id}`
-}
-
-function toolID(id: string): string {
-  return `tool:${id}`
-}
-
-function hasToolMetrics(metrics: ToolMetrics): boolean {
-  return metrics.latencyMs !== undefined || metrics.lastCall !== undefined
 }

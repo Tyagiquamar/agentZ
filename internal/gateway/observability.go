@@ -592,7 +592,7 @@ func (s *Service) ListProcessObservability(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	items, next := eventPage(rows, req.limit, processEvent, func(row gatewaydb.GatewayListProcessEventsRow) eventPageCursor {
+	items, next := cursorPage(rows, req.limit, processEvent, func(row gatewaydb.GatewayListProcessEventsRow) eventPageCursor {
 		return eventPageCursor{EventTime: row.EventTime, ID: row.ID}
 	})
 	apiutil.WriteJSON(
@@ -646,7 +646,7 @@ func (s *Service) ListProcessObservabilitySummary(w http.ResponseWriter, r *http
 		return
 	}
 
-	items, next := eventPage(
+	items, next := cursorPage(
 		rows,
 		req.limit,
 		processAggregatedEvent,
@@ -707,7 +707,7 @@ func (s *Service) ListFileObservability(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	items, next := eventPage(rows, req.limit, fileEvent, func(row gatewaydb.GatewayListFileEventsRow) eventPageCursor {
+	items, next := cursorPage(rows, req.limit, fileEvent, func(row gatewaydb.GatewayListFileEventsRow) eventPageCursor {
 		return eventPageCursor{EventTime: row.EventTime, ID: row.ID}
 	})
 	apiutil.WriteJSON(
@@ -761,7 +761,7 @@ func (s *Service) ListFileObservabilitySummary(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	items, next := eventPage(
+	items, next := cursorPage(
 		rows,
 		req.limit,
 		fileAggregatedEvent,
@@ -822,7 +822,7 @@ func (s *Service) ListNetworkObservability(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	items, next := eventPage(rows, req.limit, networkEvent, func(row gatewaydb.GatewayListNetworkEventsRow) eventPageCursor {
+	items, next := cursorPage(rows, req.limit, networkEvent, func(row gatewaydb.GatewayListNetworkEventsRow) eventPageCursor {
 		return eventPageCursor{EventTime: row.EventTime, ID: row.ID}
 	})
 	apiutil.WriteJSON(
@@ -876,7 +876,7 @@ func (s *Service) ListNetworkObservabilitySummary(w http.ResponseWriter, r *http
 		return
 	}
 
-	items, next := eventPage(
+	items, next := cursorPage(
 		rows,
 		req.limit,
 		networkAggregatedEvent,
@@ -986,25 +986,15 @@ func jsonValue(w http.ResponseWriter, r *http.Request, raw []byte) (gatewayapi.J
 		raw = []byte("null")
 	}
 	var out gatewayapi.JSONValue
-	if !jsonBytes(w, r, raw, &out) {
+	if err := json.Unmarshal(raw, &out); err != nil {
+		apiutil.WriteInternalError(w, r, err)
 		return gatewayapi.JSONValue{}, false
 	}
 	return out, true
 }
 
-func jsonBytes(w http.ResponseWriter, r *http.Request, raw []byte, out any) bool {
-	if len(raw) == 0 {
-		raw = []byte("[]")
-	}
-	if err := json.Unmarshal(raw, out); err != nil {
-		apiutil.WriteInternalError(w, r, err)
-		return false
-	}
-	return true
-}
-
-func eventPage[T any, E any, C any](rows []T, limit int, convert func(T) E, cursor func(T) C) ([]E, string) {
-	items := make([]E, 0, limit)
+func cursorPage[T any, E any, C any](rows []T, limit int, convert func(T) E, cursor func(T) C) ([]E, string) {
+	items := make([]E, 0, min(len(rows), limit))
 	var next string
 	for i, row := range rows {
 		if i == limit {

@@ -80,7 +80,7 @@ export function readTraceRecording(
       promptRead = true
       const input = request.safeParse(JSON.parse(payload.input_messages))
       if (input.success) {
-        const texts = input.data.filter((message) => message.role === "user").at(-1)?.content ?? []
+        const texts = input.data.findLast((message) => message.role === "user")?.content ?? []
         const context: string[] = []
         const visible: string[] = []
         for (const text of texts) {

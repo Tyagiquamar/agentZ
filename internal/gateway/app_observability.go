@@ -156,19 +156,15 @@ func (s *Service) ListAppSessions(w http.ResponseWriter, r *http.Request, client
 		apiutil.WriteInternalError(w, r, err)
 		return
 	}
-	result := gatewayapi.ListAppSessionsResponse{Sessions: []gatewayapi.AppSession{}}
-	for index, row := range rows {
-		if index == limit {
-			last := rows[index-1]
-			result.NextPageToken = encodeCursorPageToken(appSessionPageCursor{
-				Scope:     scope,
-				LastSeen:  last.LastSeen,
-				SessionID: last.SessionID,
-			})
-			result.HasNextPage = true
-			break
+	sessions, next := cursorPage(rows, limit, func(row gatewaydb.GatewayListAppSessionsRow) gatewayapi.AppSession {
+		return gatewayapi.AppSession{SessionId: row.SessionID, LastSeen: row.LastSeen}
+	}, func(row gatewaydb.GatewayListAppSessionsRow) appSessionPageCursor {
+		return appSessionPageCursor{
+			Scope: scope, LastSeen: row.LastSeen, SessionID: row.SessionID,
 		}
-		result.Sessions = append(result.Sessions, gatewayapi.AppSession{SessionId: row.SessionID, LastSeen: row.LastSeen})
+	})
+	result := gatewayapi.ListAppSessionsResponse{
+		Sessions: sessions, NextPageToken: next, HasNextPage: next != "",
 	}
 	apiutil.WriteJSON(w, http.StatusOK, result)
 }
@@ -230,17 +226,7 @@ func (s *Service) ListAppTraces(w http.ResponseWriter, r *http.Request, clientID
 		apiutil.WriteInternalError(w, r, err)
 		return
 	}
-	items := make([]gatewayapi.AppTrace, 0, limit)
-	var next string
-	for index, row := range rows {
-		if index == limit {
-			last := rows[index-1]
-			next = encodeCursorPageToken(appTracePageCursor{
-				Scope: scope, StartedAt: last.StartedAt,
-				TraceID: hex.EncodeToString(last.TraceID),
-			})
-			break
-		}
+	items, next := cursorPage(rows, limit, func(row gatewaydb.GatewayListAppTracesRow) gatewayapi.AppTrace {
 		item := gatewayapi.AppTrace{
 			TraceId: hex.EncodeToString(row.TraceID), RootSpanId: hex.EncodeToString(row.RootSpanID),
 			StartedAt: row.StartedAt, EndedAt: row.EndedAt, UpdatedAt: row.UpdatedAt,
@@ -263,8 +249,12 @@ func (s *Service) ListAppTraces(w http.ResponseWriter, r *http.Request, clientID
 		if row.CostUsdKnown.Bool {
 			item.CostUsd = &row.CostUsd
 		}
-		items = append(items, item)
-	}
+		return item
+	}, func(row gatewaydb.GatewayListAppTracesRow) appTracePageCursor {
+		return appTracePageCursor{
+			Scope: scope, StartedAt: row.StartedAt, TraceID: hex.EncodeToString(row.TraceID),
+		}
+	})
 	apiutil.WriteJSON(w, http.StatusOK, gatewayapi.ListAppTracesResponse{Traces: items, NextPageToken: next})
 }
 
@@ -344,21 +334,14 @@ func (s *Service) ListAppSpans(w http.ResponseWriter, r *http.Request, clientID 
 		apiutil.WriteInternalError(w, r, err)
 		return
 	}
-	spans := make([]gatewayapi.AppSpan, 0, limit)
-	var next string
-	for index, row := range rows {
-		if index == limit {
-			last := rows[index-1].ObserverAppSpan
-			next = encodeCursorPageToken(appSpanPageCursor{
-				Scope:     scope,
-				NonRoot:   last.ResourceKind != "turn",
-				StartTime: last.StartTime,
-				ID:        last.ID,
-			})
-			break
+	spans, next := cursorPage(rows, limit, func(row gatewaydb.GatewayListAppSpansRow) gatewayapi.AppSpan {
+		return appSpan(row.ObserverAppSpan)
+	}, func(row gatewaydb.GatewayListAppSpansRow) appSpanPageCursor {
+		span := row.ObserverAppSpan
+		return appSpanPageCursor{
+			Scope: scope, NonRoot: span.ResourceKind != "turn", StartTime: span.StartTime, ID: span.ID,
 		}
-		spans = append(spans, appSpan(row.ObserverAppSpan))
-	}
+	})
 	result := gatewayapi.ListAppSpansResponse{
 		Spans: spans, NextPageToken: next, Recording: []gatewayapi.AppOperationResponse{},
 	}
@@ -430,8 +413,9 @@ func appOperation(row gatewaydb.GatewayGetAppOperationsRow) (gatewayapi.AppOpera
 		&result.Payload.ToolResult:     row.ToolResult,
 		&result.ToolError:              row.ToolError,
 	}
+	var formatted bytes.Buffer
 	for target, raw := range payloads {
-		var formatted bytes.Buffer
+		formatted.Reset()
 		if err := json.Indent(&formatted, raw, "", "  "); err != nil {
 			return gatewayapi.AppOperationResponse{}, err
 		}
