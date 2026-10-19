@@ -939,11 +939,13 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 				}
 				response.Header = http.Header{"Cache-Control": {"no-store, no-transform"}}
 				response.Trailer = nil
-				failure := inferenceError{Error: inferenceErrorDetail{
-					Message: "The upstream service could not complete this request.",
-					Type:    "server_error",
-					Code:    "upstream_error",
-				}}
+				failure := inferenceError{
+					Error: inferenceErrorDetail{
+						Message: "The upstream service could not complete this request.",
+						Type:    "server_error",
+						Code:    "upstream_error",
+					},
+				}
 				if strings.HasPrefix(r.URL.Path, "/api/inference/v1/messages") {
 					failure.Type = "error"
 					failure.Error.Type = "api_error"
@@ -1040,11 +1042,13 @@ func (s *Service) delegationError(w http.ResponseWriter, r *http.Request, status
 		})
 		return
 	}
-	apiutil.WriteJSON(w, status, inferenceError{Error: inferenceErrorDetail{
-		Message: message,
-		Type:    code,
-		Code:    code,
-	}})
+	apiutil.WriteJSON(w, status, inferenceError{
+		Error: inferenceErrorDetail{
+			Message: message,
+			Type:    code,
+			Code:    code,
+		},
+	})
 }
 
 func (s *Service) delegationCORS(next http.Handler) http.Handler {

@@ -61,8 +61,9 @@ func (s *Service) appObservability(w http.ResponseWriter, r *http.Request, clien
 		return resourceAccess{}, false
 	}
 	access, apiErr := s.resolveResourceAccess(r.Context(), resourceAccessRequest{
-		resource: "Observability", workspaceID: claims.WorkspaceID,
-		operation: authorization.OperationReadObservability,
+		resource:    "Observability",
+		workspaceID: claims.WorkspaceID,
+		operation:   authorization.OperationReadObservability,
 	})
 	if apiErr != nil {
 		apiutil.WriteError(w, r, apiErr)
@@ -73,7 +74,9 @@ func (s *Service) appObservability(w http.ResponseWriter, r *http.Request, clien
 	}
 	// Data endpoints need availability without aggregating app metadata history.
 	exists, err := s.queries.GatewayLensAppExists(r.Context(), gatewaydb.GatewayLensAppExistsParams{
-		OrganizationID: claims.OrganizationID, WorkspaceID: claims.WorkspaceID, ClientID: clientID,
+		OrganizationID: claims.OrganizationID,
+		WorkspaceID:    claims.WorkspaceID,
+		ClientID:       clientID,
 	})
 	if err != nil {
 		apiutil.WriteError(w, r, mapGatewayStoreError("get app telemetry", err))
@@ -93,7 +96,8 @@ func (s *Service) ListLensApps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows, err := s.queries.GatewayListLensApps(r.Context(), gatewaydb.GatewayListLensAppsParams{
-		OrganizationID: req.claims.OrganizationID, WorkspaceID: req.workspaceID,
+		OrganizationID: req.claims.OrganizationID,
+		WorkspaceID:    req.workspaceID,
 	})
 	if err != nil {
 		apiutil.WriteInternalError(w, r, err)
@@ -104,7 +108,8 @@ func (s *Service) ListLensApps(w http.ResponseWriter, r *http.Request) {
 		app := gatewayapi.LensApp{ClientId: row.ClientID, Name: row.Name}
 		if row.UserID != "" {
 			app.User = &gatewayapi.ResourceActor{
-				Id: row.UserID, Name: &row.UserName,
+				Id:    row.UserID,
+				Name:  &row.UserName,
 				Email: new(openapi_types.Email(row.UserEmail)),
 			}
 			if row.UserImage.Valid {
@@ -148,23 +153,40 @@ func (s *Service) ListAppSessions(w http.ResponseWriter, r *http.Request, client
 		return
 	}
 	rows, err := s.queries.GatewayListAppSessions(r.Context(), gatewaydb.GatewayListAppSessionsParams{
-		OrganizationID: req.claims.OrganizationID, WorkspaceID: req.workspaceID, ClientID: clientID,
-		SessionID: sessionID, CursorSet: set, CursorLastSeen: cursor.LastSeen, CursorSessionID: cursor.SessionID,
-		PageSize: int32(limit + 1),
+		OrganizationID:  req.claims.OrganizationID,
+		WorkspaceID:     req.workspaceID,
+		ClientID:        clientID,
+		SessionID:       sessionID,
+		CursorSet:       set,
+		CursorLastSeen:  cursor.LastSeen,
+		CursorSessionID: cursor.SessionID,
+		PageSize:        int32(limit + 1),
 	})
 	if err != nil {
 		apiutil.WriteInternalError(w, r, err)
 		return
 	}
-	sessions, next := cursorPage(rows, limit, func(row gatewaydb.GatewayListAppSessionsRow) gatewayapi.AppSession {
-		return gatewayapi.AppSession{SessionId: row.SessionID, LastSeen: row.LastSeen}
-	}, func(row gatewaydb.GatewayListAppSessionsRow) appSessionPageCursor {
-		return appSessionPageCursor{
-			Scope: scope, LastSeen: row.LastSeen, SessionID: row.SessionID,
-		}
-	})
+	sessions, next := cursorPage(
+		rows,
+		limit,
+		func(row gatewaydb.GatewayListAppSessionsRow) gatewayapi.AppSession {
+			return gatewayapi.AppSession{
+				SessionId: row.SessionID,
+				LastSeen:  row.LastSeen,
+			}
+		},
+		func(row gatewaydb.GatewayListAppSessionsRow) appSessionPageCursor {
+			return appSessionPageCursor{
+				Scope:     scope,
+				LastSeen:  row.LastSeen,
+				SessionID: row.SessionID,
+			}
+		},
+	)
 	result := gatewayapi.ListAppSessionsResponse{
-		Sessions: sessions, NextPageToken: next, HasNextPage: next != "",
+		Sessions:      sessions,
+		NextPageToken: next,
+		HasNextPage:   next != "",
 	}
 	apiutil.WriteJSON(w, http.StatusOK, result)
 }
@@ -210,17 +232,29 @@ func (s *Service) ListAppTraces(w http.ResponseWriter, r *http.Request, clientID
 		sessionID = *params.SessionId
 	}
 	scope := appPageScope{
-		OrganizationID: req.claims.OrganizationID, WorkspaceID: req.workspaceID, ClientID: clientID,
-		SessionID: sessionID, Kind: "traces", After: after, Before: before,
+		OrganizationID: req.claims.OrganizationID,
+		WorkspaceID:    req.workspaceID,
+		ClientID:       clientID,
+		SessionID:      sessionID,
+		Kind:           "traces",
+		After:          after,
+		Before:         before,
 	}
 	if set && cursor.Scope != scope {
 		writeInvalidPageToken(w, r, errBadRequest)
 		return
 	}
 	rows, err := s.queries.GatewayListAppTraces(r.Context(), gatewaydb.GatewayListAppTracesParams{
-		OrganizationID: req.claims.OrganizationID, WorkspaceID: req.workspaceID, ClientID: clientID,
-		SessionID: sessionID, StartedAfter: after, StartedBefore: before, PageSize: int32(limit + 1),
-		CursorSet: set, CursorStartedAt: cursor.StartedAt, CursorTraceID: traceID,
+		OrganizationID:  req.claims.OrganizationID,
+		WorkspaceID:     req.workspaceID,
+		ClientID:        clientID,
+		SessionID:       sessionID,
+		StartedAfter:    after,
+		StartedBefore:   before,
+		PageSize:        int32(limit + 1),
+		CursorSet:       set,
+		CursorStartedAt: cursor.StartedAt,
+		CursorTraceID:   traceID,
 	})
 	if err != nil {
 		apiutil.WriteInternalError(w, r, err)
@@ -228,11 +262,18 @@ func (s *Service) ListAppTraces(w http.ResponseWriter, r *http.Request, clientID
 	}
 	items, next := cursorPage(rows, limit, func(row gatewaydb.GatewayListAppTracesRow) gatewayapi.AppTrace {
 		item := gatewayapi.AppTrace{
-			TraceId: hex.EncodeToString(row.TraceID), RootSpanId: hex.EncodeToString(row.RootSpanID),
-			StartedAt: row.StartedAt, EndedAt: row.EndedAt, UpdatedAt: row.UpdatedAt,
-			DurationNs: row.DurationNs, DurationMs: float64(row.DurationNs) / float64(time.Millisecond),
-			SpanCount: row.SpanCount, ErrorCount: row.ErrorCount, ToolCount: row.ToolCount,
-			ModelCount: row.ModelCount, StatusCode: row.StatusCode,
+			TraceId:    hex.EncodeToString(row.TraceID),
+			RootSpanId: hex.EncodeToString(row.RootSpanID),
+			StartedAt:  row.StartedAt,
+			EndedAt:    row.EndedAt,
+			UpdatedAt:  row.UpdatedAt,
+			DurationNs: row.DurationNs,
+			DurationMs: float64(row.DurationNs) / float64(time.Millisecond),
+			SpanCount:  row.SpanCount,
+			ErrorCount: row.ErrorCount,
+			ToolCount:  row.ToolCount,
+			ModelCount: row.ModelCount,
+			StatusCode: row.StatusCode,
 		}
 		if row.InputTokensKnown.Bool {
 			item.InputTokens = &row.InputTokens
@@ -252,7 +293,9 @@ func (s *Service) ListAppTraces(w http.ResponseWriter, r *http.Request, clientID
 		return item
 	}, func(row gatewaydb.GatewayListAppTracesRow) appTracePageCursor {
 		return appTracePageCursor{
-			Scope: scope, StartedAt: row.StartedAt, TraceID: hex.EncodeToString(row.TraceID),
+			Scope:     scope,
+			StartedAt: row.StartedAt,
+			TraceID:   hex.EncodeToString(row.TraceID),
 		}
 	})
 	apiutil.WriteJSON(w, http.StatusOK, gatewayapi.ListAppTracesResponse{Traces: items, NextPageToken: next})
@@ -283,8 +326,12 @@ func (s *Service) GetAppTraceChart(w http.ResponseWriter, r *http.Request, clien
 		sessionID = *params.SessionId
 	}
 	rows, err := s.queries.GatewayGetAppTraceChart(r.Context(), gatewaydb.GatewayGetAppTraceChartParams{
-		OrganizationID: req.claims.OrganizationID, WorkspaceID: req.workspaceID, ClientID: clientID,
-		SessionID: sessionID, StartedAfter: after, StartedBefore: before,
+		OrganizationID: req.claims.OrganizationID,
+		WorkspaceID:    req.workspaceID,
+		ClientID:       clientID,
+		SessionID:      sessionID,
+		StartedAfter:   after,
+		StartedBefore:  before,
 	})
 	if err != nil {
 		apiutil.WriteInternalError(w, r, err)
@@ -327,8 +374,15 @@ func (s *Service) ListAppSpans(w http.ResponseWriter, r *http.Request, clientID 
 		return
 	}
 	rows, err := s.queries.GatewayListAppSpans(r.Context(), gatewaydb.GatewayListAppSpansParams{
-		OrganizationID: req.claims.OrganizationID, WorkspaceID: req.workspaceID, ClientID: clientID,
-		TraceID: trace, CursorSet: set, CursorNonRoot: cursor.NonRoot, CursorStartTime: cursor.StartTime, CursorID: cursor.ID, PageSize: int32(limit + 1),
+		OrganizationID:  req.claims.OrganizationID,
+		WorkspaceID:     req.workspaceID,
+		ClientID:        clientID,
+		TraceID:         trace,
+		CursorSet:       set,
+		CursorNonRoot:   cursor.NonRoot,
+		CursorStartTime: cursor.StartTime,
+		CursorID:        cursor.ID,
+		PageSize:        int32(limit + 1),
 	})
 	if err != nil {
 		apiutil.WriteInternalError(w, r, err)
@@ -339,11 +393,16 @@ func (s *Service) ListAppSpans(w http.ResponseWriter, r *http.Request, clientID 
 	}, func(row gatewaydb.GatewayListAppSpansRow) appSpanPageCursor {
 		span := row.ObserverAppSpan
 		return appSpanPageCursor{
-			Scope: scope, NonRoot: span.ResourceKind != "turn", StartTime: span.StartTime, ID: span.ID,
+			Scope:     scope,
+			NonRoot:   span.ResourceKind != "turn",
+			StartTime: span.StartTime,
+			ID:        span.ID,
 		}
 	})
 	result := gatewayapi.ListAppSpansResponse{
-		Spans: spans, NextPageToken: next, Recording: []gatewayapi.AppOperationResponse{},
+		Spans:         spans,
+		NextPageToken: next,
+		Recording:     []gatewayapi.AppOperationResponse{},
 	}
 	if params.IncludeRecording != nil && *params.IncludeRecording && len(spans) > 0 {
 		ids := make([]int64, len(spans))
@@ -355,8 +414,12 @@ func (s *Service) ListAppSpans(w http.ResponseWriter, r *http.Request, clientID 
 			}
 		}
 		rows, err := s.queries.GatewayGetAppOperations(r.Context(), gatewaydb.GatewayGetAppOperationsParams{
-			OrganizationID: req.claims.OrganizationID, WorkspaceID: req.workspaceID, ClientID: clientID, OperationIds: ids,
-			Recording: true, PromptOperationID: prompt,
+			OrganizationID:    req.claims.OrganizationID,
+			WorkspaceID:       req.workspaceID,
+			ClientID:          clientID,
+			OperationIds:      ids,
+			Recording:         true,
+			PromptOperationID: prompt,
 		})
 		if err != nil {
 			apiutil.WriteInternalError(w, r, err)
@@ -386,7 +449,10 @@ func (s *Service) GetAppOperation(w http.ResponseWriter, r *http.Request, client
 		return
 	}
 	rows, err := s.queries.GatewayGetAppOperations(r.Context(), gatewaydb.GatewayGetAppOperationsParams{
-		OrganizationID: req.claims.OrganizationID, WorkspaceID: req.workspaceID, ClientID: clientID, OperationIds: []int64{operationID},
+		OrganizationID: req.claims.OrganizationID,
+		WorkspaceID:    req.workspaceID,
+		ClientID:       clientID,
+		OperationIds:   []int64{operationID},
 	})
 	if err != nil {
 		apiutil.WriteError(w, r, mapGatewayStoreError("get app operation", err))
@@ -426,14 +492,30 @@ func appOperation(row gatewaydb.GatewayGetAppOperationsRow) (gatewayapi.AppOpera
 
 func appSpan(row gatewaydb.ObserverAppSpan) gatewayapi.AppSpan {
 	span := gatewayapi.AppSpan{
-		Id: row.ID, TraceId: hex.EncodeToString(row.TraceID), SpanId: hex.EncodeToString(row.SpanID),
-		ParentSpanId: hex.EncodeToString(row.ParentSpanID), StartTime: row.StartTime, EndTime: row.EndTime,
-		IngestedAt: row.IngestedAt,
-		Name:       row.Name, SpanClass: row.SpanClass, OperationName: row.OperationName, Kind: "SERVER",
-		StatusCode: row.StatusCode, ErrorType: row.ErrorType, ErrorMessage: row.ErrorMessage,
-		Model: row.Model, ToolName: row.ToolName, SessionId: row.SessionID,
-		GrantId: row.GrantID, UserId: row.UserID, ResourceKind: row.ResourceKind,
-		ResourceNamespace: row.ResourceNamespace, ResourceName: row.ResourceName, ResourceUid: row.ResourceUid, TargetId: row.TargetID,
+		Id:                row.ID,
+		TraceId:           hex.EncodeToString(row.TraceID),
+		SpanId:            hex.EncodeToString(row.SpanID),
+		ParentSpanId:      hex.EncodeToString(row.ParentSpanID),
+		StartTime:         row.StartTime,
+		EndTime:           row.EndTime,
+		IngestedAt:        row.IngestedAt,
+		Name:              row.Name,
+		SpanClass:         row.SpanClass,
+		OperationName:     row.OperationName,
+		Kind:              "SERVER",
+		StatusCode:        row.StatusCode,
+		ErrorType:         row.ErrorType,
+		ErrorMessage:      row.ErrorMessage,
+		Model:             row.Model,
+		ToolName:          row.ToolName,
+		SessionId:         row.SessionID,
+		GrantId:           row.GrantID,
+		UserId:            row.UserID,
+		ResourceKind:      row.ResourceKind,
+		ResourceNamespace: row.ResourceNamespace,
+		ResourceName:      row.ResourceName,
+		ResourceUid:       row.ResourceUid,
+		TargetId:          row.TargetID,
 	}
 	if row.ResourceKind != "tool" {
 		span.DurationNs = &row.DurationNs
@@ -468,7 +550,9 @@ func (s *Service) GetAppMCPGraph(w http.ResponseWriter, r *http.Request, clientI
 		return
 	}
 	appRow, err := s.queries.GatewayGetLensApp(r.Context(), gatewaydb.GatewayGetLensAppParams{
-		OrganizationID: req.claims.OrganizationID, WorkspaceID: req.workspaceID, ClientID: clientID,
+		OrganizationID: req.claims.OrganizationID,
+		WorkspaceID:    req.workspaceID,
+		ClientID:       clientID,
 	})
 	if err != nil {
 		apiutil.WriteError(w, r, mapGatewayStoreError("get app telemetry", err))
@@ -488,15 +572,22 @@ func (s *Service) GetAppMCPGraph(w http.ResponseWriter, r *http.Request, clientI
 		sessionID = *params.SessionId
 	}
 	rows, err := s.queries.GatewayGetAppMCPGraph(r.Context(), gatewaydb.GatewayGetAppMCPGraphParams{
-		OrganizationID: req.claims.OrganizationID, WorkspaceID: req.workspaceID, ClientID: clientID,
-		SessionID: sessionID, StartTimeAfter: after, StartTimeBefore: before,
+		OrganizationID:  req.claims.OrganizationID,
+		WorkspaceID:     req.workspaceID,
+		ClientID:        clientID,
+		SessionID:       sessionID,
+		StartTimeAfter:  after,
+		StartTimeBefore: before,
 	})
 	if err != nil {
 		apiutil.WriteInternalError(w, r, err)
 		return
 	}
 	graph := gatewayapi.AppMCPGraphResponse{
-		App: app, Connections: []gatewayapi.MCPGraphConnection{}, Tools: []gatewayapi.MCPGraphTool{}, Edges: []gatewayapi.MCPGraphEdge{},
+		App:         app,
+		Connections: []gatewayapi.MCPGraphConnection{},
+		Tools:       []gatewayapi.MCPGraphTool{},
+		Edges:       []gatewayapi.MCPGraphEdge{},
 	}
 	connections := map[string]bool{}
 	for _, row := range rows {
@@ -527,8 +618,13 @@ func (s *Service) GetAppMCPGraph(w http.ResponseWriter, r *http.Request, clientI
 			Name:         row.ToolName,
 		})
 		graph.Edges = append(graph.Edges, gatewayapi.MCPGraphEdge{
-			Source: connectionID, Target: toolID, Kind: gatewayapi.ConnectionTool,
-			AvgLatencyMs: &row.AvgLatencyMs, SuccessCount: &row.SuccessCount, FailedCount: &row.FailedCount, LastCalledAt: &row.LastCalledAt,
+			Source:       connectionID,
+			Target:       toolID,
+			Kind:         gatewayapi.ConnectionTool,
+			AvgLatencyMs: &row.AvgLatencyMs,
+			SuccessCount: &row.SuccessCount,
+			FailedCount:  &row.FailedCount,
+			LastCalledAt: &row.LastCalledAt,
 		})
 	}
 	apiutil.WriteJSON(w, http.StatusOK, graph)

@@ -317,10 +317,12 @@ func (r *Reconciler) poolsForProvider(ctx context.Context, obj client.Object) []
 		}
 		requests = append(
 			requests,
-			reconcile.Request{NamespacedName: types.NamespacedName{
-				Namespace: pool.Namespace,
-				Name:      pool.Name,
-			}},
+			reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Namespace: pool.Namespace,
+					Name:      pool.Name,
+				},
+			},
 		)
 	}
 	return requests

@@ -19,9 +19,12 @@ type invalidToolCase struct {
 func TestValidate(t *testing.T) {
 	t.Parallel()
 	valid := agentzv1alpha1.AgentTool{
-		Name: "lookup", Description: "Look up a record", Filename: "lookup.py",
-		Language: agentzv1alpha1.ToolLanguagePython, Script: "print('ok')\r\n",
-		Inputs: []agentzv1alpha1.ToolInput{{Name: "id", Type: agentzv1alpha1.ToolInputString}},
+		Name:        "lookup",
+		Description: "Look up a record",
+		Filename:    "lookup.py",
+		Language:    agentzv1alpha1.ToolLanguagePython,
+		Script:      "print('ok')\r\n",
+		Inputs:      []agentzv1alpha1.ToolInput{{Name: "id", Type: agentzv1alpha1.ToolInputString}},
 	}
 	p := field.NewPath("tools")
 	if errs := Validate([]agentzv1alpha1.AgentTool{valid}, p); len(errs) != 0 {

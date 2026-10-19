@@ -294,8 +294,11 @@ func insertAppOperationBatch(ctx context.Context, q *observerdb.Queries, operati
 				continue
 			}
 			invocation := appInvocation{
-				OrganizationID: op.OrganizationID, WorkspaceID: op.WorkspaceID, ClientID: op.ClientID,
-				UserID: op.UserID, CallID: id,
+				OrganizationID: op.OrganizationID,
+				WorkspaceID:    op.WorkspaceID,
+				ClientID:       op.ClientID,
+				UserID:         op.UserID,
+				CallID:         id,
 			}
 			if seen[invocation] {
 				continue

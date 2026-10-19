@@ -14,28 +14,39 @@ import (
 
 func appSpanFixture(payloadSize int) *tracepb.Span {
 	attributes := map[string]string{
-		"agentz.organization_id": "telemetry-test-org", "agentz.workspace_id": "telemetry-test-workspace",
-		"agentz.client_id": "telemetry-test-client", "agentz.app_name": "Telemetry test",
-		"agentz.grant_id": "telemetry-test-grant", "agentz.user_id": "telemetry-test-user",
-		"agentz.resource_kind": "inference", "agentz.resource_namespace": "telemetry-test-namespace",
-		"agentz.resource_name": "provider", "agentz.resource_uid": "provider-uid", "agentz.target_id": "model",
-		attrGenAIResponseModel: "fixture-model", "agw.ai.usage.cost.total": "0.00125",
-		attrLLMInputMessages:  `{"messages":[{"role":"user","content":"` + strings.Repeat("x", payloadSize) + `"}]}`,
-		attrLLMOutputMessages: `{"completion":["answer"],"tool_calls":[{"id":"call-1","name":"lookup","arguments":"{\"n\":9007199254740993}"}]}`,
+		"agentz.organization_id":    "telemetry-test-org",
+		"agentz.workspace_id":       "telemetry-test-workspace",
+		"agentz.client_id":          "telemetry-test-client",
+		"agentz.app_name":           "Telemetry test",
+		"agentz.grant_id":           "telemetry-test-grant",
+		"agentz.user_id":            "telemetry-test-user",
+		"agentz.resource_kind":      "inference",
+		"agentz.resource_namespace": "telemetry-test-namespace",
+		"agentz.resource_name":      "provider",
+		"agentz.resource_uid":       "provider-uid",
+		"agentz.target_id":          "model",
+		attrGenAIResponseModel:      "fixture-model",
+		"agw.ai.usage.cost.total":   "0.00125",
+		attrLLMInputMessages:        `{"messages":[{"role":"user","content":"` + strings.Repeat("x", payloadSize) + `"}]}`,
+		attrLLMOutputMessages:       `{"completion":["answer"],"tool_calls":[{"id":"call-1","name":"lookup","arguments":"{\"n\":9007199254740993}"}]}`,
 	}
 	span := &tracepb.Span{
-		TraceId: bytes.Repeat([]byte{1}, 16), SpanId: bytes.Repeat([]byte{2}, 8),
-		Name: "inference", Kind: tracepb.Span_SPAN_KIND_SERVER,
+		TraceId:           bytes.Repeat([]byte{1}, 16),
+		SpanId:            bytes.Repeat([]byte{2}, 8),
+		Name:              "inference",
+		Kind:              tracepb.Span_SPAN_KIND_SERVER,
 		StartTimeUnixNano: uint64(time.Second),
 	}
 	span.EndTimeUnixNano = span.StartTimeUnixNano + uint64(time.Millisecond)
 	for name, value := range attributes {
 		span.Attributes = append(span.Attributes, &commonpb.KeyValue{
-			Key: name, Value: &commonpb.AnyValue{Value: &commonpb.AnyValue_StringValue{StringValue: value}},
+			Key:   name,
+			Value: &commonpb.AnyValue{Value: &commonpb.AnyValue_StringValue{StringValue: value}},
 		})
 	}
 	span.Attributes = append(span.Attributes, &commonpb.KeyValue{
-		Key: attrGenAIInputTokens, Value: &commonpb.AnyValue{Value: &commonpb.AnyValue_IntValue{IntValue: 0}},
+		Key:   attrGenAIInputTokens,
+		Value: &commonpb.AnyValue{Value: &commonpb.AnyValue_IntValue{IntValue: 0}},
 	})
 	return span
 }
@@ -69,13 +80,16 @@ func TestAppMCPFailureAndAttribution(t *testing.T) {
 		}
 	}
 	attributes := map[string]string{
-		attrMCPMethodName: "tools/call", attrGenAIToolName: "lookup",
-		attrToolParameters: `{"n":9007199254740993}`, attrOutputValue: `{"isError":true,"structuredContent":{"reason":"denied"}}`,
-		attrToolError: `{"code":-32001,"message":"denied","data":{"n":9007199254740993}}`,
+		attrMCPMethodName:  "tools/call",
+		attrGenAIToolName:  "lookup",
+		attrToolParameters: `{"n":9007199254740993}`,
+		attrOutputValue:    `{"isError":true,"structuredContent":{"reason":"denied"}}`,
+		attrToolError:      `{"code":-32001,"message":"denied","data":{"n":9007199254740993}}`,
 	}
 	for name, value := range attributes {
 		span.Attributes = append(span.Attributes, &commonpb.KeyValue{
-			Key: name, Value: &commonpb.AnyValue{Value: &commonpb.AnyValue_StringValue{StringValue: value}},
+			Key:   name,
+			Value: &commonpb.AnyValue{Value: &commonpb.AnyValue_StringValue{StringValue: value}},
 		})
 	}
 	op, err := appOperationFromOTLPSpan(span)
@@ -86,7 +100,8 @@ func TestAppMCPFailureAndAttribution(t *testing.T) {
 		t.Fatal("MCP failure or error data lost")
 	}
 	span.Attributes = append(span.Attributes, &commonpb.KeyValue{
-		Key: "agentz.workspace_id", Value: &commonpb.AnyValue{Value: &commonpb.AnyValue_StringValue{}},
+		Key:   "agentz.workspace_id",
+		Value: &commonpb.AnyValue{Value: &commonpb.AnyValue_StringValue{}},
 	})
 	if _, err := appOperationFromOTLPSpan(span); err == nil {
 		t.Fatal("unattributed app operation accepted")
@@ -121,7 +136,8 @@ func TestAppNativeIdentityRequiresRegistration(t *testing.T) {
 			}
 			for key, value := range labels {
 				span.Attributes = append(span.Attributes, &commonpb.KeyValue{
-					Key: key, Value: &commonpb.AnyValue{Value: &commonpb.AnyValue_StringValue{StringValue: value}},
+					Key:   key,
+					Value: &commonpb.AnyValue{Value: &commonpb.AnyValue_StringValue{StringValue: value}},
 				})
 			}
 			op, err := appOperationFromOTLPSpan(span)
@@ -139,7 +155,8 @@ func TestAppNativeIdentityRequiresRegistration(t *testing.T) {
 				t.Fatalf("native identity lost: %+v", op)
 			}
 			span.Attributes = append(span.Attributes, &commonpb.KeyValue{
-				Key: attrSessionID, Value: &commonpb.AnyValue{Value: &commonpb.AnyValue_IntValue{IntValue: 123}},
+				Key:   attrSessionID,
+				Value: &commonpb.AnyValue{Value: &commonpb.AnyValue_IntValue{IntValue: 123}},
 			})
 			op, err = appOperationFromOTLPSpan(span)
 			if err != nil || op.SessionID != "" || op.TurnID != "native-turn" {
@@ -162,7 +179,8 @@ func TestAppNativeOversizedIdentifiers(t *testing.T) {
 			labels[key] = strings.Repeat("λ", 257)
 			for name, value := range labels {
 				span.Attributes = append(span.Attributes, &commonpb.KeyValue{
-					Key: name, Value: &commonpb.AnyValue{Value: &commonpb.AnyValue_StringValue{StringValue: value}},
+					Key:   name,
+					Value: &commonpb.AnyValue{Value: &commonpb.AnyValue_StringValue{StringValue: value}},
 				})
 			}
 			op, err := appOperationFromOTLPSpan(span)
@@ -170,7 +188,9 @@ func TestAppNativeOversizedIdentifiers(t *testing.T) {
 				t.Fatal(err)
 			}
 			got := map[string]string{
-				attrSessionID: op.SessionID, "agentz.turn_id": op.TurnID, "gen_ai.tool.call.id": op.ToolCallID,
+				attrSessionID:         op.SessionID,
+				"agentz.turn_id":      op.TurnID,
+				"gen_ai.tool.call.id": op.ToolCallID,
 			}
 			labels[key] = ""
 			for name, value := range got {
@@ -203,23 +223,31 @@ func TestReceiverAttributionBoundary(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			span := appSpanFixture(0)
 			labels := map[string]string{
-				attrAgentZAgentName: "test", attrAgentZTenantNamespace: "test", attrSessionID: "session",
+				attrAgentZAgentName:       "test",
+				attrAgentZTenantNamespace: "test",
+				attrSessionID:             "session",
 			}
 			for key, value := range labels {
 				span.Attributes = append(span.Attributes, &commonpb.KeyValue{
-					Key: key, Value: &commonpb.AnyValue{Value: &commonpb.AnyValue_StringValue{StringValue: value}},
+					Key:   key,
+					Value: &commonpb.AnyValue{Value: &commonpb.AnyValue_StringValue{StringValue: value}},
 				})
 			}
 			service := "agentz"
 			if test.gateway {
 				service = "agentz-oauth-gateway"
 			}
-			request := &tracev1.ExportTraceServiceRequest{ResourceSpans: []*tracepb.ResourceSpans{{
-				Resource: &resourcepb.Resource{Attributes: []*commonpb.KeyValue{{
-					Key: "service.name", Value: &commonpb.AnyValue{Value: &commonpb.AnyValue_StringValue{StringValue: service}},
-				}}},
-				ScopeSpans: []*tracepb.ScopeSpans{{Spans: []*tracepb.Span{span}}},
-			}}}
+			request := &tracev1.ExportTraceServiceRequest{
+				ResourceSpans: []*tracepb.ResourceSpans{{
+					Resource: &resourcepb.Resource{
+						Attributes: []*commonpb.KeyValue{{
+							Key:   "service.name",
+							Value: &commonpb.AnyValue{Value: &commonpb.AnyValue_StringValue{StringValue: service}},
+						}},
+					},
+					ScopeSpans: []*tracepb.ScopeSpans{{Spans: []*tracepb.Span{span}}},
+				}},
+			}
 			events := make(chan event, 1)
 			receiver := traceReceiver{out: events, stats: &stats{}, app: test.app}
 			response, err := receiver.Export(t.Context(), request)

@@ -38,12 +38,14 @@ func TestExtAuthAccessIsLimitedToOrganizationWorkspaces(t *testing.T) {
 	allowed := workspaceForExtAuth("workspace-a", organizationID)
 	allowed.Spec.SelectedOrganizationResources.MCPConnections = []string{"mcp-a"}
 	foreign := workspaceForExtAuth("workspace-b", "organization-b")
-	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
-		Name: org,
-		Annotations: map[string]string{
-			agentzv1alpha1.TenantOrganizationIDAnnotation: organizationID,
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: org,
+			Annotations: map[string]string{
+				agentzv1alpha1.TenantOrganizationIDAnnotation: organizationID,
+			},
 		},
-	}}
+	}
 
 	scheme := runtime.NewScheme()
 	adders := []func(*runtime.Scheme) error{
@@ -239,20 +241,25 @@ func TestDelegationRestoresAgentGatewayParameters(t *testing.T) {
 	}
 	normal := &gwv1.HTTPRoute{
 		ObjectMeta: metav1.ObjectMeta{Namespace: namespace.Name, Name: "agent-route"},
-		Spec: gwv1.HTTPRouteSpec{CommonRouteSpec: gwv1.CommonRouteSpec{
-			ParentRefs: []gwv1.ParentReference{{Name: gwv1.ObjectName(inference.GatewayName)}},
-		}},
+		Spec: gwv1.HTTPRouteSpec{
+			CommonRouteSpec: gwv1.CommonRouteSpec{
+				ParentRefs: []gwv1.ParentReference{{Name: gwv1.ObjectName(inference.GatewayName)}},
+			},
+		},
 	}
 	delegated := normal.DeepCopy()
 	delegated.Name = "app-route"
 	delegated.Labels = map[string]string{authorization.DelegationLabel: "grant"}
 	gateway := inference.Gateway(namespace.Name)
 	originalImage := &agw.Image{
-		Registry: new("registry.example.test"), Repository: new("gateway"), Tag: new("operator"),
+		Registry:   new("registry.example.test"),
+		Repository: new("gateway"),
+		Tag:        new("operator"),
 	}
 	parameters := &agw.AgentgatewayParameters{
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace: namespace.Name, Name: gateway.Spec.Infrastructure.ParametersRef.Name,
+			Namespace: namespace.Name,
+			Name:      gateway.Spec.Infrastructure.ParametersRef.Name,
 		},
 		Spec: agw.AgentgatewayParametersSpec{
 			Image: originalImage,
@@ -267,10 +274,14 @@ func TestDelegationRestoresAgentGatewayParameters(t *testing.T) {
 	r := &ExtAuthRuntimeReconciler{
 		Client: c,
 		TraceBackend: sandboxcontroller.TraceBackend{
-			Mode: sandboxcontroller.TraceBackendModeStatic, Host: "192.0.2.10", Port: 4317,
+			Mode: sandboxcontroller.TraceBackendModeStatic,
+			Host: "192.0.2.10",
+			Port: 4317,
 		},
 		DelegationImage: agw.Image{
-			Registry: new("registry.example.test"), Repository: new("patched-gateway"), Tag: new("tested"),
+			Registry:   new("registry.example.test"),
+			Repository: new("patched-gateway"),
+			Tag:        new("tested"),
 		},
 	}
 	if err := r.reconcileDelegationRuntime(t.Context(), namespace); err != nil {

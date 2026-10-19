@@ -75,12 +75,14 @@ func (q *permissionQueries) GatewayResolvePermissions(_ context.Context, params 
 func TestResolverDirectRoleUnionAndScopeIsolation(t *testing.T) {
 	t.Parallel()
 
-	queries := &permissionQueries{rows: []gatewaydb.GatewayResolvePermissionsRow{
-		permissionRow(gatewaydb.PermissionResourceSandbox, "", gatewaydb.PermissionActionRead),
-		permissionRow(gatewaydb.PermissionResourceSandbox, "workspace-a", gatewaydb.PermissionActionCreate),
-		permissionRow(gatewaydb.PermissionResourceSandbox, "workspace-a", gatewaydb.PermissionActionModify),
-		permissionRow(gatewaydb.PermissionResourceSandbox, "workspace-b", gatewaydb.PermissionActionDelete),
-	}}
+	queries := &permissionQueries{
+		rows: []gatewaydb.GatewayResolvePermissionsRow{
+			permissionRow(gatewaydb.PermissionResourceSandbox, "", gatewaydb.PermissionActionRead),
+			permissionRow(gatewaydb.PermissionResourceSandbox, "workspace-a", gatewaydb.PermissionActionCreate),
+			permissionRow(gatewaydb.PermissionResourceSandbox, "workspace-a", gatewaydb.PermissionActionModify),
+			permissionRow(gatewaydb.PermissionResourceSandbox, "workspace-b", gatewaydb.PermissionActionDelete),
+		},
+	}
 	effective, err := authorization.New(queries).Resolve(
 		context.Background(),
 		authorization.Subject{

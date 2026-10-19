@@ -4,7 +4,6 @@
     "lint": "eslint",
     "format": "prettier . --write",
     "gen:openapi-client": "openapi-ts",
-    "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

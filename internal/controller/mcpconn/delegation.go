@@ -48,10 +48,12 @@ func (r *ExtAuthRuntimeReconciler) reconcileDelegationRuntime(ctx context.Contex
 		_, delegated := route.Labels[authorization.DelegationLabel]
 		return delegated
 	})
-	backend := &agw.AgentgatewayBackend{ObjectMeta: metav1.ObjectMeta{
-		Name:      "delegation-extauth",
-		Namespace: ns,
-	}}
+	backend := &agw.AgentgatewayBackend{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "delegation-extauth",
+			Namespace: ns,
+		},
+	}
 	if delegated {
 		_, err = ctrlutil.CreateOrPatch(ctx, r.Client, backend, func() error {
 			backend.OwnerReferences = ownerRefs
@@ -99,10 +101,12 @@ func (r *ExtAuthRuntimeReconciler) reconcileDelegationRuntime(ctx context.Contex
 				if err := client.IgnoreNotFound(r.Delete(ctx, gateway)); err != nil {
 					return err
 				}
-				parameters := &agw.AgentgatewayParameters{ObjectMeta: metav1.ObjectMeta{
-					Name:      desired.Spec.Infrastructure.ParametersRef.Name,
-					Namespace: ns,
-				}}
+				parameters := &agw.AgentgatewayParameters{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      desired.Spec.Infrastructure.ParametersRef.Name,
+						Namespace: ns,
+					},
+				}
 				if err := client.IgnoreNotFound(r.Delete(ctx, parameters)); err != nil {
 					return err
 				}
@@ -154,10 +158,12 @@ func (r *ExtAuthRuntimeReconciler) reconcileDelegationRuntime(ctx context.Contex
 			}
 			continue
 		}
-		parameters := &agw.AgentgatewayParameters{ObjectMeta: metav1.ObjectMeta{
-			Name:      desired.Spec.Infrastructure.ParametersRef.Name,
-			Namespace: ns,
-		}}
+		parameters := &agw.AgentgatewayParameters{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      desired.Spec.Infrastructure.ParametersRef.Name,
+				Namespace: ns,
+			},
+		}
 		_, err = ctrlutil.CreateOrPatch(ctx, r.Client, parameters, func() error {
 			parameters.OwnerReferences = ownerRefs
 			original := delegationParameters{Image: parameters.Spec.Image.DeepCopy()}
@@ -247,9 +253,12 @@ func (r *ExtAuthRuntimeReconciler) reconcileDelegationTracing(ctx context.Contex
 	if r.TraceBackend.Mode == sandboxcontroller.TraceBackendModeStatic {
 		_, err := ctrlutil.CreateOrPatch(ctx, r.Client, backend, func() error {
 			backend.OwnerReferences = owners
-			backend.Spec = agw.AgentgatewayBackendSpec{Static: &agw.StaticBackend{
-				Host: r.TraceBackend.Host, Port: r.TraceBackend.Port,
-			}}
+			backend.Spec = agw.AgentgatewayBackendSpec{
+				Static: &agw.StaticBackend{
+					Host: r.TraceBackend.Host,
+					Port: r.TraceBackend.Port,
+				},
+			}
 			return nil
 		})
 		if err != nil {
@@ -273,20 +282,31 @@ func (r *ExtAuthRuntimeReconciler) reconcileDelegationTracing(ctx context.Contex
 		})
 	}
 	// Registration controls which native metadata is accepted as conversation identity.
-	agentKind := `default(metadata.agentz_observability.agent_kind, "")`
 	attrs = append(attrs, agw.AttributeAdd{
 		Name:       "agentz.agent_kind",
-		Expression: agw.CELExpression(agentKind),
+		Expression: `default(metadata.agentz_observability.agent_kind, "")`,
 	})
 	if gateway == inference.GatewayName {
 		attrs = append(attrs,
 			agw.AttributeAdd{
-				Name:       "session.id",
-				Expression: agw.CELExpression(agentKind + ` == "codex" ? default(request.headers["thread-id"], "") : (` + agentKind + ` == "claude" ? default(request.headers["x-claude-code-session-id"], "") : "")`),
+				Name: "session.id",
+				Expression: `
+					default(metadata.agentz_observability.agent_kind, "") == "codex"
+						? default(request.headers["thread-id"], "")
+						: (default(metadata.agentz_observability.agent_kind, "") == "claude"
+							? default(request.headers["x-claude-code-session-id"], "")
+							: "")
+				`,
 			},
 			agw.AttributeAdd{
-				Name:       "agentz.turn_id",
-				Expression: agw.CELExpression(agentKind + ` == "codex" ? default(json(request.headers["x-codex-turn-metadata"]).turn_id, "") : (` + agentKind + ` == "claude" ? default(request.headers["x-claude-code-prompt-id"], "") : "")`),
+				Name: "agentz.turn_id",
+				Expression: `
+					default(metadata.agentz_observability.agent_kind, "") == "codex"
+						? default(json(request.headers["x-codex-turn-metadata"]).turn_id, "")
+						: (default(metadata.agentz_observability.agent_kind, "") == "claude"
+							? default(request.headers["x-claude-code-prompt-id"], "")
+							: "")
+				`,
 			},
 			agw.AttributeAdd{Name: "llm.input_messages", Expression: "string(request.body)"},
 			agw.AttributeAdd{
@@ -294,24 +314,41 @@ func (r *ExtAuthRuntimeReconciler) reconcileDelegationTracing(ctx context.Contex
 				Expression: "default(llm.requestModel, json(request.body).model)",
 			},
 			agw.AttributeAdd{
-				Name:       "llm.output_messages",
-				Expression: `toJson({"completion": default(llm.completion, []), "tool_calls": default(llm.toolCalls, [])})`,
+				Name: "llm.output_messages",
+				Expression: `toJson({
+					"completion": default(llm.completion, []),
+					"tool_calls": default(llm.toolCalls, [])
+				})`,
 			},
 		)
 	}
 	if gateway == mcp.GatewayName {
 		attrs = append(attrs,
 			agw.AttributeAdd{
-				Name:       "session.id",
-				Expression: agw.CELExpression(agentKind + ` == "codex" ? default(json(request.body).params._meta["x-codex-turn-metadata"].thread_id, "") : ""`),
+				Name: "session.id",
+				Expression: `
+					default(metadata.agentz_observability.agent_kind, "") == "codex"
+						? default(json(request.body).params._meta["x-codex-turn-metadata"].thread_id, "")
+						: ""
+				`,
 			},
 			agw.AttributeAdd{
-				Name:       "agentz.turn_id",
-				Expression: agw.CELExpression(agentKind + ` == "codex" ? default(json(request.body).params._meta["x-codex-turn-metadata"].turn_id, "") : ""`),
+				Name: "agentz.turn_id",
+				Expression: `
+					default(metadata.agentz_observability.agent_kind, "") == "codex"
+						? default(json(request.body).params._meta["x-codex-turn-metadata"].turn_id, "")
+						: ""
+				`,
 			},
 			agw.AttributeAdd{
-				Name:       "gen_ai.tool.call.id",
-				Expression: agw.CELExpression(agentKind + ` == "claude" ? default(json(request.body).params._meta["claudecode/toolUseId"], "") : (` + agentKind + ` == "codex" ? default(json(request.body).params._meta.callId, "") : "")`),
+				Name: "gen_ai.tool.call.id",
+				Expression: `
+					default(metadata.agentz_observability.agent_kind, "") == "claude"
+						? default(json(request.body).params._meta["claudecode/toolUseId"], "")
+						: (default(metadata.agentz_observability.agent_kind, "") == "codex"
+							? default(json(request.body).params._meta.callId, "")
+							: "")
+				`,
 			},
 			agw.AttributeAdd{
 				Name:       "tool.parameters",
@@ -319,8 +356,12 @@ func (r *ExtAuthRuntimeReconciler) reconcileDelegationTracing(ctx context.Contex
 			},
 			agw.AttributeAdd{Name: "output.value", Expression: "toJson(mcp.tool.result)"},
 			agw.AttributeAdd{
-				Name:       "tool.error",
-				Expression: "toJson(response.code >= 400 ? default(mcp.tool.error, string(response.body)) : mcp.tool.error)",
+				Name: "tool.error",
+				Expression: `toJson(
+					response.code >= 400
+						? default(mcp.tool.error, string(response.body))
+						: mcp.tool.error
+				)`,
 			},
 			agw.AttributeAdd{Name: "mcp.request.id", Expression: "json(request.body).id"},
 			agw.AttributeAdd{
@@ -334,36 +375,47 @@ func (r *ExtAuthRuntimeReconciler) reconcileDelegationTracing(ctx context.Contex
 		)
 	}
 	sample := agw.CELExpression("true")
-	filter := agw.CELExpression(
-		`metadata.agentz_observability.resource_kind == "inference" || (metadata.agentz_observability.resource_kind == "mcp" && default(mcp.methodName, json(request.body).method) == "tools/call")`,
-	)
+	filter := agw.CELExpression(`
+		metadata.agentz_observability.resource_kind == "inference" || (
+			metadata.agentz_observability.resource_kind == "mcp" &&
+			default(mcp.methodName, json(request.body).method) == "tools/call"
+		)
+	`)
 	bufferSize := resource.MustParse("32Mi")
 	_, err := ctrlutil.CreateOrPatch(ctx, r.Client, policy, func() error {
 		policy.OwnerReferences = owners
 		policy.Spec = agw.AgentgatewayPolicySpec{
 			TargetRefs: []agw.LocalPolicyTargetReferenceWithSectionName{{
 				LocalPolicyTargetReference: agw.LocalPolicyTargetReference{
-					Group: "gateway.networking.k8s.io", Kind: "Gateway", Name: gwv1.ObjectName(gateway),
+					Group: "gateway.networking.k8s.io",
+					Kind:  "Gateway",
+					Name:  gwv1.ObjectName(gateway),
 				},
 				Port: new(int32(8080)),
 			}},
-			Frontend: &agw.Frontend{HTTP: &agw.FrontendHTTP{
-				MaxBufferSize: &agw.ByteSize{Value: &bufferSize},
-			}, Tracing: &agw.Tracing{
-				PolicyBackendEndpoint: agw.PolicyBackendEndpoint{
-					BackendRef: r.TraceBackend.BackendRef(backend.Name),
+			Frontend: &agw.Frontend{
+				HTTP: &agw.FrontendHTTP{
+					MaxBufferSize: &agw.ByteSize{Value: &bufferSize},
 				},
-				Protocol:       agw.OTLPProtocolGrpc,
-				RandomSampling: &sample, ClientSampling: &sample, ParentNotSampled: &sample,
-				Filter: &filter, Attributes: &agw.LogTracingAttributes{Add: attrs},
-				Resources: []agw.ResourceAdd{
-					{Name: "service.name", Expression: `"agentz-oauth-gateway"`},
-					{
-						Name:       "service.namespace",
-						Expression: agw.CELExpression(strconv.Quote(namespace)),
+				Tracing: &agw.Tracing{
+					PolicyBackendEndpoint: agw.PolicyBackendEndpoint{
+						BackendRef: r.TraceBackend.BackendRef(backend.Name),
+					},
+					Protocol:         agw.OTLPProtocolGrpc,
+					RandomSampling:   &sample,
+					ClientSampling:   &sample,
+					ParentNotSampled: &sample,
+					Filter:           &filter,
+					Attributes:       &agw.LogTracingAttributes{Add: attrs},
+					Resources: []agw.ResourceAdd{
+						{Name: "service.name", Expression: `"agentz-oauth-gateway"`},
+						{
+							Name:       "service.namespace",
+							Expression: agw.CELExpression(strconv.Quote(namespace)),
+						},
 					},
 				},
-			}},
+			},
 		}
 		return nil
 	})

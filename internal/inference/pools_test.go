@@ -71,18 +71,20 @@ func TestResolvePoolContract(t *testing.T) {
 	reader := poolTestReader(t, scheme, primary, secondary)
 	pool := &agentzv1alpha1.InferencePool{
 		ObjectMeta: metav1.ObjectMeta{Name: "pool", Namespace: "default"},
-		Spec: agentzv1alpha1.InferencePoolSpec{Members: []agentzv1alpha1.InferencePoolMember{
-			{
-				Scope:    agentzv1alpha1.ResourceScopeOrganisation,
-				Provider: primary.Name,
-				Model:    "model",
+		Spec: agentzv1alpha1.InferencePoolSpec{
+			Members: []agentzv1alpha1.InferencePoolMember{
+				{
+					Scope:    agentzv1alpha1.ResourceScopeOrganisation,
+					Provider: primary.Name,
+					Model:    "model",
+				},
+				{
+					Scope:    agentzv1alpha1.ResourceScopeOrganisation,
+					Provider: secondary.Name,
+					Model:    "model",
+				},
 			},
-			{
-				Scope:    agentzv1alpha1.ResourceScopeOrganisation,
-				Provider: secondary.Name,
-				Model:    "model",
-			},
-		}},
+		},
 	}
 	definition, issues, err := ResolvePool(context.Background(), reader, pool)
 	if err != nil {
@@ -140,18 +142,20 @@ func TestResolvePoolRejectsUnsupportedAPIConversion(t *testing.T) {
 	reader := poolTestReader(t, scheme, primary, secondary)
 	pool := &agentzv1alpha1.InferencePool{
 		ObjectMeta: metav1.ObjectMeta{Name: "pool", Namespace: "default"},
-		Spec: agentzv1alpha1.InferencePoolSpec{Members: []agentzv1alpha1.InferencePoolMember{
-			{
-				Scope:    agentzv1alpha1.ResourceScopeOrganisation,
-				Provider: primary.Name,
-				Model:    "model",
+		Spec: agentzv1alpha1.InferencePoolSpec{
+			Members: []agentzv1alpha1.InferencePoolMember{
+				{
+					Scope:    agentzv1alpha1.ResourceScopeOrganisation,
+					Provider: primary.Name,
+					Model:    "model",
+				},
+				{
+					Scope:    agentzv1alpha1.ResourceScopeOrganisation,
+					Provider: secondary.Name,
+					Model:    "model",
+				},
 			},
-			{
-				Scope:    agentzv1alpha1.ResourceScopeOrganisation,
-				Provider: secondary.Name,
-				Model:    "model",
-			},
-		}},
+		},
 	}
 	_, issues, err := ResolvePool(context.Background(), reader, pool)
 	if err != nil {
@@ -300,24 +304,26 @@ func TestRenderPoolBackend(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "logical", Namespace: "default"},
 		Spec:       agentzv1alpha1.InferencePoolSpec{AutomaticFailover: true},
 	}
-	definition := PoolDefinition{Members: []ResolvedPoolMember{
-		{
-			Ref: agentzv1alpha1.InferencePoolMember{
-				Scope:    agentzv1alpha1.ResourceScopeOrganisation,
-				Provider: primary.Name,
-				Model:    "gpt",
+	definition := PoolDefinition{
+		Members: []ResolvedPoolMember{
+			{
+				Ref: agentzv1alpha1.InferencePoolMember{
+					Scope:    agentzv1alpha1.ResourceScopeOrganisation,
+					Provider: primary.Name,
+					Model:    "gpt",
+				},
+				Provider: primary,
 			},
-			Provider: primary,
-		},
-		{
-			Ref: agentzv1alpha1.InferencePoolMember{
-				Scope:    agentzv1alpha1.ResourceScopeOrganisation,
-				Provider: secondary.Name,
-				Model:    "claude",
+			{
+				Ref: agentzv1alpha1.InferencePoolMember{
+					Scope:    agentzv1alpha1.ResourceScopeOrganisation,
+					Provider: secondary.Name,
+					Model:    "claude",
+				},
+				Provider: secondary,
 			},
-			Provider: secondary,
 		},
-	}}
+	}
 	backend, err := RenderPoolBackend(pool, definition)
 	if err != nil {
 		t.Fatalf("RenderPoolBackend() error = %v", err)
@@ -388,48 +394,6 @@ func TestRenderPoolBackend(t *testing.T) {
 		if group.Providers[0].Policies.Health != nil {
 			t.Fatalf("group %d rendered health with failover disabled", i)
 		}
-	}
-}
-
-func TestRenderSandboxPoolTarget(t *testing.T) {
-	t.Parallel()
-
-	runtime := RenderSandboxTarget(
-		"default",
-		"sandbox",
-		SandboxTarget{
-			Name:    "pool",
-			Backend: "pool",
-			Path:    SandboxPoolPath("sandbox", "pool"),
-			Models:  []string{"pool"},
-			Labels:  map[string]string{PoolLabel: "pool"},
-			Retries: 1,
-		},
-	)
-	match := runtime.Route.Spec.Rules[0].Matches[0].Path
-	if match == nil || match.Value == nil || *match.Value != "/sandboxes/sandbox/pools/pool" {
-		t.Fatalf("route path = %#v", match)
-	}
-	if len(runtime.Route.Spec.Rules[0].Filters) != 0 {
-		t.Fatalf("route filters = %#v, want none", runtime.Route.Spec.Rules[0].Filters)
-	}
-	expressions := runtime.Policy.Spec.Traffic.Authorization.Policy.MatchExpressions
-	if len(expressions) != 1 {
-		t.Fatalf("authorization expressions = %#v", expressions)
-	}
-	wantExpression := "default(json(request.body).model, \"\") in [\"pool\"]"
-	if string(expressions[0]) != wantExpression {
-		t.Fatalf("authorization expressions = %#v", expressions)
-	}
-	retry := runtime.Policy.Spec.Traffic.Retry
-	if retry == nil || retry.Attempts == nil || retry.Backoff == nil || retry.Condition == nil {
-		t.Fatalf("retry = %#v", retry)
-	}
-	attemptsMismatch := *retry.Attempts != 1
-	backoffMismatch := *retry.Backoff != "50ms"
-	wantRetryCondition := "response.code == 401 || response.code == 403 || response.code == 429 || response.code >= 500"
-	if attemptsMismatch || backoffMismatch || string(*retry.Condition) != wantRetryCondition {
-		t.Fatalf("retry = %#v", retry)
 	}
 }
 

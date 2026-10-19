@@ -265,11 +265,13 @@ func TestValidateModelRemovalRejectsPoolReference(t *testing.T) {
 	desired.Spec.Models = nil
 	pool := &agentzv1alpha1.InferencePool{
 		ObjectMeta: metav1.ObjectMeta{Name: "pool", Namespace: "default"},
-		Spec: agentzv1alpha1.InferencePoolSpec{Members: []agentzv1alpha1.InferencePoolMember{{
-			Scope:    agentzv1alpha1.ResourceScopeOrganisation,
-			Provider: current.Name,
-			Model:    "model",
-		}}},
+		Spec: agentzv1alpha1.InferencePoolSpec{
+			Members: []agentzv1alpha1.InferencePoolMember{{
+				Scope:    agentzv1alpha1.ResourceScopeOrganisation,
+				Provider: current.Name,
+				Model:    "model",
+			}},
+		},
 	}
 	scheme := runtime.NewScheme()
 	if err := agentzv1alpha1.AddToScheme(scheme); err != nil {

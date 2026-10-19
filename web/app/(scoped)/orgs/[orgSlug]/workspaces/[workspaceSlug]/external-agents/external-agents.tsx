@@ -495,11 +495,7 @@ function ExternalAgentEditor({
       <SheetContent size="default">
         <SheetHeader>
           <SheetTitle>{agent ? "Rename agent" : "Add external agent"}</SheetTitle>
-          <SheetDescription>
-            {agent
-              ? "Choose a name you recognize."
-              : "Sign in as yourself. Grant only the access your agent needs."}
-          </SheetDescription>
+          {agent && <SheetDescription>Choose a name you recognize.</SheetDescription>}
         </SheetHeader>
         <form
           className="flex min-h-0 flex-1 flex-col"
