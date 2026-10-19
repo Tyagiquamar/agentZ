@@ -276,7 +276,7 @@ export AGENTZ_HOST=agentz.example.com
 export S3_HOST=s3.agentz.example.com
 export ACME_EMAIL=ops@example.com
 export ADMIN_EMAIL=you@example.com
-export AGENTZ_VERSION=v0.28.1
+export AGENTZ_VERSION=v0.30.0
 
 kubectl rollout status deployment/cert-manager-webhook -n cert-manager --timeout=180s
 
@@ -507,6 +507,7 @@ manager:
   config:
     agentImage: public.ecr.aws/k9v9d5v2/agentz/agent:${AGENTZ_VERSION}
     agentInitImage: public.ecr.aws/k9v9d5v2/agentz/init:${AGENTZ_VERSION}
+    delegationImage: public.ecr.aws/k9v9d5v2/agentz/agentgateway:${AGENTZ_VERSION}
     skillsS3Endpoint: http://rustfs-svc.rustfs.svc.cluster.local:9000
 gateway:
   image:

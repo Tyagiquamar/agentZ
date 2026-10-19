@@ -38,10 +38,12 @@ func TestTenantIsolationExcludesPrivateRuntimes(t *testing.T) {
 		Scheme:                         scheme,
 		ManagerServiceAccountNamespace: "custom-system",
 	}
-	tenant := &agentzv1alpha1.Tenant{ObjectMeta: metav1.ObjectMeta{
-		Name: "org-05d3f392d8021c42b0434f9f5f20eac6",
-		UID:  "tenant-uid",
-	}}
+	tenant := &agentzv1alpha1.Tenant{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "org-05d3f392d8021c42b0434f9f5f20eac6",
+			UID:  "tenant-uid",
+		},
+	}
 	err := r.reconcileIsolationPolicy(context.Background(), tenant, tenant.Name)
 	if err != nil {
 		t.Fatalf("reconcileIsolationPolicy() error = %v", err)

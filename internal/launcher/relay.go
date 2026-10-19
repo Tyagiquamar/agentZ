@@ -104,7 +104,8 @@ func (installed *installation) serve(ctx context.Context) error {
 		return err
 	}
 	proxy := &httputil.ReverseProxy{
-		Transport: transport, FlushInterval: -1,
+		Transport:     transport,
+		FlushInterval: -1,
 		Rewrite: func(request *httputil.ProxyRequest) {
 			request.SetURL(installed.upstream)
 			request.Out.URL.Path = "/api/inference" + request.In.URL.Path
@@ -120,9 +121,13 @@ func (installed *installation) serve(ctx context.Context) error {
 		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, _ error) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadGateway)
-			json.NewEncoder(w).Encode(relayError{Type: "error", Error: relayErrorDetail{
-				Type: "api_error", Message: "AgentZ is unreachable. Check your network connection.",
-			}})
+			json.NewEncoder(w).Encode(relayError{
+				Type: "error",
+				Error: relayErrorDetail{
+					Type:    "api_error",
+					Message: "AgentZ is unreachable. Check your network connection.",
+				},
+			})
 		},
 	}
 	ctx, cancel := context.WithCancel(ctx)
@@ -170,8 +175,11 @@ func (installed *installation) serve(ctx context.Context) error {
 		mux.ServeHTTP(w, r)
 	})
 	server := &http.Server{
-		Handler: handler, ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout: 30 * time.Second, IdleTimeout: time.Minute, MaxHeaderBytes: 32 << 10,
+		Handler:           handler,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		IdleTimeout:       time.Minute,
+		MaxHeaderBytes:    32 << 10,
 	}
 	stopped := make(chan struct{})
 	go func() {
@@ -251,9 +259,12 @@ func (installed *installation) serveCatalog(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	settings := managedSettings{
-		DisableAutoMode: "disable",
-		AvailableModels: []string{}, AvailableModelsMatch: "exact", EnforceAvailable: true,
-		ModelOverrides: map[string]string{}, ModelPicker: modelPicker{Options: []modelOption{}, ReplaceBuiltInOptions: true},
+		DisableAutoMode:      "disable",
+		AvailableModels:      []string{},
+		AvailableModelsMatch: "exact",
+		EnforceAvailable:     true,
+		ModelOverrides:       map[string]string{},
+		ModelPicker:          modelPicker{Options: []modelOption{}, ReplaceBuiltInOptions: true},
 	}
 	list := modelList{Data: []modelListItem{}}
 	for _, model := range catalog.JSON200.Models {

@@ -41,9 +41,11 @@ func main() {
 		},
 		Commands: []*cli.Command{
 			{
-				Name: "launch", Usage: "Launch Claude or Codex with native flags",
+				Name:            "launch",
+				Usage:           "Launch Claude or Codex with native flags",
 				ArgsUsage:       "[claude|codex] [--profile NAME] [-- native flags]",
-				SkipFlagParsing: true, Action: launcher.Run,
+				SkipFlagParsing: true,
+				Action:          launcher.Run,
 			},
 			{
 				Name:            "login",
@@ -53,7 +55,8 @@ func main() {
 				Action:          launcher.Run,
 			},
 			{
-				Name: "relay", Usage: "Manage the local AgentZ relay",
+				Name:  "relay",
+				Usage: "Manage the local AgentZ relay",
 				Commands: []*cli.Command{
 					{Name: "serve", Hidden: true, Action: launcher.Run},
 					{Name: "status", Action: launcher.Run},

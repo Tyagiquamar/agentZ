@@ -136,7 +136,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 
 	nsName := tenant.Name
-	if !apimeta.IsStatusConditionTrue(tenant.Status.Conditions, agentzv1alpha1.TenantConditionReady) {
+	ready := apimeta.IsStatusConditionTrue(tenant.Status.Conditions, agentzv1alpha1.TenantConditionReady)
+	if !ready {
 		err := r.updateStatus(
 			ctx,
 			tenant.Name,
@@ -402,10 +403,12 @@ func (r *Reconciler) reconcileNamespace(ctx context.Context, tenant *agentzv1alp
 }
 
 func (r *Reconciler) reconcileNixStorePVC(ctx context.Context, tenant *agentzv1alpha1.Tenant, nsName string) error {
-	pvc := &corev1.PersistentVolumeClaim{ObjectMeta: metav1.ObjectMeta{
-		Name:      r.NixStorePVCName,
-		Namespace: nsName,
-	}}
+	pvc := &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      r.NixStorePVCName,
+			Namespace: nsName,
+		},
+	}
 	_, err := controllerutil.CreateOrPatch(
 		ctx,
 		r.directClient(),
@@ -439,7 +442,8 @@ func (r *Reconciler) reconcileIsolationPolicy(ctx context.Context, tenant *agent
 	if err := r.directClient().Get(ctx, client.ObjectKey{Name: nsName}, namespace); err != nil {
 		return err
 	}
-	if err := networkpolicy.ReconcileRuntimeIsolation(ctx, r.directClient(), namespace); err != nil {
+	err := networkpolicy.ReconcileRuntimeIsolation(ctx, r.directClient(), namespace)
+	if err != nil {
 		return err
 	}
 	policy := &ciliumv2.CiliumNetworkPolicy{
@@ -448,7 +452,7 @@ func (r *Reconciler) reconcileIsolationPolicy(ctx context.Context, tenant *agent
 			Namespace: nsName,
 		},
 	}
-	_, err := controllerutil.CreateOrPatch(
+	_, err = controllerutil.CreateOrPatch(
 		ctx,
 		r.directClient(),
 		policy,

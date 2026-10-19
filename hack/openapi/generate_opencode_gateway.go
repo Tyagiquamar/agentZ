@@ -78,8 +78,11 @@ var baseOperationCapabilities = map[string][]string{
 		"createAgentFile",
 		"createWorkflow",
 		"listAgentModelCatalog",
-		"createWorkflowEvaluation", "listWorkflowEvaluations",
-		"getWorkflowEvaluation", "updateWorkflowEvaluation", "deleteWorkflowEvaluation",
+		"createWorkflowEvaluation",
+		"listWorkflowEvaluations",
+		"getWorkflowEvaluation",
+		"updateWorkflowEvaluation",
+		"deleteWorkflowEvaluation",
 		"createWorkflowRun",
 		"createWorkflowSchedule",
 		"deleteAgent",
@@ -185,6 +188,13 @@ var baseOperationCapabilities = map[string][]string{
 		"watchMCPConnections",
 	},
 	"observability.read": {
+		"listLensApps",
+		"listAppSessions",
+		"listAppTraces",
+		"getAppTraceChart",
+		"listAppSpans",
+		"getAppOperation",
+		"getAppMCPGraph",
 		"getEventTrailEvent",
 		"getMCPGraph",
 		"getSpanDetail",
@@ -989,7 +999,8 @@ func applyOAPICodegenFixups(doc map[string]any) error {
 	userTime["created"] = map[string]any{"type": "integer", "format": "int64"}
 
 	schemas["PromptModel"] = map[string]any{
-		"type": "object", "required": []any{"providerID", "modelID"},
+		"type":     "object",
+		"required": []any{"providerID", "modelID"},
 		"properties": map[string]any{
 			"providerID": map[string]any{"type": "string"},
 			"modelID":    map[string]any{"type": "string"},

@@ -337,13 +337,15 @@ func TestCodingSuggestionModels(t *testing.T) {
 			org := agentzv1alpha1.ScopeNamespace(
 				agentzv1alpha1.ResourceScopeOrganisation, "org",
 			)
-			ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
-				Name: "workspace",
-				Labels: map[string]string{
-					agentzv1alpha1.WorkspaceNameLabel:        "workspace",
-					agentzv1alpha1.TenantOrganizationIDLabel: org,
+			ns := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "workspace",
+					Labels: map[string]string{
+						agentzv1alpha1.WorkspaceNameLabel:        "workspace",
+						agentzv1alpha1.TenantOrganizationIDLabel: org,
+					},
 				},
-			}}
+			}
 			workspace := &agentzv1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{Name: ns.Name},
 			}

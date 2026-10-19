@@ -2946,7 +2946,8 @@ func (s *Service) agentTools(w http.ResponseWriter, r *http.Request, name, toolN
 			fields := make([]gatewayapi.FieldError, 0, len(validation))
 			for _, e := range validation {
 				fields = append(fields, gatewayapi.FieldError{
-					Field: e.Field, Message: e.Detail,
+					Field:   e.Field,
+					Message: e.Detail,
 				})
 			}
 			apiutil.WriteError(w, r, apiutil.NewError(
@@ -2984,7 +2985,9 @@ func (s *Service) agentTools(w http.ResponseWriter, r *http.Request, name, toolN
 	})
 	if err == nil {
 		err = createAgentEventTrail(ctx, q, agentEvent{
-			access: access, name: name, action: action,
+			access: access,
+			name:   name,
+			action: action,
 			before: []gatewayapi.EventTrailField{
 				{Field: gatewayapi.EventTrailFieldName, Value: toolName},
 				{Field: gatewayapi.EventTrailFieldState, Value: before.ResourceVersion},

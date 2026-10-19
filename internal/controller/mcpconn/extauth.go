@@ -28,10 +28,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gwv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	sandboxcontroller "github.com/accuknox/agentz/internal/controller/sandbox"
 	"github.com/accuknox/agentz/internal/inference"
 	"github.com/accuknox/agentz/internal/mcp"
 	"github.com/accuknox/agentz/internal/networkpolicy"
 	agentzv1alpha1 "github.com/accuknox/agentz/pkg/apis/agentz/v1alpha1"
+	agw "github.com/agentgateway/agentgateway/controller/api/v1alpha1/agentgateway"
 )
 
 const (
@@ -83,6 +85,8 @@ type ExtAuthRuntimeReconciler struct {
 	OpenBaoSecretMountPath  string
 	OpenBaoK8sAuthMountPath string
 	DelegationNamespace     string
+	TraceBackend            sandboxcontroller.TraceBackend
+	DelegationImage         agw.Image
 }
 
 // The runtime controller deletes obsolete scope-reader RBAC objects explicitly
@@ -117,10 +121,14 @@ func (r *ExtAuthRuntimeReconciler) namespaceForWorkspace(_ context.Context, obj 
 	if !ok {
 		return nil
 	}
-	return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: agentzv1alpha1.ScopeNamespace(
-		agentzv1alpha1.ResourceScopeOrganisation,
-		workspace.Spec.OrganizationID,
-	)}}}
+	return []reconcile.Request{{
+		NamespacedName: types.NamespacedName{
+			Name: agentzv1alpha1.ScopeNamespace(
+				agentzv1alpha1.ResourceScopeOrganisation,
+				workspace.Spec.OrganizationID,
+			),
+		},
+	}}
 }
 
 func (r *ExtAuthRuntimeReconciler) namespaceForObject(_ context.Context, obj client.Object) []reconcile.Request {
@@ -148,7 +156,9 @@ func (r *ExtAuthRuntimeReconciler) runtimeNeeded(ctx context.Context, ns string)
 		if !provider.DeletionTimestamp.IsZero() {
 			continue
 		}
-		if provider.Spec.Kind == agentzv1alpha1.InferenceProviderKindOpenAICodex || r.DelegationNamespace != "" {
+		requiresExtAuth := provider.Spec.Kind == agentzv1alpha1.InferenceProviderKindOpenAICodex ||
+			r.DelegationNamespace != ""
+		if requiresExtAuth {
 			return true, nil
 		}
 	}
@@ -461,10 +471,12 @@ func (r *ExtAuthRuntimeReconciler) reconcileExtAuthWorkspaceAccess(ctx context.C
 	org, workspaces, labels := scope.namespace, scope.workspaces, scope.labels
 	name := mcp.ExtAuthOpenBaoName(org)
 	for _, workspace := range workspaces {
-		grant := &gwv1.ReferenceGrant{ObjectMeta: metav1.ObjectMeta{
-			Name:      mcp.ExtAuthServiceName + "-" + workspace.name,
-			Namespace: org,
-		}}
+		grant := &gwv1.ReferenceGrant{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      mcp.ExtAuthServiceName + "-" + workspace.name,
+				Namespace: org,
+			},
+		}
 		if workspace.mcp {
 			_, err := ctrlutil.CreateOrPatch(
 				ctx,
@@ -499,14 +511,18 @@ func (r *ExtAuthRuntimeReconciler) reconcileExtAuthWorkspaceAccess(ctx context.C
 			}
 		}
 
-		role := &rbacv1.Role{ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: workspace.namespace,
-		}}
-		binding := &rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: workspace.namespace,
-		}}
+		role := &rbacv1.Role{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: workspace.namespace,
+			},
+		}
+		binding := &rbacv1.RoleBinding{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: workspace.namespace,
+			},
+		}
 		if !workspace.mcp && !workspace.inference {
 			if err := r.Delete(ctx, binding); err != nil && !apierrors.IsNotFound(err) {
 				return fmt.Errorf("delete workspace ext auth role binding: %w", err)
@@ -832,22 +848,26 @@ func (r *ExtAuthRuntimeReconciler) reconcileExtAuthPolicy(ctx context.Context, s
 			policy.Spec = extAuthPolicySpec(ns, workspaces)
 			if r.DelegationNamespace != "" {
 				policy.Spec.Ingress = append(policy.Spec.Ingress, ciliumapi.IngressRule{
-					IngressCommonRule: ciliumapi.IngressCommonRule{FromEndpoints: []ciliumapi.EndpointSelector{
-						ciliumapi.NewESFromLabels(
-							ciliumlabels.NewLabel("io.kubernetes.pod.namespace", ns, ciliumlabels.LabelSourceK8s),
-							ciliumlabels.NewLabel("io.cilium.k8s.policy.serviceaccount", "mcp", ciliumlabels.LabelSourceK8s),
-							ciliumlabels.NewLabel("gateway.networking.k8s.io/gateway-name", mcp.GatewayName, ciliumlabels.LabelSourceK8s),
-						),
-						ciliumapi.NewESFromLabels(
-							ciliumlabels.NewLabel("io.kubernetes.pod.namespace", ns, ciliumlabels.LabelSourceK8s),
-							ciliumlabels.NewLabel("io.cilium.k8s.policy.serviceaccount", "inference", ciliumlabels.LabelSourceK8s),
-							ciliumlabels.NewLabel("gateway.networking.k8s.io/gateway-name", inference.GatewayName, ciliumlabels.LabelSourceK8s),
-						),
+					IngressCommonRule: ciliumapi.IngressCommonRule{
+						FromEndpoints: []ciliumapi.EndpointSelector{
+							ciliumapi.NewESFromLabels(
+								ciliumlabels.NewLabel("io.kubernetes.pod.namespace", ns, ciliumlabels.LabelSourceK8s),
+								ciliumlabels.NewLabel("io.cilium.k8s.policy.serviceaccount", "mcp", ciliumlabels.LabelSourceK8s),
+								ciliumlabels.NewLabel("gateway.networking.k8s.io/gateway-name", mcp.GatewayName, ciliumlabels.LabelSourceK8s),
+							),
+							ciliumapi.NewESFromLabels(
+								ciliumlabels.NewLabel("io.kubernetes.pod.namespace", ns, ciliumlabels.LabelSourceK8s),
+								ciliumlabels.NewLabel("io.cilium.k8s.policy.serviceaccount", "inference", ciliumlabels.LabelSourceK8s),
+								ciliumlabels.NewLabel("gateway.networking.k8s.io/gateway-name", inference.GatewayName, ciliumlabels.LabelSourceK8s),
+							),
+						},
+					},
+					ToPorts: []ciliumapi.PortRule{{
+						Ports: []ciliumapi.PortProtocol{{
+							Port:     "18084",
+							Protocol: ciliumapi.ProtoTCP,
+						}},
 					}},
-					ToPorts: []ciliumapi.PortRule{{Ports: []ciliumapi.PortProtocol{{
-						Port:     "18084",
-						Protocol: ciliumapi.ProtoTCP,
-					}}}},
 				})
 			}
 			policy.Spec.Egress = append(

@@ -400,7 +400,9 @@ func (r *Reconciler) reconcileNamespace(ctx context.Context, workspace *agentzv1
 				workspaceMatches := ns.Annotations[agentzv1alpha1.WorkspaceIDAnnotation] == workspace.Spec.WorkspaceID
 				organizationID := ns.Annotations[agentzv1alpha1.TenantOrganizationIDAnnotation]
 				organizationMatches := organizationID == workspace.Spec.OrganizationID
-				if !managed || !workspaceOwned || !organizationOwned || !workspaceMatches || !organizationMatches {
+				identityMatches := managed && workspaceOwned && organizationOwned &&
+					workspaceMatches && organizationMatches
+				if !identityMatches {
 					return errNamespaceConflict
 				}
 				for _, owner := range ns.OwnerReferences {
@@ -437,10 +439,12 @@ func (r *Reconciler) reconcileNamespace(ctx context.Context, workspace *agentzv1
 }
 
 func (r *Reconciler) reconcileNixStorePVC(ctx context.Context, workspace *agentzv1alpha1.Workspace, tenant *agentzv1alpha1.Tenant) error {
-	pvc := &corev1.PersistentVolumeClaim{ObjectMeta: metav1.ObjectMeta{
-		Name:      r.NixStorePVCName,
-		Namespace: workspace.Name,
-	}}
+	pvc := &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      r.NixStorePVCName,
+			Namespace: workspace.Name,
+		},
+	}
 	_, err := controllerutil.CreateOrPatch(
 		ctx,
 		r.Direct,
@@ -515,34 +519,40 @@ func (r *Reconciler) reconcileIsolationPolicy(ctx context.Context, workspace *ag
 	}
 	nonPackageJobs := ciliumpolicyapi.NewESFromK8sLabelSelector(
 		ciliumlabels.LabelSourceK8sKeyPrefix,
-		&slimv1.LabelSelector{MatchExpressions: []slimv1.LabelSelectorRequirement{{
-			Key:      "io.cilium.k8s.policy.serviceaccount",
-			Operator: slimv1.LabelSelectorOpNotIn,
-			Values:   []string{"inference", "mcp", "extauth"},
-		}, {
-			Key:      agentzv1alpha1.AgentPackageJobLabel,
-			Operator: slimv1.LabelSelectorOpDoesNotExist,
-		}}},
+		&slimv1.LabelSelector{
+			MatchExpressions: []slimv1.LabelSelectorRequirement{{
+				Key:      "io.cilium.k8s.policy.serviceaccount",
+				Operator: slimv1.LabelSelectorOpNotIn,
+				Values:   []string{"inference", "mcp", "extauth"},
+			}, {
+				Key:      agentzv1alpha1.AgentPackageJobLabel,
+				Operator: slimv1.LabelSelectorOpDoesNotExist,
+			}},
+		},
 	)
 	workspacePeers := ciliumpolicyapi.NewESFromK8sLabelSelector(
 		ciliumlabels.LabelSourceK8sKeyPrefix,
-		&slimv1.LabelSelector{MatchExpressions: []slimv1.LabelSelectorRequirement{
-			{
-				Key:      agentzv1alpha1.AgentPackageJobLabel,
-				Operator: slimv1.LabelSelectorOpDoesNotExist,
+		&slimv1.LabelSelector{
+			MatchExpressions: []slimv1.LabelSelectorRequirement{
+				{
+					Key:      agentzv1alpha1.AgentPackageJobLabel,
+					Operator: slimv1.LabelSelectorOpDoesNotExist,
+				},
+				{
+					Key:      "agentz.accuknox.com/agent",
+					Operator: slimv1.LabelSelectorOpDoesNotExist,
+				},
 			},
-			{
-				Key:      "agentz.accuknox.com/agent",
-				Operator: slimv1.LabelSelectorOpDoesNotExist,
-			},
-		}},
+		},
 	)
 	packageJobs := ciliumpolicyapi.NewESFromK8sLabelSelector(
 		ciliumlabels.LabelSourceK8sKeyPrefix,
-		&slimv1.LabelSelector{MatchExpressions: []slimv1.LabelSelectorRequirement{{
-			Key:      agentzv1alpha1.AgentPackageJobLabel,
-			Operator: slimv1.LabelSelectorOpExists,
-		}}},
+		&slimv1.LabelSelector{
+			MatchExpressions: []slimv1.LabelSelectorRequirement{{
+				Key:      agentzv1alpha1.AgentPackageJobLabel,
+				Operator: slimv1.LabelSelectorOpExists,
+			}},
+		},
 	)
 	gateway := ciliumpolicyapi.NewESFromLabels(
 		ciliumlabels.NewLabel(
