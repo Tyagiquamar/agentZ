@@ -2322,23 +2322,23 @@ const gatewayGetLensApp = `-- name: GatewayGetLensApp :one
 WITH subjects AS (
  SELECT op.client_id, op.app_name AS name, op.agent_kind, MAX(op.start_time) AS last_seen
  FROM observer_app_operations op
- WHERE op.client_id = $1 AND op.organization_id = $2 AND op.workspace_id = $3
+ WHERE op.client_id = $3 AND op.organization_id = $1 AND op.workspace_id = $2
  GROUP BY op.client_id, op.app_name, op.agent_kind
  UNION ALL
  SELECT g.client_id, COALESCE(c.name, c.client_id)::text, COALESCE(e.kind::text, ''), now()
  FROM delegation_grants g JOIN oauth_clients c ON c.client_id = g.client_id
  LEFT JOIN external_agents e ON e.client_id = g.client_id AND e.organization_id = g.organization_id
-   AND e.workspace_id = $3
- WHERE g.client_id = $1 AND g.organization_id = $2
+   AND e.workspace_id = $2
+ WHERE g.client_id = $3 AND g.organization_id = $1
    AND g.approved_at IS NOT NULL AND g.revoked_at IS NULL AND c.disabled IS NOT TRUE
    AND EXISTS (
     SELECT 1 FROM jsonb_array_elements((g.selection->'models') || (g.selection->'mcp')) AS selected
-    WHERE selected->>'workspace_id' = $3
+    WHERE selected->>'workspace_id' = $2
    )
  UNION ALL
  SELECT e.client_id, COALESCE(c.name, e.client_id)::text, e.kind::text, now()
  FROM external_agents e LEFT JOIN oauth_clients c ON c.client_id = e.client_id
- WHERE e.client_id = $1 AND e.organization_id = $2 AND e.workspace_id = $3
+ WHERE e.client_id = $3 AND e.organization_id = $1 AND e.workspace_id = $2
 ), latest AS (
  SELECT DISTINCT ON (client_id) client_id, name FROM subjects ORDER BY client_id, last_seen DESC, name
 ), kinds AS (
@@ -2346,13 +2346,16 @@ WITH subjects AS (
 )
 SELECT latest.client_id, COALESCE(c.name, latest.name)::text AS name, COALESCE(kinds.agent_kind, '')::text AS agent_kind
 FROM latest JOIN kinds ON kinds.client_id = latest.client_id LEFT JOIN oauth_clients c ON c.client_id = latest.client_id
+LEFT JOIN external_agents e ON e.client_id = latest.client_id
+ AND e.organization_id = $1 AND e.workspace_id = $2
+WHERE kinds.agent_kind IS NULL OR e.client_id IS NOT NULL
 LIMIT 1
 `
 
 type GatewayGetLensAppParams struct {
-	ClientID       string `json:"client_id"`
 	OrganizationID string `json:"organization_id"`
 	WorkspaceID    string `json:"workspace_id"`
+	ClientID       string `json:"client_id"`
 }
 
 type GatewayGetLensAppRow struct {
@@ -2362,7 +2365,7 @@ type GatewayGetLensAppRow struct {
 }
 
 func (q *Queries) GatewayGetLensApp(ctx context.Context, arg GatewayGetLensAppParams) (GatewayGetLensAppRow, error) {
-	row := q.db.QueryRow(ctx, gatewayGetLensApp, arg.ClientID, arg.OrganizationID, arg.WorkspaceID)
+	row := q.db.QueryRow(ctx, gatewayGetLensApp, arg.OrganizationID, arg.WorkspaceID, arg.ClientID)
 	var i GatewayGetLensAppRow
 	err := row.Scan(&i.ClientID, &i.Name, &i.AgentKind)
 	return i, err
@@ -2870,6 +2873,15 @@ SELECT EXISTS (
  SELECT 1 FROM observer_app_operations op
  WHERE op.organization_id = $1 AND op.workspace_id = $2
    AND op.client_id = $3
+   AND (EXISTS (
+    SELECT 1 FROM external_agents e
+    WHERE e.client_id = op.client_id AND e.organization_id = op.organization_id
+      AND e.workspace_id = op.workspace_id
+   ) OR NOT EXISTS (
+    SELECT 1 FROM observer_app_operations native
+    WHERE native.client_id = op.client_id AND native.organization_id = op.organization_id
+      AND native.workspace_id = op.workspace_id AND native.agent_kind <> ''
+   ))
  UNION ALL
  SELECT 1 FROM delegation_grants g JOIN oauth_clients c ON c.client_id = g.client_id
  WHERE g.organization_id = $1 AND g.client_id = $3
@@ -5144,6 +5156,7 @@ FROM latest JOIN kinds ON kinds.client_id = latest.client_id LEFT JOIN oauth_cli
 LEFT JOIN external_agents owner ON owner.client_id = latest.client_id
  AND owner.organization_id = $1 AND owner.workspace_id = $2
 LEFT JOIN users u ON u.id = owner.user_id
+WHERE kinds.agent_kind IS NULL OR owner.client_id IS NOT NULL
 ORDER BY COALESCE(c.name, latest.name), latest.client_id
 `
 

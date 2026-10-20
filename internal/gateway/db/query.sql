@@ -2769,6 +2769,7 @@ FROM latest JOIN kinds ON kinds.client_id = latest.client_id LEFT JOIN oauth_cli
 LEFT JOIN external_agents owner ON owner.client_id = latest.client_id
  AND owner.organization_id = sqlc.arg(organization_id) AND owner.workspace_id = sqlc.arg(workspace_id)
 LEFT JOIN users u ON u.id = owner.user_id
+WHERE kinds.agent_kind IS NULL OR owner.client_id IS NOT NULL
 ORDER BY COALESCE(c.name, latest.name), latest.client_id;
 
 -- name: GatewayLensAppExists :one
@@ -2776,6 +2777,15 @@ SELECT EXISTS (
  SELECT 1 FROM observer_app_operations op
  WHERE op.organization_id = sqlc.arg(organization_id) AND op.workspace_id = sqlc.arg(workspace_id)
    AND op.client_id = sqlc.arg(client_id)
+   AND (EXISTS (
+    SELECT 1 FROM external_agents e
+    WHERE e.client_id = op.client_id AND e.organization_id = op.organization_id
+      AND e.workspace_id = op.workspace_id
+   ) OR NOT EXISTS (
+    SELECT 1 FROM observer_app_operations native
+    WHERE native.client_id = op.client_id AND native.organization_id = op.organization_id
+      AND native.workspace_id = op.workspace_id AND native.agent_kind <> ''
+   ))
  UNION ALL
  SELECT 1 FROM delegation_grants g JOIN oauth_clients c ON c.client_id = g.client_id
  WHERE g.organization_id = sqlc.arg(organization_id) AND g.client_id = sqlc.arg(client_id)
@@ -2818,6 +2828,9 @@ WITH subjects AS (
 )
 SELECT latest.client_id, COALESCE(c.name, latest.name)::text AS name, COALESCE(kinds.agent_kind, '')::text AS agent_kind
 FROM latest JOIN kinds ON kinds.client_id = latest.client_id LEFT JOIN oauth_clients c ON c.client_id = latest.client_id
+LEFT JOIN external_agents e ON e.client_id = latest.client_id
+ AND e.organization_id = sqlc.arg(organization_id) AND e.workspace_id = sqlc.arg(workspace_id)
+WHERE kinds.agent_kind IS NULL OR e.client_id IS NOT NULL
 LIMIT 1;
 
 -- name: GatewayListAppSessions :many

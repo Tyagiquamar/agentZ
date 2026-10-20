@@ -425,7 +425,7 @@ export function ExternalAgents({
             </DialogTitle>
             <DialogDescription>
               {confirmation?.operation === "delete"
-                ? "This removes the agent and revokes its identity, model and MCP access."
+                ? "This permanently deletes the agent, its traces and conversations, and revokes its identity, model and MCP access."
                 : "Revoke this agent's identity, model and MCP access. Sign in again to reconnect."}{" "}
               Requests already running may finish.
             </DialogDescription>
