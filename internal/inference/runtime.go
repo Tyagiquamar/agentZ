@@ -289,18 +289,14 @@ func RenderInferenceAuthPolicy(namespace, backend string, section *gwv1.SectionN
 		contextExtensions["agentz.inference_pool"] = pool
 	}
 	return &agentgatewayv1alpha1.AgentgatewayPolicy{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: agentgatewayv1alpha1.GroupVersion.String(),
-			Kind:       "AgentgatewayPolicy",
-		},
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		APIVersion: agentgatewayv1alpha1.GroupVersion.String(),
+		Kind:       "AgentgatewayPolicy",
+		Name:       name, Namespace: namespace,
 		Spec: agentgatewayv1alpha1.AgentgatewayPolicySpec{
 			TargetRefs: []agentgatewayv1alpha1.LocalPolicyTargetReferenceWithSectionName{{
-				LocalPolicyTargetReference: agentgatewayv1alpha1.LocalPolicyTargetReference{
-					Group: "agentgateway.dev",
-					Kind:  "AgentgatewayBackend",
-					Name:  gwv1.ObjectName(backend),
-				},
+				Group:       "agentgateway.dev",
+				Kind:        "AgentgatewayBackend",
+				Name:        gwv1.ObjectName(backend),
 				SectionName: section,
 			}},
 			Backend: &agentgatewayv1alpha1.BackendFull{
@@ -524,10 +520,8 @@ func RenderProviderTarget(provider *agentzv1alpha1.InferenceProvider, model stri
 			}
 		}
 		target.LLM.Custom = &agentgatewayv1alpha1.CustomProvider{
-			CustomProviderSettings: agentgatewayv1alpha1.CustomProviderSettings{
-				Formats: formats,
-			},
-			Model: modelRef,
+			Formats: formats,
+			Model:   modelRef,
 		}
 		err := applyEndpoint(
 			&target.LLM,
@@ -637,10 +631,8 @@ func applyEndpoint(llm *agentgatewayv1alpha1.LLMProvider, policies *agentgateway
 
 func headerLocation(name, prefix string) *agentgatewayv1alpha1.AuthorizationLocation {
 	location := &agentgatewayv1alpha1.AuthorizationLocation{
-		AuthorizationLocationFields: agentgatewayv1alpha1.AuthorizationLocationFields{
-			Header: &agentgatewayv1alpha1.AuthorizationHeaderLocation{
-				Name: gwv1.HTTPHeaderName(name),
-			},
+		Header: &agentgatewayv1alpha1.AuthorizationHeaderLocation{
+			Name: gwv1.HTTPHeaderName(name),
 		},
 	}
 	if prefix != "" {
