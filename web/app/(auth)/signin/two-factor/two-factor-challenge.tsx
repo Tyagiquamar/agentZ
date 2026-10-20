@@ -1,5 +1,6 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
 import Image from "next/image"
 import * as React from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -13,8 +14,8 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Field, FieldContent, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Spinner } from "@/components/ui/spinner"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { SegmentedControl } from "@/components/interior/segmented-control"
+import { OtpInput } from "@/components/interior/otp-input"
 
 type TwoFactorChallengeProps = {
   returnTo: string
@@ -145,45 +146,54 @@ export function TwoFactorChallenge({ returnTo, oauth }: TwoFactorChallengeProps)
           aria-busy={locked}
           noValidate
         >
-          <Tabs
+          <SegmentedControl<ChallengeMode>
+            label="Verification method"
+            className="h-9 w-full"
             value={mode}
-            onValueChange={(value) => {
-              if (value !== "totp" && value !== "backup") {
-                return
-              }
-              setMode(value)
+            disabled={locked}
+            onValueChange={(next) => {
+              setMode(next)
               form.resetField("code")
               form.clearErrors("code")
             }}
-          >
-            <TabsList className="h-9 w-full">
-              <TabsTrigger value="totp" disabled={locked}>
-                Authenticator code
-              </TabsTrigger>
-              <TabsTrigger value="backup" disabled={locked}>
-                Backup code
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+            options={[
+              { value: "totp", label: "Authenticator code" },
+              { value: "backup", label: "Backup code" },
+            ]}
+          />
 
           <FieldGroup>
             <Field data-invalid={!!form.formState.errors.code}>
               <FieldLabel htmlFor="two-factor-signin-code" required>
                 {mode === "totp" ? "6-digit code" : "Backup code"}
               </FieldLabel>
-              <Input
-                id="two-factor-signin-code"
-                inputMode={mode === "totp" ? "numeric" : "text"}
-                autoComplete={mode === "totp" ? "one-time-code" : "off"}
-                maxLength={mode === "totp" ? 6 : undefined}
-                pattern={mode === "totp" ? "[0-9]*" : undefined}
-                placeholder={mode === "totp" ? "000000" : "Enter a backup code"}
-                disabled={locked}
-                aria-invalid={!!form.formState.errors.code}
-                aria-required="true"
-                {...form.register("code")}
-                aria-describedby="two-factor-signin-code-error"
-              />
+              {mode === "totp" ? (
+                <Controller
+                  name="code"
+                  control={form.control}
+                  render={({ field, fieldState }) => (
+                    <OtpInput
+                      {...field}
+                      id="two-factor-signin-code"
+                      disabled={locked}
+                      aria-invalid={fieldState.invalid}
+                      aria-required="true"
+                      aria-describedby="two-factor-signin-code-error"
+                    />
+                  )}
+                />
+              ) : (
+                <Input
+                  id="two-factor-signin-code"
+                  autoComplete="off"
+                  placeholder="Enter a backup code"
+                  disabled={locked}
+                  aria-invalid={!!form.formState.errors.code}
+                  aria-required="true"
+                  {...form.register("code")}
+                  aria-describedby="two-factor-signin-code-error"
+                />
+              )}
               {form.formState.errors.code ? (
                 <FieldError id="two-factor-signin-code-error">
                   {form.formState.errors.code.message}
@@ -217,11 +227,10 @@ export function TwoFactorChallenge({ returnTo, oauth }: TwoFactorChallengeProps)
           </FieldGroup>
 
           <div className="flex flex-col gap-3">
-            <Button type="submit" size="lg" disabled={locked}>
-              {pending ? <Spinner data-icon="inline-start" /> : null}
+            <LoadingButton pending={pending} type="submit" size="lg" disabled={locked}>
               Continue
-              {!pending ? <ArrowRight data-icon="inline-end" /> : null}
-            </Button>
+              <ArrowRight data-icon="inline-end" />
+            </LoadingButton>
             <Button
               type="button"
               variant="ghost"

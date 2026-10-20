@@ -15,7 +15,7 @@ import {
   ScanSearch,
 } from "lucide-react"
 import type { WorkflowEvaluation, EvaluationEvidenceReference } from "@/lib/gateway/client"
-import { Progress } from "@/components/ui/progress"
+import { Progress } from "@/components/interior/progress-bar"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"

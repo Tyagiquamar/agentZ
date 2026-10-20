@@ -1,5 +1,10 @@
 "use client"
 
+import { AnimatePresence } from "motion/react"
+import { ExpandingSearch } from "@/components/interior/expanding-search"
+import { LoadMore } from "@/components/interior/load-more"
+
+import { LoadingButton } from "@/components/interior/loading-button"
 import type { Route } from "next"
 import Link from "next/link"
 import { useRouter } from "@bprogress/next/app"
@@ -411,6 +416,7 @@ function NavSessionsContent({
     }
   }, [savedExpansion])
   const searchInput = useRef<HTMLInputElement>(null)
+  const searchTrigger = useRef<HTMLButtonElement>(null)
   const trimmedSearch = searchText.trim()
   const searchLength = Array.from(trimmedSearch).length
   const sessionPrefix = `${workspacePath}/agents/`
@@ -788,6 +794,7 @@ function NavSessionsContent({
         ) : null}
         <Button
           aria-label="Search chats"
+          ref={searchTrigger}
           data-tour="search-chats"
           aria-pressed={searchOpen}
           className="size-8 rounded-md border-0 bg-transparent text-sidebar-muted-foreground shadow-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground aria-pressed:bg-sidebar-accent aria-pressed:text-sidebar-accent-foreground"
@@ -876,42 +883,46 @@ function NavSessionsContent({
         </DropdownMenu>
       </div>
 
-      {searchOpen ? (
-        <div className="relative px-(--sidebar-content-inset) pb-1">
-          <Search
-            aria-hidden="true"
-            className="absolute top-2 left-[calc(var(--sidebar-content-inset)+0.625rem)] size-4 text-sidebar-muted-foreground"
-          />
-          <Input
-            aria-controls="chat-session-results"
-            aria-label="Search chat titles"
-            className="h-8 border-sidebar-border bg-sidebar-control-surface pr-8 pl-8"
-            onChange={(event) => setSearchText(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key !== "Escape") return
-              setSearchOpen(false)
-              setSearchText("")
-              setSearch("")
-            }}
-            placeholder="Search chats"
-            ref={searchInput}
-            value={searchText}
-          />
-          <Button
-            aria-label="Clear search"
-            className="absolute top-0 right-(--sidebar-content-inset) size-8 text-sidebar-muted-foreground hover:text-sidebar-accent-foreground"
-            onClick={() => {
-              setSearchOpen(false)
-              setSearchText("")
-              setSearch("")
-            }}
-            size="icon-sm"
-            variant="ghost"
-          >
-            <X aria-hidden="true" />
-          </Button>
-        </div>
-      ) : null}
+      <AnimatePresence initial={false}>
+        {searchOpen ? (
+          <ExpandingSearch className="relative px-(--sidebar-content-inset) pb-1">
+            <Search
+              aria-hidden="true"
+              className="absolute top-2 left-[calc(var(--sidebar-content-inset)+0.625rem)] size-4 text-sidebar-muted-foreground"
+            />
+            <Input
+              aria-controls="chat-session-results"
+              aria-label="Search chat titles"
+              className="h-8 border-sidebar-border bg-sidebar-control-surface pr-8 pl-8"
+              onChange={(event) => setSearchText(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key !== "Escape") return
+                setSearchOpen(false)
+                setSearchText("")
+                setSearch("")
+                searchTrigger.current?.focus({ preventScroll: true })
+              }}
+              placeholder="Search chats"
+              ref={searchInput}
+              value={searchText}
+            />
+            <Button
+              aria-label="Clear search"
+              className="absolute top-0 right-(--sidebar-content-inset) size-8 text-sidebar-muted-foreground hover:text-sidebar-accent-foreground"
+              onClick={() => {
+                setSearchOpen(false)
+                setSearchText("")
+                setSearch("")
+                searchTrigger.current?.focus({ preventScroll: true })
+              }}
+              size="icon-sm"
+              variant="ghost"
+            >
+              <X aria-hidden="true" />
+            </Button>
+          </ExpandingSearch>
+        ) : null}
+      </AnimatePresence>
 
       <div
         aria-busy={
@@ -1047,16 +1058,16 @@ function NavSessionsContent({
         !searchInvalid &&
         !searchSettling &&
         sessions.hasNextPage ? (
-          <Button
+          <LoadMore
+            pending={sessions.isFetchingNextPage}
             className="mt-2 w-full text-sidebar-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground"
-            disabled={sessions.isFetchingNextPage}
             onClick={() => void sessions.fetchNextPage()}
             size="sm"
             variant="ghost"
           >
-            {sessions.isFetchingNextPage ? <Spinner /> : <ChevronDown />}
+            <ChevronDown />
             Load more
-          </Button>
+          </LoadMore>
         ) : null}
       </div>
       <ProjectPicker
@@ -1318,20 +1329,16 @@ function SessionGroup({
             : null}
           {pages.hasNextPage ? (
             <SidebarMenuSubItem>
-              <Button
+              <LoadingButton
+                pending={pages.isFetchingNextPage}
                 className="w-full text-sidebar-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground"
-                disabled={pages.isFetchingNextPage}
                 onClick={() => void pages.fetchNextPage()}
                 size="sm"
                 variant="ghost"
               >
-                {pages.isFetchingNextPage ? (
-                  <Spinner data-icon="inline-start" />
-                ) : (
-                  <ChevronDown data-icon="inline-start" />
-                )}
+                <ChevronDown data-icon="inline-start" />
                 Load more
-              </Button>
+              </LoadingButton>
             </SidebarMenuSubItem>
           ) : null}
         </SidebarMenuSub>
@@ -1712,7 +1719,13 @@ function SessionCard({
       </ContextMenuTrigger>
       <ContextMenuContent>
         <ContextMenuGroup>
-          <ContextMenuItem onSelect={() => setConfirmingDelete(true)} variant="destructive">
+          <ContextMenuItem
+            onSelect={(event) => {
+              event.preventDefault()
+              setConfirmingDelete(true)
+            }}
+            variant="destructive"
+          >
             <Trash2 aria-hidden="true" />
             Delete chat
           </ContextMenuItem>
@@ -1740,10 +1753,10 @@ function SessionCard({
             </DialogClose>
             <form action={action}>
               <input name="sessionID" type="hidden" value={session.session_id} />
-              <Button disabled={isPending} type="submit" variant="destructive">
-                {isPending ? <Spinner /> : <Trash2 />}
+              <LoadingButton pending={isPending} type="submit" variant="destructive">
+                <Trash2 />
                 Delete
-              </Button>
+              </LoadingButton>
             </form>
           </DialogFooter>
         </DialogContent>

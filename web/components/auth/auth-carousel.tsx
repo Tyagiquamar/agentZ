@@ -14,13 +14,12 @@ import {
   KeyRound,
   LockKeyhole,
   Megaphone,
-  Pause,
-  Play,
   ShieldCheck,
   Sparkles,
   Terminal,
   Users,
 } from "lucide-react"
+import { IconMorph } from "@/components/interior/icon-morph"
 import { ProviderIcon } from "@/app/(app)/inference/providers/provider-shared"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -463,7 +462,7 @@ export function AuthCarousel() {
           aria-label={paused ? "Play slideshow" : "Pause slideshow"}
           onClick={() => setPaused(!paused)}
         >
-          {paused ? <Play /> : <Pause />}
+          <IconMorph preset="playback" active={!paused} />
         </Button>
       </div>
     </Carousel>

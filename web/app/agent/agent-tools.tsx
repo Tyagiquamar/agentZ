@@ -1,5 +1,6 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
 import { useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -403,8 +404,8 @@ export function AgentTools({
             <Button disabled={pending} onClick={() => setDeleting(undefined)} variant="outline">
               Cancel
             </Button>
-            <Button
-              disabled={pending}
+            <LoadingButton
+              pending={pending}
               variant="destructive"
               onClick={() => {
                 if (!deleting) return
@@ -431,13 +432,8 @@ export function AgentTools({
                 })
               }}
             >
-              {pending ? (
-                <Spinner aria-hidden="true" data-icon="inline-start" />
-              ) : (
-                <Trash2 aria-hidden="true" data-icon="inline-start" />
-              )}{" "}
-              Delete tool
-            </Button>
+              <Trash2 aria-hidden="true" data-icon="inline-start" /> Delete tool
+            </LoadingButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -902,16 +898,15 @@ function ToolUpload({
           <Button disabled={pending || reading} onClick={close} variant="outline">
             Cancel
           </Button>
-          <Button disabled={pending || reading || !!fileError} form="tool-upload" type="submit">
-            {pending || reading ? (
-              <Spinner aria-hidden="true" />
-            ) : existing ? (
-              <Pencil aria-hidden="true" />
-            ) : (
-              <Wrench aria-hidden="true" />
-            )}
+          <LoadingButton
+            pending={pending || reading}
+            disabled={pending || reading || !!fileError}
+            form="tool-upload"
+            type="submit"
+          >
+            {existing ? <Pencil aria-hidden="true" /> : <Wrench aria-hidden="true" />}
             {pending ? "Saving…" : existing ? "Save changes" : "Create tool"}
-          </Button>
+          </LoadingButton>
         </SheetFooter>
         {/* Nesting keeps discard clicks from dismissing the editor. */}
         <Dialog open={discard} onOpenChange={setDiscard}>

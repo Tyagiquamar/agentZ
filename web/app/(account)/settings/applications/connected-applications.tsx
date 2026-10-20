@@ -1,5 +1,6 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
 import { useMemo, useState, useTransition } from "react"
 import { type ColumnDef, getCoreRowModel, useReactTable } from "@tanstack/react-table"
 import { AppWindow, Eye, MoreHorizontal, Unplug } from "lucide-react"
@@ -24,7 +25,6 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu"
-import { Spinner } from "@/components/ui/spinner"
 import { RelativeDateTime } from "@/components/ui/table"
 import type { DelegationCatalog } from "@/lib/gateway/client"
 import { ApplicationAccessSheet } from "./application-access-sheet"
@@ -203,9 +203,10 @@ export function ConnectedApplications({
             <Button variant="outline" disabled={pending} onClick={() => setSelected(undefined)}>
               Cancel
             </Button>
-            <Button
+            <LoadingButton
+              pending={pending}
+              pendingLabel={"Disconnecting…"}
               variant="destructive"
-              disabled={pending}
               onClick={() =>
                 startTransition(async () => {
                   if (!selected) return
@@ -224,9 +225,9 @@ export function ConnectedApplications({
                 })
               }
             >
-              {pending ? <Spinner /> : <Unplug aria-hidden="true" data-icon="inline-start" />}
-              {pending ? "Disconnecting…" : "Disconnect"}
-            </Button>
+              <Unplug aria-hidden="true" data-icon="inline-start" />
+              {"Disconnect"}
+            </LoadingButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>

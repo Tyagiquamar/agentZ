@@ -1,5 +1,6 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
 import * as React from "react"
 import { useRouter } from "next/navigation"
 import { MoreHorizontal, Trash2, CircleAlert } from "lucide-react"
@@ -27,7 +28,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Spinner } from "@/components/ui/spinner"
 import { EmptyValue, RelativeDateTime } from "@/components/ui/table"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import type { UserAPIKey } from "@/data/api-key.queries"
@@ -280,10 +280,10 @@ function DeleteAPIKeyButton({
             </DialogClose>
             <form action={action}>
               <input type="hidden" name="keyID" value={keyID} />
-              <Button type="submit" variant="destructive" disabled={pending}>
-                {pending ? <Spinner aria-hidden="true" /> : <Trash2 data-icon="inline-start" />}
+              <LoadingButton pending={pending} type="submit" variant="destructive">
+                <Trash2 data-icon="inline-start" />
                 Revoke
-              </Button>
+              </LoadingButton>
             </form>
           </DialogFooter>
         </DialogContent>

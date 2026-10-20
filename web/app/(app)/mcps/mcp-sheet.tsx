@@ -1,5 +1,6 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
 import * as React from "react"
 import { toast } from "sonner"
 import Fuse from "fuse.js"
@@ -1122,8 +1123,8 @@ export function McpSheet({
                   ? "Enter a connection name."
                   : "Fix the invalid header or provider fields before adding the connection."
   const submitButton = (
-    <Button type="submit" disabled={!isValid || submitPending} aria-busy={submitPending}>
-      {submitPending ? <Spinner /> : <Save data-icon="inline-start" />}
+    <LoadingButton pending={submitPending} type="submit" disabled={!isValid || submitPending}>
+      <Save data-icon="inline-start" />
       {oauthPopupFlowId
         ? "Waiting for OAuth..."
         : isDiscoveryPendingForCurrentURL
@@ -1131,7 +1132,7 @@ export function McpSheet({
           : isSubmitting || isRefreshing
             ? "Adding connection..."
             : submitLabel}
-    </Button>
+    </LoadingButton>
   )
 
   return (

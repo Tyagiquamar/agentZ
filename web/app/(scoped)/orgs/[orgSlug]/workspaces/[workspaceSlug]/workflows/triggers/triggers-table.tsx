@@ -1,5 +1,6 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
 import * as React from "react"
 import type { Route } from "next"
 import { toast } from "sonner"
@@ -36,7 +37,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Spinner } from "@/components/ui/spinner"
 import { RelativeDateTime } from "@/components/ui/table"
 import type {
   DeleteWorkflowScheduleFormState,
@@ -279,15 +279,31 @@ function ScheduleActions({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={() => setRunOpen(true)}>
+          <DropdownMenuItem
+            onSelect={(event) => {
+              event.preventDefault()
+              setRunOpen(true)
+            }}
+          >
             <Play />
             Run
           </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => setEditOpen(true)}>
+          <DropdownMenuItem
+            onSelect={(event) => {
+              event.preventDefault()
+              setEditOpen(true)
+            }}
+          >
             <Pencil />
             Edit
           </DropdownMenuItem>
-          <DropdownMenuItem variant="destructive" onSelect={() => setDeleteOpen(true)}>
+          <DropdownMenuItem
+            variant="destructive"
+            onSelect={(event) => {
+              event.preventDefault()
+              setDeleteOpen(true)
+            }}
+          >
             <Trash2 />
             Delete
           </DropdownMenuItem>
@@ -383,10 +399,10 @@ function RunScheduleDialog({
           <form action={action}>
             <input type="hidden" name="workflow_name" value={item.workflow_name} />
             <input type="hidden" name="schedule_name" value={item.name} />
-            <Button type="submit" disabled={pending}>
-              {pending ? <Spinner /> : <Play />}
+            <LoadingButton pending={pending} type="submit">
+              <Play />
               Run
-            </Button>
+            </LoadingButton>
           </form>
         </DialogFooter>
       </DialogContent>
@@ -447,10 +463,10 @@ function DeleteScheduleDialog({
           <form action={action}>
             <input type="hidden" name="name" value={item.name} />
             <input type="hidden" name="workflow_name" value={item.workflow_name} />
-            <Button type="submit" variant="destructive" disabled={pending}>
-              {pending ? <Spinner /> : <Trash2 />}
+            <LoadingButton pending={pending} type="submit" variant="destructive">
+              <Trash2 />
               Delete
-            </Button>
+            </LoadingButton>
           </form>
         </DialogFooter>
       </DialogContent>

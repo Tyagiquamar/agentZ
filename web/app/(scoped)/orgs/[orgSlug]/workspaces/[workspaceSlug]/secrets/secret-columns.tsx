@@ -1,5 +1,6 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
 import * as React from "react"
 import type { ColumnDef } from "@tanstack/react-table"
 import {
@@ -30,7 +31,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Spinner } from "@/components/ui/spinner"
 import { UserAvatar } from "@/components/ui/avatar"
 import { toast } from "sonner"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -180,7 +180,13 @@ function SecretActions({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem variant="destructive" onSelect={() => setOpen(true)}>
+          <DropdownMenuItem
+            variant="destructive"
+            onSelect={(event) => {
+              event.preventDefault()
+              setOpen(true)
+            }}
+          >
             <Trash2 />
             Delete
           </DropdownMenuItem>
@@ -243,10 +249,10 @@ function DeleteSecretDialog({
           </DialogClose>
           <form action={action}>
             <input type="hidden" name="key" value={item.key} readOnly />
-            <Button type="submit" variant="destructive" disabled={pending}>
-              {pending ? <Spinner /> : <Trash2 />}
+            <LoadingButton pending={pending} type="submit" variant="destructive">
+              <Trash2 />
               Delete
-            </Button>
+            </LoadingButton>
           </form>
         </DialogFooter>
       </DialogContent>

@@ -1,5 +1,6 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
 import { Controller, useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import type { z } from "zod"
@@ -16,7 +17,6 @@ import { Button } from "@/components/ui/button"
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { MultiSelectDropdown } from "@/components/ui/multi-select-dropdown"
-import { Spinner } from "@/components/ui/spinner"
 import { toast } from "sonner"
 
 export type TeamFormData = {
@@ -179,10 +179,10 @@ export function TeamForm({
           <Button asChild variant="outline">
             <Link href={root as Route}>Cancel</Link>
           </Button>
-          <Button disabled={pending} type="submit">
-            {pending ? <Spinner /> : <Save data-icon="inline-start" />}
+          <LoadingButton pending={pending} type="submit">
+            <Save data-icon="inline-start" />
             {pending ? "Saving..." : data.team ? "Update team" : "Create team"}
-          </Button>
+          </LoadingButton>
         </div>
       </form>
     </div>

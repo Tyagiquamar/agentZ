@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
+import { motion, useReducedMotion } from "motion/react"
 import { cva, type VariantProps } from "class-variance-authority"
 import type { MultipleFieldErrors } from "react-hook-form"
 
@@ -183,6 +184,7 @@ function FieldError({
 }: React.ComponentProps<"div"> & {
   errors?: Array<{ message?: string; types?: MultipleFieldErrors } | undefined>
 }) {
+  const reduced = useReducedMotion()
   const content = useMemo(() => {
     if (children) {
       return children
@@ -202,7 +204,11 @@ function FieldError({
       }
 
       return Object.values(error.types).flatMap((value) =>
-        (Array.isArray(value) ? value : [value]).map(String)
+        Array.isArray(value)
+          ? value
+          : value === true || value === false || value === undefined
+            ? []
+            : [value]
       )
     })
     const uniqueErrors = [...new Set(messages)]
@@ -235,7 +241,15 @@ function FieldError({
       className={cn("text-sm font-normal text-destructive", className)}
       {...props}
     >
-      {content}
+      <motion.div
+        initial={{ opacity: 0, y: reduced ? 0 : 2 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={
+          reduced ? { duration: 0 } : { type: "spring", stiffness: 260, damping: 34, mass: 0.8 }
+        }
+      >
+        {content}
+      </motion.div>
     </div>
   )
 }

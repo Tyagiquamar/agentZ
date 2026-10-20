@@ -1,5 +1,6 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
 import { useActionState, useState } from "react"
 import { useRouter } from "@bprogress/next/app"
 import { Trash2, CircleAlert } from "lucide-react"
@@ -20,7 +21,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Spinner } from "@/components/ui/spinner"
 import { formatTimestamp } from "@/lib/format"
 
 export function RoleDelete({
@@ -118,10 +118,16 @@ export function RoleDeleteDialog({
                 Cancel
               </Button>
             </DialogClose>
-            <Button data-dialog-submit disabled={pending} type="submit" variant="destructive">
-              {pending ? <Spinner data-icon="inline-start" /> : <Trash2 data-icon="inline-start" />}
-              {pending ? "Deleting..." : "Delete role"}
-            </Button>
+            <LoadingButton
+              pending={pending}
+              pendingLabel={"Deleting..."}
+              data-dialog-submit
+              type="submit"
+              variant="destructive"
+            >
+              <Trash2 data-icon="inline-start" />
+              {"Delete role"}
+            </LoadingButton>
           </DialogFooter>
         </form>
       </DialogContent>

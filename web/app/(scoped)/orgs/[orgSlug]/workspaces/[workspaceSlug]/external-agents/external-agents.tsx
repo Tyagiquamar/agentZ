@@ -1,5 +1,6 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
 import { useMemo, useState, useTransition } from "react"
 import { Controller, useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -29,7 +30,7 @@ import { UserAvatar, UserIdentity } from "@/components/ui/avatar"
 import { TruncatedText } from "@/components/ui/tooltip"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { CopyButton } from "@/components/ui/copy-button"
+import { CopyButton } from "@/components/interior/copy-button"
 import {
   Dialog,
   DialogContent,
@@ -65,7 +66,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
-import { Spinner } from "@/components/ui/spinner"
 import { RelativeDateTime } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ApplicationAccessDetails } from "@/app/(account)/settings/applications/application-access-sheet"
@@ -434,9 +434,9 @@ export function ExternalAgents({
             <Button variant="outline" disabled={pending} onClick={() => setConfirmation(undefined)}>
               Cancel
             </Button>
-            <Button
+            <LoadingButton
+              pending={pending}
               variant="destructive"
-              disabled={pending}
               onClick={() => {
                 if (!confirmation) return
                 const { agent, operation } = confirmation
@@ -457,9 +457,8 @@ export function ExternalAgents({
                 })
               }}
             >
-              {pending ? <Spinner data-icon="inline-start" /> : null}
               {confirmation?.operation === "delete" ? "Delete agent" : "Disconnect"}
-            </Button>
+            </LoadingButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -578,10 +577,9 @@ function ExternalAgentEditor({
             <FieldError errors={[form.formState.errors.root]} />
           </FieldGroup>
           <SheetFooter className="mt-auto border-t">
-            <Button type="submit" disabled={pending}>
-              {pending ? <Spinner data-icon="inline-start" /> : null}
+            <LoadingButton pending={pending} type="submit">
               {agent ? "Save" : "Add agent"}
-            </Button>
+            </LoadingButton>
             <Button variant="outline" type="button" disabled={pending} onClick={onClose}>
               Cancel
             </Button>

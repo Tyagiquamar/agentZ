@@ -1,5 +1,6 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
 import { useId, useLayoutEffect, useRef, useState } from "react"
 import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
@@ -49,7 +50,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Field, FieldLabel, FieldError, FieldDescription, FieldGroup } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Slider } from "@/components/ui/slider"
+import { SliderDetents } from "@/components/interior/slider-detents"
 import { Textarea } from "@/components/ui/textarea"
 import { MultiSelectDropdown } from "@/components/ui/multi-select-dropdown"
 import {
@@ -71,7 +72,6 @@ import {
 } from "@/components/ui/sheet"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Spinner } from "@/components/ui/spinner"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { dayjs } from "@/lib/format"
 
@@ -405,10 +405,15 @@ export function Evaluations({
             >
               Keep evaluation
             </Button>
-            <Button variant="destructive" disabled={actionPending} onClick={remove}>
-              {actionPending ? <Spinner /> : <Trash2 />}
-              {actionPending ? "Deleting…" : "Delete evaluation"}
-            </Button>
+            <LoadingButton
+              pending={actionPending}
+              pendingLabel={"Deleting…"}
+              variant="destructive"
+              onClick={remove}
+            >
+              <Trash2 />
+              {"Delete evaluation"}
+            </LoadingButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -807,15 +812,15 @@ function EvaluationForm({
                     {concurrency}
                   </output>
                 </div>
-                <Slider
+                <SliderDetents
                   id="evaluation-concurrency"
                   aria-labelledby="evaluation-concurrency-label"
                   min={1}
                   max={5}
                   step={1}
-                  value={[concurrency]}
-                  onValueChange={([value]) => {
-                    setConcurrency(value ?? 1)
+                  value={concurrency}
+                  onValueChange={(value) => {
+                    setConcurrency(value)
                     setErrors((errors) => errors.filter((error) => error.field !== "concurrency"))
                   }}
                   aria-invalid={errors.some((error) => error.field === "concurrency")}
@@ -987,10 +992,10 @@ function EvaluationForm({
             ? "Uses saved transcripts. Workflows will not run again."
             : "Runs can change shared files and services."}
         </p>
-        <Button type="submit" disabled={pending}>
-          {pending ? <Spinner /> : <Play />}
+        <LoadingButton pending={pending} type="submit">
+          <Play />
           {retry ? "Judge executions" : "Run evaluation"}
-        </Button>
+        </LoadingButton>
       </SheetFooter>
     </form>
   )

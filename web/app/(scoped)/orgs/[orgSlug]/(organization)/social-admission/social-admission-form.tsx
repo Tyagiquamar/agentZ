@@ -1,5 +1,6 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
 import Link from "next/link"
 import { Controller, useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -33,7 +34,7 @@ import type { SocialAdmission } from "@/data/members"
 import type { EventTrailFilter } from "@/lib/gateway/client"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { CopyButton } from "@/components/ui/copy-button"
+import { CopyButton } from "@/components/interior/copy-button"
 import {
   Field,
   FieldContent,
@@ -52,7 +53,6 @@ import {
 import { Input } from "@/components/ui/input"
 import { MultiSelectDropdown } from "@/components/ui/multi-select-dropdown"
 import { Separator } from "@/components/ui/separator"
-import { Spinner } from "@/components/ui/spinner"
 import { Switch } from "@/components/ui/switch"
 import {
   Table,
@@ -403,7 +403,7 @@ export function SocialAdmissionForm({ data, orgSlug }: { data: SocialAdmission; 
                     checked={googleEnabled}
                     configured={data.googleConfigured}
                     description="Permit Google accounts with one of the listed email domains."
-                    icon={<Google aria-hidden className="size-5" />}
+                    icon=<Google aria-hidden className="size-5" />
                     id="google-enabled"
                     onCheckedChange={(checked) => {
                       field.onChange(checked)
@@ -663,10 +663,10 @@ export function SocialAdmissionForm({ data, orgSlug }: { data: SocialAdmission; 
       ) : null}
 
       <div className="-mx-4 flex w-[100cqw] justify-end border-t px-4 pt-6 md:-mx-6 md:px-6">
-        <Button disabled={pending} type="submit">
-          {pending ? <Spinner /> : <Save data-icon="inline-start" />}
-          {pending ? "Saving..." : "Save admission policy"}
-        </Button>
+        <LoadingButton pending={pending} pendingLabel={"Saving..."} type="submit">
+          <Save data-icon="inline-start" />
+          {"Save admission policy"}
+        </LoadingButton>
       </div>
     </form>
   )

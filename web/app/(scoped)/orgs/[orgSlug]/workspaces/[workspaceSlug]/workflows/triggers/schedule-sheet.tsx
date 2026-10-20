@@ -1,5 +1,6 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
 import * as React from "react"
 import { toast } from "sonner"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -59,8 +60,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Slider } from "@/components/ui/slider"
-import { Spinner } from "@/components/ui/spinner"
+import { SliderDetents } from "@/components/interior/slider-detents"
 import { dayjs } from "@/lib/format"
 import type {
   CreateWorkflowScheduleFormState,
@@ -624,13 +624,13 @@ export function ScheduleSheet(props: ScheduleSheetProps) {
                   />
                   <div className="flex flex-col gap-3">
                     <div className="text-sm text-muted-foreground">{field.value}</div>
-                    <Slider
+                    <SliderDetents
                       id="successful-runs-history-limit"
                       min={1}
                       max={10}
                       step={1}
-                      value={[field.value]}
-                      onValueChange={(value) => field.onChange(value[0] ?? historyLimitDefault)}
+                      value={field.value}
+                      onValueChange={field.onChange}
                       onBlur={field.onBlur}
                       aria-invalid={fieldState.invalid}
                       aria-required="true"
@@ -657,13 +657,13 @@ export function ScheduleSheet(props: ScheduleSheetProps) {
                   />
                   <div className="flex flex-col gap-3">
                     <div className="text-sm text-muted-foreground">{field.value}</div>
-                    <Slider
+                    <SliderDetents
                       id="failed-runs-history-limit"
                       min={1}
                       max={10}
                       step={1}
-                      value={[field.value]}
-                      onValueChange={(value) => field.onChange(value[0] ?? historyLimitDefault)}
+                      value={field.value}
+                      onValueChange={field.onChange}
                       onBlur={field.onBlur}
                       aria-invalid={fieldState.invalid}
                       aria-required="true"
@@ -689,10 +689,15 @@ export function ScheduleSheet(props: ScheduleSheetProps) {
             </Alert>
           ) : null}
           <div className="shrink-0">
-            <Button type="submit" disabled={isPending || schemaPending} className="w-full">
-              {isPending ? <Spinner /> : <CalendarCheck data-icon="inline-start" />}
+            <LoadingButton
+              pending={isPending}
+              type="submit"
+              disabled={isPending || schemaPending}
+              className="w-full"
+            >
+              <CalendarCheck data-icon="inline-start" />
               {isPending ? pendingLabel : submitLabel}
-            </Button>
+            </LoadingButton>
           </div>
         </form>
       </SheetContent>

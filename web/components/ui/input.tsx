@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Eye, EyeOff } from "lucide-react"
+import { IconMorph } from "@/components/interior/icon-morph"
 
 import { cn } from "@/lib/utils"
 
@@ -50,7 +50,7 @@ const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
           setRevealed((value) => !value)
         }}
       >
-        {revealed ? <EyeOff size={15} aria-hidden="true" /> : <Eye size={15} aria-hidden="true" />}
+        <IconMorph active={revealed} preset="visibility" className="[&_svg]:size-[15px]" />
       </button>
     </div>
   )

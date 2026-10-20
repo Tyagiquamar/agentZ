@@ -1,5 +1,6 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
 import * as React from "react"
 import type { ColumnDef } from "@tanstack/react-table"
 import Link from "next/link"
@@ -35,7 +36,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Spinner } from "@/components/ui/spinner"
 import { UserAvatar } from "@/components/ui/avatar"
 import { toast } from "sonner"
 import { RelativeDateTime } from "@/components/ui/table"
@@ -189,7 +189,13 @@ function AgentActions({
             </DropdownMenuItem>
           ) : null}
           {agent.capabilities.delete ? (
-            <DropdownMenuItem variant="destructive" onSelect={() => setDeleteOpen(true)}>
+            <DropdownMenuItem
+              variant="destructive"
+              onSelect={(event) => {
+                event.preventDefault()
+                setDeleteOpen(true)
+              }}
+            >
               <Trash2 />
               Delete
             </DropdownMenuItem>
@@ -270,10 +276,10 @@ function DeleteAgentDialog({
             </Button>
           </DialogClose>
           <form action={action}>
-            <Button type="submit" variant="destructive" disabled={pending}>
-              {pending ? <Spinner /> : <Trash2 />}
+            <LoadingButton pending={pending} type="submit" variant="destructive">
+              <Trash2 />
               Delete
-            </Button>
+            </LoadingButton>
           </form>
         </DialogFooter>
       </DialogContent>

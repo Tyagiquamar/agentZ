@@ -59,7 +59,9 @@ import {
   RevertDock,
   TodoDock,
 } from "@/components/blocks/chat/docks"
-import { CopyButton } from "@/components/ui/copy-button"
+import { NewItemsPill } from "@/components/interior/new-items-pill"
+import { SkeletonSwap } from "@/components/interior/skeleton-swap"
+import { CopyButton } from "@/components/interior/copy-button"
 import {
   type RenderEntry,
   projectTimeline,
@@ -98,7 +100,6 @@ import {
   SquareIcon,
   BrainIcon,
   BotIcon,
-  ArrowDownIcon,
   CheckIcon,
   ChevronDownIcon,
   CpuIcon,
@@ -1301,145 +1302,149 @@ function ChatInner({
           showStarter && "pointer-events-none opacity-0"
         )}
       >
-        {showHistorySkeleton ? (
-          <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 px-4 pt-4">
-            <Skeleton className="h-16 w-full rounded-md" />
-            <Skeleton className="h-24 w-full rounded-md" />
-            <Skeleton className="h-16 w-2/3 rounded-md" />
-          </div>
-        ) : !showStarter ? (
-          <LegendList<TimelineRow>
-            className="h-full min-h-0 overflow-x-hidden overscroll-y-contain [overflow-anchor:none]"
-            data={rows}
-            estimatedItemSize={96}
-            extraData={actorProfiles}
-            initialScrollAtEnd
-            keyExtractor={(row) => row.key}
-            recycleItems={false}
-            ListHeaderComponent={
-              hasEarlierMessages ? (
-                <div className="mx-auto w-[calc(100%-2rem)] max-w-3xl pt-4 pb-2">
-                  <button
-                    className="w-full py-1.5 text-xs text-muted-foreground/70 hover:text-foreground disabled:cursor-default"
-                    disabled={isLoadingEarlier}
-                    onClick={() => void loadEarlier()}
-                    type="button"
-                  >
-                    {isLoadingEarlier ? "Loading earlier turns..." : "Load earlier turns"}
-                  </button>
-                </div>
-              ) : (
-                <div className="h-4" />
-              )
-            }
-            ListFooterComponent={
-              <div
-                className="mx-auto flex w-[calc(100%-2rem)] max-w-3xl flex-col gap-4 pt-2"
-                style={{ paddingBottom: composerHeight + 16 }}
-              >
-                {pendingInputs.map(({ id, text, files, status, author }) => (
-                  <div
-                    key={id}
-                    className="flex flex-col items-end gap-2"
-                    aria-label="Pending message"
-                  >
-                    <div className="max-w-[80%] rounded-2xl bg-message p-3 text-sm text-message-foreground">
-                      {!coding && author ? (
-                        <div className="mb-1 text-xs text-muted-foreground">{author}</div>
-                      ) : null}
-                      {files.map((file, index) => (
-                        <div
-                          key={index}
-                          className="flex items-center gap-1.5 text-xs text-muted-foreground"
-                        >
-                          <PaperclipIcon className="size-3.5" />
-                          {file.filename}
-                        </div>
-                      ))}
-                      {text ? <MessageResponse>{text}</MessageResponse> : null}
-                    </div>
-                    <div
-                      role="status"
-                      className="flex items-center gap-1.5 text-xs text-muted-foreground"
-                    >
-                      <Spinner className="size-3" />
-                      {status}
-                    </div>
-                  </div>
-                ))}
-                <RevertDock
-                  items={reverted}
-                  onRestore={restoreMutation.mutate}
-                  pending={revertPending}
-                  restoringId={restoringId}
-                  summary={session?.summary}
-                />
-                {todos.length > 0 ? <TodoDock todos={todos} /> : null}
-                {permissionRequest ? (
-                  <PermissionDock
-                    onDecide={handlePermission}
-                    pending={isPermissionPending}
-                    request={permissionRequest}
-                  />
-                ) : null}
-                {questionRequest && planApproval && session ? (
-                  <PlanDock
-                    agentName={agentName}
-                    key={questionRequest.id}
-                    onSubmit={submitQuestionAnswer}
-                    pending={isQuestionPending}
-                    request={questionRequest}
-                    session={session}
-                    workspaceId={workspaceId}
-                  />
-                ) : null}
+        {!showStarter ? (
+          <SkeletonSwap
+            ready={!showHistorySkeleton}
+            className="h-full"
+            skeleton={
+              <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 px-4 pt-4">
+                <Skeleton className="h-16 w-full rounded-md" />
+                <Skeleton className="h-24 w-full rounded-md" />
+                <Skeleton className="h-16 w-2/3 rounded-md" />
               </div>
             }
-            maintainScrollAtEnd={timelineAtEnd ? { animated: false } : false}
-            maintainVisibleContentPosition={{ data: true, size: true }}
-            onScroll={(event) => {
-              const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent
-              setTimelineAtEnd(
-                contentOffset.y + layoutMeasurement.height >= contentSize.height - 24
-              )
-            }}
-            ref={timelineRef}
-            renderItem={({ item }) => (
-              <div
-                className={cn(
-                  "mx-auto w-[calc(100%-2rem)] max-w-3xl",
-                  item.type === "assistant" && item.isStreaming
-                    ? "pb-2"
-                    : item.type === "thinking" || item.type === "checkpoint"
-                      ? "pb-1.5"
-                      : "pb-4"
-                )}
-              >
-                <TimelineRowView
-                  agentName={agentName}
-                  actorProfiles={actorProfiles}
-                  onRevert={handleRevert}
-                  revertDisabled={revertDisabled || isBusy || isStopping || revertPending}
-                  row={item}
-                  workspaceId={workspaceId}
-                  workspacePath={workspacePath}
-                />
-              </div>
-            )}
-          />
-        ) : null}
-        {!timelineAtEnd && !showStarter ? (
-          <Button
-            aria-label="Scroll to latest message"
-            className="absolute left-1/2 z-20 -translate-x-1/2 rounded-full bg-background/80 shadow-sm backdrop-blur-md"
-            style={{ bottom: composerHeight + 8 }}
-            onClick={() => timelineRef.current?.scrollToEnd({ animated: true })}
-            size="icon"
-            variant="outline"
           >
-            <ArrowDownIcon />
-          </Button>
+            <LegendList<TimelineRow>
+              className="h-full min-h-0 overflow-x-hidden overscroll-y-contain [overflow-anchor:none]"
+              data={rows}
+              estimatedItemSize={96}
+              extraData={actorProfiles}
+              initialScrollAtEnd
+              keyExtractor={(row) => row.key}
+              recycleItems={false}
+              ListHeaderComponent={
+                hasEarlierMessages ? (
+                  <div className="mx-auto w-[calc(100%-2rem)] max-w-3xl pt-4 pb-2">
+                    <button
+                      className="w-full py-1.5 text-xs text-muted-foreground/70 hover:text-foreground disabled:cursor-default"
+                      disabled={isLoadingEarlier}
+                      onClick={() => void loadEarlier()}
+                      type="button"
+                    >
+                      {isLoadingEarlier ? "Loading earlier turns..." : "Load earlier turns"}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="h-4" />
+                )
+              }
+              ListFooterComponent={
+                <div
+                  className="mx-auto flex w-[calc(100%-2rem)] max-w-3xl flex-col gap-4 pt-2"
+                  style={{ paddingBottom: composerHeight + 16 }}
+                >
+                  {pendingInputs.map(({ id, text, files, status, author }) => (
+                    <div
+                      key={id}
+                      className="flex flex-col items-end gap-2"
+                      aria-label="Pending message"
+                    >
+                      <div className="max-w-[80%] rounded-2xl bg-message p-3 text-sm text-message-foreground">
+                        {!coding && author ? (
+                          <div className="mb-1 text-xs text-muted-foreground">{author}</div>
+                        ) : null}
+                        {files.map((file, index) => (
+                          <div
+                            key={index}
+                            className="flex items-center gap-1.5 text-xs text-muted-foreground"
+                          >
+                            <PaperclipIcon className="size-3.5" />
+                            {file.filename}
+                          </div>
+                        ))}
+                        {text ? <MessageResponse>{text}</MessageResponse> : null}
+                      </div>
+                      <div
+                        role="status"
+                        className="flex items-center gap-1.5 text-xs text-muted-foreground"
+                      >
+                        <Spinner className="size-3" />
+                        {status}
+                      </div>
+                    </div>
+                  ))}
+                  <RevertDock
+                    items={reverted}
+                    onRestore={restoreMutation.mutate}
+                    pending={revertPending}
+                    restoringId={restoringId}
+                    summary={session?.summary}
+                  />
+                  {todos.length > 0 ? <TodoDock todos={todos} /> : null}
+                  {permissionRequest ? (
+                    <PermissionDock
+                      onDecide={handlePermission}
+                      pending={isPermissionPending}
+                      request={permissionRequest}
+                    />
+                  ) : null}
+                  {questionRequest && planApproval && session ? (
+                    <PlanDock
+                      agentName={agentName}
+                      key={questionRequest.id}
+                      onSubmit={submitQuestionAnswer}
+                      pending={isQuestionPending}
+                      request={questionRequest}
+                      session={session}
+                      workspaceId={workspaceId}
+                    />
+                  ) : null}
+                </div>
+              }
+              maintainScrollAtEnd={timelineAtEnd ? { animated: false } : false}
+              maintainVisibleContentPosition={{ data: true, size: true }}
+              onScroll={(event) => {
+                const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent
+                setTimelineAtEnd(
+                  contentOffset.y + layoutMeasurement.height >= contentSize.height - 24
+                )
+              }}
+              ref={timelineRef}
+              renderItem={({ item }) => (
+                <div
+                  className={cn(
+                    "mx-auto w-[calc(100%-2rem)] max-w-3xl",
+                    item.type === "assistant" && item.isStreaming
+                      ? "pb-2"
+                      : item.type === "thinking" || item.type === "checkpoint"
+                        ? "pb-1.5"
+                        : "pb-4"
+                  )}
+                >
+                  <TimelineRowView
+                    agentName={agentName}
+                    actorProfiles={actorProfiles}
+                    onRevert={handleRevert}
+                    revertDisabled={revertDisabled || isBusy || isStopping || revertPending}
+                    row={item}
+                    workspaceId={workspaceId}
+                    workspacePath={workspacePath}
+                  />
+                </div>
+              )}
+            />
+          </SkeletonSwap>
         ) : null}
+        <NewItemsPill
+          visible={!timelineAtEnd && !showStarter}
+          latestId={rows.findLast((row) => row.type === "user" || row.type === "assistant")?.key}
+          scope={sessionId ?? "new"}
+          className="absolute left-1/2 z-20 -translate-x-1/2"
+          style={{ bottom: composerHeight + 8 }}
+          onClick={() => timelineRef.current?.scrollToEnd({ animated: true })}
+          size="icon"
+          variant="outline"
+        />
         {!showStarter ? <QuickTurnNav listRef={timelineRef} rows={rows} /> : null}
       </div>
       <motion.div
@@ -1691,7 +1696,10 @@ function ChatInner({
                             <DropdownMenuGroup>
                               <DropdownMenuItem
                                 disabled={inputDisabled}
-                                onSelect={() => setModelSelectorOpen(true)}
+                                onSelect={(event) => {
+                                  event.preventDefault()
+                                  setModelSelectorOpen(true)
+                                }}
                               >
                                 <BrainIcon />
                                 <span className="min-w-0 flex-1 truncate">

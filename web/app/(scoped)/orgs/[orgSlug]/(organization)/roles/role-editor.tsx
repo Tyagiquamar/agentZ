@@ -1,5 +1,6 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
 import { Controller, useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
@@ -70,7 +71,6 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
-import { Spinner } from "@/components/ui/spinner"
 import type {
   RoleAction,
   RoleDependency,
@@ -733,15 +733,15 @@ export function RoleEditor({ data }: { data: RoleEditorData | WorkspaceRoleEdito
                   Cancel
                 </Button>
               </DialogClose>
-              <Button
+              <LoadingButton
+                pending={pending}
                 data-dialog-submit
-                disabled={pending}
                 type="button"
                 onClick={form.handleSubmit((values) => submit(values, "save"))}
               >
-                {pending ? <Spinner data-icon="inline-start" /> : <Save data-icon="inline-start" />}
+                <Save data-icon="inline-start" />
                 Confirm update
-              </Button>
+              </LoadingButton>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -763,15 +763,16 @@ export function RoleEditor({ data }: { data: RoleEditorData | WorkspaceRoleEdito
           </Link>
         </Button>
         {!immutable ? (
-          <Button
+          <LoadingButton
+            pending={pending}
             disabled={pending || changed === 0}
             name="intent"
             type="submit"
             value={role ? "preview" : "save"}
           >
-            {pending ? <Spinner data-icon="inline-start" /> : <Save data-icon="inline-start" />}
+            <Save data-icon="inline-start" />
             {role ? "Update" : "Create"}
-          </Button>
+          </LoadingButton>
         ) : null}
       </footer>
     </form>

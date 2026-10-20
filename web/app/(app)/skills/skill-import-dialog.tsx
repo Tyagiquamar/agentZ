@@ -1,5 +1,6 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
 import * as React from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import {
@@ -16,7 +17,6 @@ import { Controller, useForm, useWatch, type Control, type FieldErrors } from "r
 import { toast } from "sonner"
 import * as z from "zod"
 import { AlertDescription, AlertTitle, Alert } from "@/components/ui/alert"
-import { Button } from "@/components/ui/button"
 import {
   Dialog,
   DialogContent,
@@ -36,7 +36,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Spinner } from "@/components/ui/spinner"
 import {
   importImmutableSkills,
   importMutableSkills,
@@ -369,10 +368,15 @@ export function SkillImportDialog({
             <>
               {error ? <ImportErrorSummary error={error} ref={errorSummaryRef} /> : null}
               <DialogFooter>
-                <Button type="button" disabled={!file || pending} onClick={previewImport}>
-                  {pending ? <Spinner /> : <FileArchive />}
+                <LoadingButton
+                  pending={pending}
+                  type="button"
+                  disabled={!file || pending}
+                  onClick={previewImport}
+                >
+                  <FileArchive />
                   Preview
-                </Button>
+                </LoadingButton>
               </DialogFooter>
             </>
           ) : (
@@ -483,14 +487,14 @@ export function SkillImportDialog({
               </div>
               {error ? <ImportErrorSummary error={error} ref={errorSummaryRef} /> : null}
               <DialogFooter>
-                <Button
+                <LoadingButton
+                  pending={pending}
                   type="button"
-                  disabled={pending}
                   onClick={() => void form.handleSubmit(applyImport, reportInvalidSubmit)()}
                 >
-                  {pending ? <Spinner /> : <Check />}
+                  <Check />
                   Import
-                </Button>
+                </LoadingButton>
               </DialogFooter>
             </>
           )}

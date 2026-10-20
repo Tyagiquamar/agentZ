@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { ValueFlash } from "@/components/interior/value-flash"
 import { formatDurationSeconds } from "@/lib/format"
 import type { WorkflowRunDetail } from "@/lib/gateway/client"
 
@@ -45,7 +46,11 @@ export function RunElapsed({
   }
 
   if (seconds !== undefined) {
-    return <span className="tabular-nums">{formatDurationSeconds(Math.max(0, seconds))}</span>
+    return (
+      <ValueFlash value={seconds} className="tabular-nums">
+        {formatDurationSeconds(Math.max(0, seconds))}
+      </ValueFlash>
+    )
   }
 
   return (

@@ -49,14 +49,20 @@ export function NewSecretButton({
         <DropdownMenuContent align="end" sideOffset={8} className="w-48 rounded-lg p-1">
           <DropdownMenuItem
             className="gap-2 rounded-md py-1.5 pr-8 pl-2 text-sm"
-            onSelect={() => setStaticOpen(true)}
+            onSelect={(event) => {
+              event.preventDefault()
+              setStaticOpen(true)
+            }}
           >
             <KeyRound className="size-4 text-muted-foreground" />
             <span>Static</span>
           </DropdownMenuItem>
           <DropdownMenuItem
             className="gap-2 rounded-md py-1.5 pr-8 pl-2 text-sm"
-            onSelect={() => setOAuthOpen(true)}
+            onSelect={(event) => {
+              event.preventDefault()
+              setOAuthOpen(true)
+            }}
           >
             <FileKey2 className="size-4 text-muted-foreground" />
             <span>OAuth</span>

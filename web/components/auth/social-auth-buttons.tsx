@@ -1,9 +1,8 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
 import { GitHubDark, GitHubLight, Google } from "@ridemountainpig/svgl-react"
 import type { AuthPath, SocialProvider } from "@/app/(auth)/shared"
-import { Button } from "@/components/ui/button"
-import { Spinner } from "@/components/ui/spinner"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { CircleAlert } from "lucide-react"
 
@@ -50,7 +49,8 @@ export function SocialAuthButtons({
                 value ? <input key={name} type="hidden" name={name} value={value} /> : null
               )
             : null}
-          <Button
+          <LoadingButton
+            pending={pendingProvider === provider}
             type="submit"
             variant="outline"
             size="lg"
@@ -58,9 +58,7 @@ export function SocialAuthButtons({
             aria-invalid={errors?.[provider] ? "true" : undefined}
             disabled={disabled}
           >
-            {pendingProvider === provider ? (
-              <Spinner data-icon="inline-start" />
-            ) : provider === "github" ? (
+            {provider === "github" ? (
               <>
                 <GitHubLight data-icon="inline-start" className="dark:hidden" />
                 <GitHubDark data-icon="inline-start" className="hidden dark:block" />
@@ -69,7 +67,7 @@ export function SocialAuthButtons({
               <Google data-icon="inline-start" />
             )}
             {submitLabel} with {provider === "github" ? "GitHub" : "Google"}
-          </Button>
+          </LoadingButton>
           {errors?.[provider] ? (
             <Alert variant="destructive">
               <CircleAlert aria-hidden="true" />

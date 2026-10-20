@@ -1,5 +1,6 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
 import * as React from "react"
 import { useRouter } from "next/navigation"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -10,7 +11,7 @@ import { createAPIKeyFormSchema, type CreateAPIKeyFormValues } from "@/data/api-
 import type { CreateAPIKeyFormState } from "@/data/types"
 import { AlertDescription, Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { CopyButton } from "@/components/ui/copy-button"
+import { CopyButton } from "@/components/interior/copy-button"
 import {
   Dialog,
   DialogClose,
@@ -44,7 +45,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Spinner } from "@/components/ui/spinner"
 import type { Agent, WorkflowSummary } from "@/lib/gateway/client"
 import { cn } from "@/lib/utils"
 
@@ -165,12 +165,12 @@ function CreateAPIKeyDialog({
     React.startTransition(() => router.refresh())
   }, [router, state.key])
 
-  const submit = form.handleSubmit((_, event) => {
-    if (!event) {
-      return
-    }
-    React.startTransition(() => action(new FormData(event.target as HTMLFormElement)))
-  })
+  const submit: React.FormEventHandler<HTMLFormElement> = (event) => {
+    const data = new FormData(event.currentTarget)
+    void form.handleSubmit(() => {
+      React.startTransition(() => action(data))
+    })(event)
+  }
 
   return (
     <DialogContent className="sm:max-w-md">
@@ -402,16 +402,14 @@ function CreateAPIKeyDialog({
                 Cancel
               </Button>
             </DialogClose>
-            <Button type="submit" form="api-key-form" disabled={pending}>
-              {pending ? (
-                <Spinner aria-hidden="true" />
-              ) : apiKeyType === "webhook" ? (
+            <LoadingButton pending={pending} type="submit" form="api-key-form">
+              {apiKeyType === "webhook" ? (
                 <Webhook data-icon="inline-start" />
               ) : (
                 <KeyRound data-icon="inline-start" />
               )}
               Create API key
-            </Button>
+            </LoadingButton>
           </DialogFooter>
         </>
       )}

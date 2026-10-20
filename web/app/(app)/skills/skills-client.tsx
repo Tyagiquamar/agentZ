@@ -1,5 +1,6 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
 import * as React from "react"
 import { useRouter } from "@bprogress/next/app"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
@@ -671,10 +672,14 @@ function EditSkillDialog({
                 Cancel
               </Button>
             </DialogClose>
-            <Button type="submit" disabled={pending || versions.length === 0}>
-              {pending ? <Spinner /> : <Pencil />}
+            <LoadingButton
+              pending={pending}
+              type="submit"
+              disabled={pending || versions.length === 0}
+            >
+              <Pencil />
               Update
-            </Button>
+            </LoadingButton>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -724,7 +729,8 @@ function DeleteDialog({
               Cancel
             </Button>
           </DialogClose>
-          <Button
+          <LoadingButton
+            pending={pending}
             type="button"
             variant="destructive"
             disabled={pending || hasRefs}
@@ -734,9 +740,9 @@ function DeleteDialog({
               })
             }}
           >
-            {pending ? <Spinner /> : <Trash2 />}
+            <Trash2 />
             Delete
-          </Button>
+          </LoadingButton>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -1,7 +1,6 @@
 "use client"
 
-import { WizardPanel } from "./panel"
-import { WizardStepNav } from "./step-nav"
+import { WizardPanel, WizardStepNav } from "@/components/interior/wizard-steps"
 import type { WizardShellProps, WizardStep } from "./types"
 import { Separator } from "@/components/ui/separator"
 

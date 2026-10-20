@@ -1,5 +1,6 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
 import { zodResolver } from "@hookform/resolvers/zod"
 import {
   Brain,
@@ -49,7 +50,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command"
-import { CopyButton } from "@/components/ui/copy-button"
+import { CopyButton } from "@/components/interior/copy-button"
 import {
   Dialog,
   DialogContent,
@@ -1886,18 +1887,16 @@ export function ProviderSheet({
                           </p>
                         </div>
                         {subscriptionOAuth.status !== "challenge" ? (
-                          <Button
+                          <LoadingButton
+                            pending={subscriptionOAuth.status === "starting"}
+                            pendingLabel={"Connecting..."}
                             type="button"
                             onClick={connectSubscription}
                             disabled={pending || subscriptionOAuth.status === "starting"}
                           >
-                            {subscriptionOAuth.status === "starting" ? (
-                              <Spinner aria-hidden />
-                            ) : (
-                              <Cable />
-                            )}
-                            {subscriptionOAuth.status === "starting" ? "Connecting..." : "Connect"}
-                          </Button>
+                            <Cable />
+                            {"Connect"}
+                          </LoadingButton>
                         ) : null}
                       </div>
                       {subscriptionOAuth.status === "challenge" ? (
@@ -2207,16 +2206,17 @@ export function ProviderSheet({
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>
-              <Button
+              <LoadingButton
+                pending={pending}
                 type="submit"
                 disabled={
                   pending ||
                   (!provider && isSubscription && subscriptionOAuth.status !== "connected")
                 }
               >
-                {pending ? <Spinner /> : <Save data-icon="inline-start" />}
+                <Save data-icon="inline-start" />
                 {provider ? "Save changes" : "Add provider"}
-              </Button>
+              </LoadingButton>
             </div>
           </div>
         </form>

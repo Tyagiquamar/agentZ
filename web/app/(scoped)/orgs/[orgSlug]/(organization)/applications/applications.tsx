@@ -30,7 +30,7 @@ import { MultiSelectDropdown } from "@/components/ui/multi-select-dropdown"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
-import { CopyButton } from "@/components/ui/copy-button"
+import { CopyButton } from "@/components/interior/copy-button"
 import {
   Field,
   FieldContent,

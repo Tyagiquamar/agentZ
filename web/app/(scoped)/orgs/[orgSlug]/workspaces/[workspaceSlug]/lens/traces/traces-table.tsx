@@ -40,7 +40,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AdminDataGrid, type AdminColumnLayout } from "@/components/admin-data-grid"
 import { ErrorState } from "@/components/error-state"
 import { TablePagination, TokenTablePagination } from "@/components/table-pagination"
-import { Progress } from "@/components/ui/progress"
+import { Progress } from "@/components/interior/progress-bar"
 import { Sheet } from "@/components/ui/sheet"
 import {
   TraceInspectorSheet,

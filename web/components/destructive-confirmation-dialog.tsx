@@ -1,5 +1,6 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
 import type { Route } from "next"
 import { startTransition, useActionState, useId, useState } from "react"
 import { useRouter } from "@bprogress/next/app"
@@ -21,7 +22,6 @@ import {
 } from "@/components/ui/dialog"
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Spinner } from "@/components/ui/spinner"
 
 export function DestructiveConfirmationDialog({
   action,
@@ -152,14 +152,15 @@ export function DestructiveConfirmationDialog({
             <Button onClick={() => setOpen(false)} type="button" variant="outline">
               Cancel
             </Button>
-            <Button
+            <LoadingButton
+              pending={pending}
               disabled={value !== confirmation || pending}
               type="submit"
               variant="destructive"
             >
-              {pending ? <Spinner data-icon="inline-start" /> : <Icon data-icon="inline-start" />}
+              <Icon data-icon="inline-start" />
               {pending ? (kind === "disable" ? "Disabling..." : "Deleting...") : submitLabel}
-            </Button>
+            </LoadingButton>
           </DialogFooter>
         </form>
       </DialogContent>

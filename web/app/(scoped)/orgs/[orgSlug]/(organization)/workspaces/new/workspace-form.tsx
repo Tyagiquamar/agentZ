@@ -1,5 +1,6 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
 import { Controller, useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import type { z } from "zod"
@@ -38,7 +39,6 @@ import {
   MultiSelectDropdown,
   type MultiSelectDropdownOption,
 } from "@/components/ui/multi-select-dropdown"
-import { Spinner } from "@/components/ui/spinner"
 import type {
   InferenceProvider,
   McpConnectionSummary,
@@ -336,10 +336,16 @@ export function WorkspaceForm({
                 Cancel
               </Button>
             </DialogClose>
-            <Button data-dialog-submit disabled={pending} form="workspace-form" type="submit">
-              {pending ? <Spinner /> : <Plus data-icon="inline-start" />}
-              {pending ? "Creating..." : "Confirm and create"}
-            </Button>
+            <LoadingButton
+              pending={pending}
+              pendingLabel={"Creating..."}
+              data-dialog-submit
+              form="workspace-form"
+              type="submit"
+            >
+              <Plus data-icon="inline-start" />
+              {"Confirm and create"}
+            </LoadingButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>

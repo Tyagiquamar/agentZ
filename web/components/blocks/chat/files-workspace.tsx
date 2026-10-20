@@ -1,5 +1,6 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
 import * as React from "react"
 import type { FileNode } from "@opencode-ai/sdk/v2"
 import {
@@ -842,10 +843,9 @@ function WorkspaceBody({
             </TooltipTrigger>
             <TooltipContent>New folder</TooltipContent>
           </Tooltip>
-          <Button
-            aria-busy={filesFetching}
+          <LoadingButton
+            pending={filesFetching}
             aria-label={filesFetching ? "Refreshing files" : "Refresh files"}
-            disabled={filesFetching}
             onClick={() =>
               void Promise.all([
                 queryClient.invalidateQueries({ queryKey: filesQueryKey }),
@@ -855,8 +855,8 @@ function WorkspaceBody({
             size="icon-sm"
             variant="ghost"
           >
-            {filesFetching ? <Spinner aria-hidden="true" /> : <RefreshCw />}
-          </Button>
+            <RefreshCw />
+          </LoadingButton>
         </div>
         {moveOperation ? (
           <div
@@ -1474,16 +1474,16 @@ function EditorPane({
         ) : null}
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button
-              aria-busy={save.isPending}
+            <LoadingButton
+              pending={save.isPending}
               aria-label={save.isPending ? "Saving file" : "Save file"}
               disabled={!draft.dirty || save.isPending || draft.truncated}
               onClick={() => saveDraft()}
               size="icon-sm"
               variant="ghost"
             >
-              {save.isPending ? <Spinner aria-hidden="true" /> : <Save />}
-            </Button>
+              <Save />
+            </LoadingButton>
           </TooltipTrigger>
           <TooltipContent>{save.isPending ? "Saving..." : "Save file"}</TooltipContent>
         </Tooltip>
@@ -1875,8 +1875,8 @@ function EntryDialog({
           <Button disabled={pending} onClick={onClose} variant="outline">
             Cancel
           </Button>
-          <Button
-            aria-busy={pending}
+          <LoadingButton
+            pending={pending}
             data-dialog-submit
             disabled={pending || (action.kind !== "delete" && !name.trim())}
             onClick={() => {
@@ -1982,13 +1982,9 @@ function EntryDialog({
             }}
             variant={action.kind === "delete" ? "destructive" : "default"}
           >
-            {pending ? (
-              <Spinner aria-hidden="true" />
-            ) : action.kind === "delete" ? (
-              <Trash2 />
-            ) : null}
+            {action.kind === "delete" ? <Trash2 /> : null}
             {pending ? pendingLabel : action.kind === "delete" ? "Delete" : "Continue"}
-          </Button>
+          </LoadingButton>
         </DialogFooter>
       </DialogContent>
     </Dialog>

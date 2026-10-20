@@ -1,5 +1,6 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
 import * as React from "react"
 import { toast } from "sonner"
 import type { Route } from "next"
@@ -419,7 +420,13 @@ function RunActions({
                   View graph
                 </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem variant="destructive" onSelect={() => setDeleteOpen(true)}>
+              <DropdownMenuItem
+                variant="destructive"
+                onSelect={(event) => {
+                  event.preventDefault()
+                  setDeleteOpen(true)
+                }}
+              >
                 <Trash2 />
                 Delete
               </DropdownMenuItem>
@@ -570,10 +577,10 @@ function DeleteRunDialog({
           </DialogClose>
           <form action={formAction}>
             <input type="hidden" name="run_name" value={item.name} />
-            <Button type="submit" variant="destructive" disabled={pending}>
-              {pending ? <Spinner /> : <Trash2 />}
+            <LoadingButton pending={pending} type="submit" variant="destructive">
+              <Trash2 />
               Delete
-            </Button>
+            </LoadingButton>
           </form>
         </DialogFooter>
       </DialogContent>

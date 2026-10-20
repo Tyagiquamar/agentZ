@@ -1,5 +1,6 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
 import * as React from "react"
 import {
   experimental_streamedQuery as streamedQuery,
@@ -39,7 +40,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Spinner } from "@/components/ui/spinner"
 import { RelativeDateTime } from "@/components/ui/table"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { TokenTablePagination } from "@/components/table-pagination"
@@ -317,13 +317,24 @@ function ProviderActions({
           <DropdownMenuContent align="end">
             <DropdownMenuGroup>
               {provider.can_modify ? (
-                <DropdownMenuItem onSelect={() => onEditAction(provider)}>
+                <DropdownMenuItem
+                  onSelect={(event) => {
+                    event.preventDefault()
+                    onEditAction(provider)
+                  }}
+                >
                   <Pencil />
                   Edit
                 </DropdownMenuItem>
               ) : null}
               {provider.can_delete ? (
-                <DropdownMenuItem variant="destructive" onSelect={() => setDeleteOpen(true)}>
+                <DropdownMenuItem
+                  variant="destructive"
+                  onSelect={(event) => {
+                    event.preventDefault()
+                    setDeleteOpen(true)
+                  }}
+                >
                   <Trash2 />
                   Delete
                 </DropdownMenuItem>
@@ -389,9 +400,9 @@ function DeleteProviderDialog({
               Cancel
             </Button>
           </DialogClose>
-          <Button
+          <LoadingButton
+            pending={pending}
             variant="destructive"
-            disabled={pending}
             onClick={() => {
               startTransition(async () => {
                 const result = await deleteInferenceProviderAction(scope, provider.id)
@@ -407,9 +418,9 @@ function DeleteProviderDialog({
               })
             }}
           >
-            {pending ? <Spinner /> : <Trash2 />}
+            <Trash2 />
             Delete
-          </Button>
+          </LoadingButton>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -1,5 +1,6 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
 import * as React from "react"
 import { toast } from "sonner"
 import Bowser from "bowser"
@@ -42,7 +43,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Spinner } from "@/components/ui/spinner"
 import type { SVGProps } from "react"
 import type { Auth } from "@/lib/auth"
 import { AdminDataGrid, type AdminColumnLayout } from "@/components/admin-data-grid"
@@ -301,10 +301,10 @@ function DeleteSessionButton({
             </DialogClose>
             <form action={action}>
               <input type="hidden" name="token" value={session.token} />
-              <Button type="submit" variant="destructive" disabled={pending}>
-                {pending ? <Spinner /> : <LogOut />}
+              <LoadingButton pending={pending} type="submit" variant="destructive">
+                <LogOut />
                 Revoke
-              </Button>
+              </LoadingButton>
             </form>
           </DialogFooter>
         </DialogContent>

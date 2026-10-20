@@ -1,5 +1,8 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
+import { PasswordStrength } from "@/components/interior/password-strength"
+
 import Link from "next/link"
 import * as React from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -10,8 +13,7 @@ import type { AuthError, SocialProvider } from "@/app/(auth)/shared"
 import { authErrorMessages } from "@/app/(auth)/shared"
 import { authClient } from "@/lib/auth-client"
 import { signInURL } from "@/lib/sign-in-redirect"
-import { passwordFieldDescription, passwordSchema } from "@/lib/password-policy"
-import { Button } from "@/components/ui/button"
+import { passwordSchema } from "@/lib/password-policy"
 import {
   Field,
   FieldDescription,
@@ -21,7 +23,6 @@ import {
   FieldSeparator,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Spinner } from "@/components/ui/spinner"
 import { SocialAuthButtons } from "./social-auth-buttons"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
@@ -216,7 +217,9 @@ export function SignUpForm({
                   aria-describedby="signup-password-error"
                   aria-required="true"
                 />
-                <FieldDescription>{passwordFieldDescription}</FieldDescription>
+                <FieldDescription>
+                  <PasswordStrength value={field.value} />
+                </FieldDescription>
                 <FieldError errors={[fieldState.error]} id="signup-password-error" />
               </Field>
             )}
@@ -246,19 +249,16 @@ export function SignUpForm({
           />
         </FieldGroup>
         <div className="flex flex-col gap-3">
-          <Button
+          <LoadingButton
+            pending={pendingAction === "password"}
             type="submit"
             size="lg"
             aria-invalid={passwordActionError ? "true" : undefined}
             disabled={locked}
           >
-            {pendingAction === "password" ? (
-              <Spinner data-icon="inline-start" />
-            ) : (
-              <UserPlus data-icon="inline-start" />
-            )}
+            <UserPlus data-icon="inline-start" />
             Sign up
-          </Button>
+          </LoadingButton>
           {passwordActionError ? (
             <Alert variant="destructive">
               <CircleAlert aria-hidden="true" />

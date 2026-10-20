@@ -1,5 +1,7 @@
 "use client"
 
+import { TaskSteps } from "@/components/interior/task-steps"
+import { LoadingButton } from "@/components/interior/loading-button"
 import {
   CheckIcon,
   ChevronDownIcon,
@@ -15,7 +17,7 @@ import { cn } from "@/lib/utils"
 import { createAgentOpencodeClient } from "@/lib/opencode/client"
 import { MessageResponse } from "@/components/ai-elements/message"
 import { Button } from "@/components/ui/button"
-import { CopyButton } from "@/components/ui/copy-button"
+import { CopyButton } from "@/components/interior/copy-button"
 import { FieldSet, FieldLegend } from "@/components/ui/field"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Spinner } from "@/components/ui/spinner"
@@ -120,14 +122,15 @@ export function PlanDock({
         <Button disabled={pending} onClick={() => onSubmit([["No"]])} size="sm" variant="ghost">
           Keep planning
         </Button>
-        <Button
+        <LoadingButton
+          pending={pending}
           disabled={pending || plan.isFetching || plan.isError || !plan.data}
           onClick={() => onSubmit([["Yes"]])}
           size="sm"
         >
-          {pending ? <Spinner /> : <HammerIcon />}
+          <HammerIcon />
           Implement plan
-        </Button>
+        </LoadingButton>
       </div>
     </section>
   )
@@ -421,8 +424,12 @@ export function QuestionDock({
                   Back
                 </Button>
               ) : null}
-              <Button disabled={pending || !complete[tab]} onClick={() => void advance()} size="sm">
-                {pending ? <Spinner aria-hidden="true" /> : null}
+              <LoadingButton
+                pending={pending}
+                disabled={pending || !complete[tab]}
+                onClick={() => void advance()}
+                size="sm"
+              >
                 {questions.length === 1
                   ? "Submit answer"
                   : isLast
@@ -430,7 +437,7 @@ export function QuestionDock({
                       ? "Submit answers"
                       : "Next unanswered"
                     : "Continue"}
-              </Button>
+              </LoadingButton>
             </div>
           </div>
         </CollapsibleContent>
@@ -556,10 +563,9 @@ export function PermissionDock({
               >
                 Always allow
               </Button>
-              <Button disabled={pending} onClick={() => decide("once")} type="button">
-                {pending ? <Spinner /> : null}
+              <LoadingButton pending={pending} onClick={() => decide("once")} type="button">
                 Allow once
-              </Button>
+              </LoadingButton>
             </div>
           </div>
         </div>
@@ -626,7 +632,8 @@ export function RevertDock({
               <span className="min-w-0 flex-1 truncate text-sm text-foreground">
                 {item.text || "[attachment]"}
               </span>
-              <Button
+              <LoadingButton
+                pending={restoringId === item.id}
                 aria-label="Restore message"
                 className="h-6 w-6 shrink-0"
                 disabled={pending}
@@ -635,12 +642,8 @@ export function RevertDock({
                 type="button"
                 variant="ghost"
               >
-                {restoringId === item.id ? (
-                  <Spinner className="size-4" />
-                ) : (
-                  <Redo2Icon className="h-4 w-4" />
-                )}
-              </Button>
+                <Redo2Icon className="h-4 w-4" />
+              </LoadingButton>
             </div>
           ))}
         </div>
@@ -678,35 +681,7 @@ export function TodoDock({ todos }: { todos: Todo[] }) {
           <span className="ml-1 min-w-0 truncate text-sm text-muted-foreground">{preview}</span>
         ) : null}
       </button>
-      {open ? (
-        <div className="mt-1 flex flex-col gap-1 border-l border-border border-muted-foreground/15 pl-3">
-          {todos.map((todo, index) => {
-            const terminal = todo.status === "completed" || todo.status === "cancelled"
-            return (
-              <div className="flex items-start gap-2 text-sm" key={`${todo.content}-${index}`}>
-                <span
-                  className={cn(
-                    "mt-0.5 size-2.5 shrink-0 rounded-full border",
-                    terminal
-                      ? "border-primary bg-primary"
-                      : todo.status === "in_progress"
-                        ? "animate-pulse border-primary"
-                        : "border-muted-foreground"
-                  )}
-                />
-                <span
-                  className={cn(
-                    "min-w-0 wrap-break-word text-foreground",
-                    terminal ? "text-muted-foreground line-through" : undefined
-                  )}
-                >
-                  {todo.content}
-                </span>
-              </div>
-            )
-          })}
-        </div>
-      ) : null}
+      {open ? <TaskSteps todos={todos} /> : null}
     </div>
   )
 }
