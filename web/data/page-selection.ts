@@ -320,6 +320,12 @@ async function resolveSelection(
       : requested
 
   if (isLens) {
+    // Hosted MCP activity is agent-wide. Its transport IDs are not
+    // conversations.
+    if (page === "lens/mcp" && workspace.workspace.type !== "coding") {
+      delete state.requested.session_id
+      return state
+    }
     const result = await listTraceSessionFilterAction(
       agent.name,
       workspaceId,
