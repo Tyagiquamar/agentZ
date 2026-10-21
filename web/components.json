@@ -22,6 +22,7 @@
   "menuColor": "default-translucent",
   "menuAccent": "subtle",
   "registries": {
+    "@interior": "https://www.interior.dev/r/{name}.json",
     "@lucide-animated": "https://lucide-animated.com/r/{name}.json",
     "@ai-elements": "https://ai-sdk.dev/elements/api/registry/{name}.json"
   }

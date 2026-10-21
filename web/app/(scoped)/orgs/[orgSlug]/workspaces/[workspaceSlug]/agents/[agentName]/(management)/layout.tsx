@@ -119,7 +119,7 @@ async function WorkspaceAgentContent({
         </div>
         <RouteTabs label="Agent settings" tabs={tabs} />
       </header>
-      {children}
+      <Suspense fallback={<AdministrationLoadingState />}>{children}</Suspense>
     </div>
   )
 }

@@ -1,5 +1,8 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
+import { PasswordStrength } from "@/components/interior/password-strength"
+
 import * as React from "react"
 import { toast } from "sonner"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -7,11 +10,9 @@ import { Controller, useForm } from "react-hook-form"
 import { KeyRound, CircleAlert } from "lucide-react"
 import { z } from "zod"
 import { authClient } from "@/lib/auth-client"
-import { Button } from "@/components/ui/button"
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Spinner } from "@/components/ui/spinner"
-import { passwordFieldDescription, passwordSchema } from "@/lib/password-policy"
+import { passwordSchema } from "@/lib/password-policy"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
 const changePasswordSchema = z
@@ -144,7 +145,9 @@ export function PasswordSettings() {
                     aria-describedby="account-new-password-error"
                     aria-required="true"
                   />
-                  <FieldDescription>{passwordFieldDescription}</FieldDescription>
+                  <FieldDescription>
+                    <PasswordStrength value={field.value} />
+                  </FieldDescription>
                   <FieldError errors={[fieldState.error]} id="account-new-password-error" />
                 </Field>
               )}
@@ -180,14 +183,10 @@ export function PasswordSettings() {
             </Alert>
           ) : null}
           <div>
-            <Button type="submit" disabled={pendingAction}>
-              {pendingAction ? (
-                <Spinner data-icon="inline-start" />
-              ) : (
-                <KeyRound data-icon="inline-start" />
-              )}
+            <LoadingButton pending={pendingAction} type="submit">
+              <KeyRound data-icon="inline-start" />
               Update password
-            </Button>
+            </LoadingButton>
           </div>
         </form>
       </div>

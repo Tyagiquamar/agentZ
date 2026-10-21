@@ -71,7 +71,7 @@ async function WorkspaceRoleContent({
         ) : null}
         <RouteTabs label="Workspace Role details" tabs={tabs} />
       </header>
-      {children}
+      <Suspense fallback={<AdministrationLoadingState />}>{children}</Suspense>
     </div>
   )
 }

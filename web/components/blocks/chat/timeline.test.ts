@@ -65,9 +65,9 @@ test("a steering message does not finish the assistant that is still streaming",
   assert.ok(rows.some((row) => row.type === "assistant"))
   const response = rows.find((row) => row.type === "assistant")
   assert.equal(response?.isStreaming, true)
-  assert.equal(
-    rows.some((row) => row.type === "thinking"),
-    false
+  assert.deepEqual(
+    rows.map((row) => row.type),
+    ["user", "assistant", "user"]
   )
   const waiting = rows.find((row) => row.type === "user" && row.messageID === steer.id)
   assert.ok(waiting?.type === "user")
@@ -84,10 +84,9 @@ test("completion moves activity from the previous response to the steering turn"
     isRetrying: false,
   })
   assert.equal(rows.find((row) => row.type === "assistant")?.isStreaming, false)
-  assert.deepEqual(
-    rows.filter((row) => row.type === "thinking"),
-    [{ key: "thinking:assistant:user2", type: "thinking" }]
-  )
+  const waiting = rows.find((row) => row.type === "user" && row.messageID === steer.id)
+  assert.ok(waiting?.type === "user")
+  assert.equal(waiting.isWaiting, false)
 })
 
 test("Stop and retry do not leave an unfinished response marked as streaming", () => {

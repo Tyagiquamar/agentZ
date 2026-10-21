@@ -1,16 +1,15 @@
 "use client"
 
 import { useMemo } from "react"
+import { motion, useReducedMotion } from "motion/react"
 import { cva, type VariantProps } from "class-variance-authority"
 import type { MultipleFieldErrors } from "react-hook-form"
 
 import { cn } from "@/lib/utils"
-import { Label } from "@/components/ui/label"
+import { Label as LabelPrimitive } from "radix-ui"
 import { Separator } from "@/components/ui/separator"
 
-type RequiredIndicatorProps = React.ComponentProps<"span">
-
-function RequiredIndicator({ className, ...props }: RequiredIndicatorProps) {
+function RequiredIndicator({ className, ...props }: React.ComponentProps<"span">) {
   return (
     <span
       aria-hidden="true"
@@ -108,17 +107,17 @@ function FieldContent({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
-type FieldLabelProps = React.ComponentProps<typeof Label> & {
+type FieldLabelProps = React.ComponentProps<typeof LabelPrimitive.Root> & {
   required?: boolean
 }
 
 function FieldLabel({ className, required = false, children, ...props }: FieldLabelProps) {
   return (
-    <Label
+    <LabelPrimitive.Root
       data-slot="field-label"
       data-required={required}
       className={cn(
-        "group/field-label peer/field-label flex w-fit gap-2 leading-snug group-data-[disabled=true]/field:opacity-50 has-data-checked:border-primary/30 has-data-checked:bg-primary/5 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10",
+        "group/field-label peer/field-label flex w-fit items-center gap-2 text-sm leading-snug font-medium select-none group-data-[disabled=true]:pointer-events-none group-data-[disabled=true]:opacity-50 group-data-[disabled=true]/field:opacity-50 peer-disabled:cursor-not-allowed peer-disabled:opacity-50 has-data-checked:border-primary/30 has-data-checked:bg-primary/5 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 [&>svg]:shrink-0",
         "has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col",
         className
       )}
@@ -126,7 +125,7 @@ function FieldLabel({ className, required = false, children, ...props }: FieldLa
     >
       {children}
       {required ? <RequiredIndicator /> : null}
-    </Label>
+    </LabelPrimitive.Root>
   )
 }
 
@@ -183,6 +182,7 @@ function FieldError({
 }: React.ComponentProps<"div"> & {
   errors?: Array<{ message?: string; types?: MultipleFieldErrors } | undefined>
 }) {
+  const reduced = useReducedMotion()
   const content = useMemo(() => {
     if (children) {
       return children
@@ -202,7 +202,11 @@ function FieldError({
       }
 
       return Object.values(error.types).flatMap((value) =>
-        (Array.isArray(value) ? value : [value]).map(String)
+        Array.isArray(value)
+          ? value
+          : value === true || value === false || value === undefined
+            ? []
+            : [value]
       )
     })
     const uniqueErrors = [...new Set(messages)]
@@ -235,7 +239,15 @@ function FieldError({
       className={cn("text-sm font-normal text-destructive", className)}
       {...props}
     >
-      {content}
+      <motion.div
+        initial={{ opacity: 0, y: reduced ? 0 : 2 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={
+          reduced ? { duration: 0 } : { type: "spring", stiffness: 260, damping: 34, mass: 0.8 }
+        }
+      >
+        {content}
+      </motion.div>
     </div>
   )
 }

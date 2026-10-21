@@ -1,5 +1,6 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
 import Link from "next/link"
 import type { Route } from "next"
 import { useActionState, useId, useState, useTransition } from "react"
@@ -26,7 +27,7 @@ import {
 import type { AssignmentOption, ScopedAssignmentOption } from "@/data/members"
 import { AlertDescription, Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { CopyButton } from "@/components/ui/copy-button"
+import { CopyButton } from "@/components/interior/copy-button"
 import {
   Dialog,
   DialogClose,
@@ -148,25 +149,25 @@ export function UserTableActions({
         <DropdownMenuContent align="end" className="min-w-48">
           <DropdownMenuGroup>
             <DropdownMenuItem asChild className="whitespace-nowrap">
-              <Link href={`/orgs/${orgSlug}/users/${memberId}?tab=access` as Route}>
+              <Link href={`/orgs/${orgSlug}/users/${memberId}/access` as Route}>
                 <Shield />
                 Roles and access
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild className="whitespace-nowrap">
-              <Link href={`/orgs/${orgSlug}/users/${memberId}?tab=agents` as Route}>
+              <Link href={`/orgs/${orgSlug}/users/${memberId}/agents` as Route}>
                 <Bot />
                 Owned Agents
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild className="whitespace-nowrap">
-              <Link href={`/orgs/${orgSlug}/users/${memberId}?tab=keys` as Route}>
+              <Link href={`/orgs/${orgSlug}/users/${memberId}/keys` as Route}>
                 <KeyRound />
                 API keys
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild className="whitespace-nowrap">
-              <Link href={`/orgs/${orgSlug}/users/${memberId}?tab=activity` as Route}>
+              <Link href={`/orgs/${orgSlug}/users/${memberId}/activity` as Route}>
                 <Activity />
                 Activity
               </Link>
@@ -352,10 +353,15 @@ function CreateInvitationForm({
           </Alert>
         ) : null}
         <div className="flex justify-end">
-          <Button disabled={!ready || pending} type="submit">
-            {pending ? <Spinner /> : <Send />}
-            {pending ? "Saving..." : "Create invitation"}
-          </Button>
+          <LoadingButton
+            pending={pending}
+            pendingLabel={"Saving..."}
+            disabled={!ready || pending}
+            type="submit"
+          >
+            <Send />
+            {"Create invitation"}
+          </LoadingButton>
         </div>
       </form>
     </DialogContent>

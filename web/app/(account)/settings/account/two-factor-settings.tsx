@@ -1,5 +1,7 @@
 "use client"
 
+import { OtpInput } from "@/components/interior/otp-input"
+import { LoadingButton } from "@/components/interior/loading-button"
 import * as React from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
@@ -14,7 +16,7 @@ import { reauthenticateWithGithub, reauthenticateWithGoogle } from "./actions"
 import { SocialAuthButtons } from "@/components/auth/social-auth-buttons"
 import { AlertDescription, Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { CopyButton } from "@/components/ui/copy-button"
+import { CopyButton } from "@/components/interior/copy-button"
 import {
   Dialog,
   DialogClose,
@@ -462,12 +464,8 @@ function SetupDialog({
                   <FieldLabel htmlFor="two-factor-code" required>
                     Then enter the 6-digit code
                   </FieldLabel>
-                  <Input
+                  <OtpInput
                     id="two-factor-code"
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    pattern="[0-9]*"
-                    maxLength={6}
                     aria-invalid={!!codeError}
                     aria-required="true"
                     disabled={pending}
@@ -494,14 +492,10 @@ function SetupDialog({
                   Cancel
                 </Button>
               </DialogClose>
-              <Button type="submit" disabled={pending}>
-                {pending ? (
-                  <Spinner data-icon="inline-start" />
-                ) : (
-                  <ShieldCheck data-icon="inline-start" />
-                )}
+              <LoadingButton pending={pending} type="submit">
+                <ShieldCheck data-icon="inline-start" />
                 Verify
-              </Button>
+              </LoadingButton>
             </DialogFooter>
           </form>
         </div>
@@ -598,11 +592,10 @@ function ReauthDialog({
                 Cancel
               </Button>
             </DialogClose>
-            <Button type="submit" disabled={pending}>
-              {pending ? <Spinner data-icon="inline-start" /> : null}
+            <LoadingButton pending={pending} type="submit">
               Continue
               {!pending ? <ArrowRight data-icon="inline-end" /> : null}
-            </Button>
+            </LoadingButton>
           </DialogFooter>
         </form>
       ) : provider === "github" || provider === "google" ? (
@@ -652,17 +645,17 @@ function DisableDialog({
             Cancel
           </Button>
         </DialogClose>
-        <Button
+        <LoadingButton
+          pending={pending}
           type="button"
           variant="destructive"
-          disabled={pending}
           onClick={() => {
             void onDisableAction()
           }}
         >
-          {pending ? <Spinner data-icon="inline-start" /> : <ShieldOff data-icon="inline-start" />}
+          <ShieldOff data-icon="inline-start" />
           Disable
-        </Button>
+        </LoadingButton>
       </DialogFooter>
     </>
   )

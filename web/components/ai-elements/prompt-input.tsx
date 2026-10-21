@@ -437,9 +437,7 @@ export const PromptInput = ({
   )
 }
 
-type PromptInputBodyProps = HTMLAttributes<HTMLDivElement>
-
-export const PromptInputBody = ({ className, ...props }: PromptInputBodyProps) => {
+export const PromptInputBody = ({ className, ...props }: HTMLAttributes<HTMLDivElement>) => {
   const layout = useContext(PromptInputLayoutContext)
 
   return (

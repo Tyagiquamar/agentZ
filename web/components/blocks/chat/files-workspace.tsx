@@ -1,5 +1,8 @@
 "use client"
 
+import { HoldToConfirm } from "@/components/interior/hold-to-confirm"
+
+import { LoadingButton } from "@/components/interior/loading-button"
 import * as React from "react"
 import type { FileNode } from "@opencode-ai/sdk/v2"
 import {
@@ -842,10 +845,9 @@ function WorkspaceBody({
             </TooltipTrigger>
             <TooltipContent>New folder</TooltipContent>
           </Tooltip>
-          <Button
-            aria-busy={filesFetching}
+          <LoadingButton
+            pending={filesFetching}
             aria-label={filesFetching ? "Refreshing files" : "Refresh files"}
-            disabled={filesFetching}
             onClick={() =>
               void Promise.all([
                 queryClient.invalidateQueries({ queryKey: filesQueryKey }),
@@ -855,8 +857,8 @@ function WorkspaceBody({
             size="icon-sm"
             variant="ghost"
           >
-            {filesFetching ? <Spinner aria-hidden="true" /> : <RefreshCw />}
-          </Button>
+            <RefreshCw />
+          </LoadingButton>
         </div>
         {moveOperation ? (
           <div
@@ -1474,16 +1476,16 @@ function EditorPane({
         ) : null}
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button
-              aria-busy={save.isPending}
+            <LoadingButton
+              pending={save.isPending}
               aria-label={save.isPending ? "Saving file" : "Save file"}
               disabled={!draft.dirty || save.isPending || draft.truncated}
               onClick={() => saveDraft()}
               size="icon-sm"
               variant="ghost"
             >
-              {save.isPending ? <Spinner aria-hidden="true" /> : <Save />}
-            </Button>
+              <Save />
+            </LoadingButton>
           </TooltipTrigger>
           <TooltipContent>{save.isPending ? "Saving..." : "Save file"}</TooltipContent>
         </Tooltip>
@@ -1835,6 +1837,100 @@ function EntryDialog({
           ? `Rename ${action.entry.name}`
           : `Delete ${action.entry.name}`
 
+  function confirmEntry() {
+    if (action.kind === "file" || action.kind === "directory") {
+      const path = action.parent === "." ? name.trim() : `${action.parent}/${name.trim()}`
+      const directoryPath = action.parent
+      const mutation = action.kind === "file" ? createFile : createDirectory
+      mutation.mutate(
+        {
+          body: { path },
+          headers: { "X-AgentZ-Workspace-ID": workspaceId },
+          path: { agentName },
+        },
+        {
+          onError: (error) => toast.error(label, { description: error.message }),
+          onSuccess: () => {
+            toast.success(action.kind === "file" ? "File created" : "Folder created")
+            void queryClient.invalidateQueries({
+              queryKey: searchQueryKey,
+            })
+            void queryClient.invalidateQueries({
+              queryKey: agentFilesQueryOptions(agentName, workspaceId, root, directoryPath)
+                .queryKey,
+            })
+            if (action.kind === "file") {
+              onOpen(path)
+            }
+            onClose()
+          },
+        }
+      )
+      return
+    }
+
+    if (action.kind === "rename") {
+      const slash = action.entry.path.lastIndexOf("/")
+      const target =
+        slash === -1 ? name.trim() : `${action.entry.path.slice(0, slash)}/${name.trim()}`
+      rename.mutate(
+        {
+          body: { path: action.entry.path, target },
+          headers: { "X-AgentZ-Workspace-ID": workspaceId },
+          path: { agentName },
+        },
+        {
+          onError: (error) => toast.error(label, { description: error.message }),
+          onSuccess: () => {
+            toast.success(action.entry.type === "directory" ? "Folder renamed" : "File renamed")
+            void queryClient.invalidateQueries({
+              queryKey: searchQueryKey,
+            })
+            void queryClient.invalidateQueries({
+              queryKey: agentFilesQueryOptions(
+                agentName,
+                workspaceId,
+                root,
+                slash === -1 ? "." : action.entry.path.slice(0, slash)
+              ).queryKey,
+            })
+            onRename(action.entry.path, target)
+            onClose()
+          },
+        }
+      )
+      return
+    }
+
+    const slash = action.entry.path.lastIndexOf("/")
+    remove.mutate(
+      {
+        headers: { "X-AgentZ-Workspace-ID": workspaceId },
+        path: { agentName },
+        query: { path: action.entry.path },
+      },
+      {
+        onError: (error) => toast.error(label, { description: error.message }),
+        onSuccess: () => {
+          toast.success(action.entry.type === "directory" ? "Folder deleted" : "File deleted")
+          void queryClient.invalidateQueries({
+            queryKey: searchQueryKey,
+          })
+          void queryClient.invalidateQueries({
+            queryKey: agentFilesQueryOptions(
+              agentName,
+              workspaceId,
+              root,
+              slash === -1 ? "." : action.entry.path.slice(0, slash)
+            ).queryKey,
+          })
+          onDelete(action.entry.path)
+          onClose()
+        },
+      }
+    )
+  }
+
   return (
     <Dialog open onOpenChange={(open) => !open && !pending && onClose()}>
       <DialogContent>
@@ -1875,120 +1971,26 @@ function EntryDialog({
           <Button disabled={pending} onClick={onClose} variant="outline">
             Cancel
           </Button>
-          <Button
-            aria-busy={pending}
-            data-dialog-submit
-            disabled={pending || (action.kind !== "delete" && !name.trim())}
-            onClick={() => {
-              if (action.kind === "file" || action.kind === "directory") {
-                const path = action.parent === "." ? name.trim() : `${action.parent}/${name.trim()}`
-                const directoryPath = action.parent
-                const mutation = action.kind === "file" ? createFile : createDirectory
-                mutation.mutate(
-                  {
-                    body: { path },
-                    headers: { "X-AgentZ-Workspace-ID": workspaceId },
-                    path: { agentName },
-                  },
-                  {
-                    onError: (error) => toast.error(label, { description: error.message }),
-                    onSuccess: () => {
-                      toast.success(action.kind === "file" ? "File created" : "Folder created")
-                      void queryClient.invalidateQueries({
-                        queryKey: searchQueryKey,
-                      })
-                      void queryClient.invalidateQueries({
-                        queryKey: agentFilesQueryOptions(
-                          agentName,
-                          workspaceId,
-                          root,
-                          directoryPath
-                        ).queryKey,
-                      })
-                      if (action.kind === "file") {
-                        onOpen(path)
-                      }
-                      onClose()
-                    },
-                  }
-                )
-                return
-              }
-
-              if (action.kind === "rename") {
-                const slash = action.entry.path.lastIndexOf("/")
-                const target =
-                  slash === -1 ? name.trim() : `${action.entry.path.slice(0, slash)}/${name.trim()}`
-                rename.mutate(
-                  {
-                    body: { path: action.entry.path, target },
-                    headers: { "X-AgentZ-Workspace-ID": workspaceId },
-                    path: { agentName },
-                  },
-                  {
-                    onError: (error) => toast.error(label, { description: error.message }),
-                    onSuccess: () => {
-                      toast.success(
-                        action.entry.type === "directory" ? "Folder renamed" : "File renamed"
-                      )
-                      void queryClient.invalidateQueries({
-                        queryKey: searchQueryKey,
-                      })
-                      void queryClient.invalidateQueries({
-                        queryKey: agentFilesQueryOptions(
-                          agentName,
-                          workspaceId,
-                          root,
-                          slash === -1 ? "." : action.entry.path.slice(0, slash)
-                        ).queryKey,
-                      })
-                      onRename(action.entry.path, target)
-                      onClose()
-                    },
-                  }
-                )
-                return
-              }
-
-              const slash = action.entry.path.lastIndexOf("/")
-              remove.mutate(
-                {
-                  headers: { "X-AgentZ-Workspace-ID": workspaceId },
-                  path: { agentName },
-                  query: { path: action.entry.path },
-                },
-                {
-                  onError: (error) => toast.error(label, { description: error.message }),
-                  onSuccess: () => {
-                    toast.success(
-                      action.entry.type === "directory" ? "Folder deleted" : "File deleted"
-                    )
-                    void queryClient.invalidateQueries({
-                      queryKey: searchQueryKey,
-                    })
-                    void queryClient.invalidateQueries({
-                      queryKey: agentFilesQueryOptions(
-                        agentName,
-                        workspaceId,
-                        root,
-                        slash === -1 ? "." : action.entry.path.slice(0, slash)
-                      ).queryKey,
-                    })
-                    onDelete(action.entry.path)
-                    onClose()
-                  },
-                }
-              )
-            }}
-            variant={action.kind === "delete" ? "destructive" : "default"}
-          >
-            {pending ? (
-              <Spinner aria-hidden="true" />
-            ) : action.kind === "delete" ? (
+          {action.kind === "delete" ? (
+            <HoldToConfirm
+              pending={pending}
+              data-dialog-submit
+              variant="destructive"
+              onConfirm={confirmEntry}
+            >
               <Trash2 />
-            ) : null}
-            {pending ? pendingLabel : action.kind === "delete" ? "Delete" : "Continue"}
-          </Button>
+              Hold to delete
+            </HoldToConfirm>
+          ) : (
+            <LoadingButton
+              pending={pending}
+              data-dialog-submit
+              disabled={!name.trim()}
+              onClick={confirmEntry}
+            >
+              {pending ? pendingLabel : "Continue"}
+            </LoadingButton>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -1,5 +1,6 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
 import { useEffect, useEffectEvent, useRef, useState } from "react"
 import { queryOptions, skipToken, useQuery, useQueryClient } from "@tanstack/react-query"
 import type { Event, Pty } from "@opencode-ai/sdk/v2"
@@ -287,7 +288,7 @@ export function CodingTerminal({
                     event.currentTarget.scrollIntoView({ block: "nearest", inline: "nearest" })
                   }
                 >
-                  <TerminalSquare className="size-3.5" />
+                  <TerminalSquare className="size-3.5 shrink-0" />
                   <span className="truncate">{label}</span>
                 </TabsPrimitive.Trigger>
                 <Button
@@ -304,16 +305,16 @@ export function CodingTerminal({
             )
           })}
         </TabsPrimitive.List>
-        <Button
+        <LoadingButton
+          pending={pending}
           aria-label="New terminal"
           title="New terminal"
           size="icon-sm"
           variant="ghost"
-          disabled={pending}
           onClick={() => void openTerminal(true)}
         >
-          {pending ? <Spinner /> : <Plus />}
-        </Button>
+          <Plus />
+        </LoadingButton>
       </div>
       {pending && sessions.length === 0 ? (
         <div role="status" className="flex items-center gap-2 p-3 text-xs text-muted-foreground">
@@ -564,7 +565,7 @@ function TerminalSession({
       ) : null}
       <div
         ref={element}
-        className="min-h-0 flex-1 overflow-hidden bg-background p-2 font-mono text-foreground [font-stretch:normal]"
+        className="min-h-0 flex-1 overflow-hidden bg-background p-2 font-mono text-foreground font-stretch-normal"
       />
     </div>
   )

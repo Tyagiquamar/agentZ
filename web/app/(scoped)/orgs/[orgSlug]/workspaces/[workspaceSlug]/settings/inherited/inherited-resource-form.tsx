@@ -1,5 +1,6 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
 import Link from "next/link"
 import * as React from "react"
 import { toast } from "sonner"
@@ -19,9 +20,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { AdminDataGrid, type AdminColumnLayout } from "@/components/admin-data-grid"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Spinner } from "@/components/ui/spinner"
 import type {
   InheritedResourceType,
   InheritedResourceSortByQuery,
@@ -282,10 +281,10 @@ export function InheritedResourceForm({
         table={table}
       />
       <div className="flex justify-end px-4 pb-6 md:px-6">
-        <Button disabled={pending} type="submit">
-          {pending ? <Spinner data-icon="inline-start" /> : <ListTree data-icon="inline-start" />}
-          {pending ? "Saving..." : "Save inheritance"}
-        </Button>
+        <LoadingButton pending={pending} pendingLabel={"Saving..."} type="submit">
+          <ListTree data-icon="inline-start" />
+          {"Save inheritance"}
+        </LoadingButton>
       </div>
     </form>
   )

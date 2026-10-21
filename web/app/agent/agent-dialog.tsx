@@ -1,5 +1,6 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
 import {
   Fragment,
   startTransition,
@@ -559,10 +560,15 @@ export function AgentDialog({
               Cancel
             </Button>
           </DialogClose>
-          <Button type="submit" form="agent-form-simple" disabled={isPending || !hasSandboxes}>
-            {isPending ? <Spinner aria-hidden="true" /> : <Save data-icon="inline-start" />}
+          <LoadingButton
+            pending={isPending}
+            type="submit"
+            form="agent-form-simple"
+            disabled={isPending || !hasSandboxes}
+          >
+            <Save data-icon="inline-start" />
             {mode === "create" ? "Create agent" : "Update agent"}
-          </Button>
+          </LoadingButton>
         </DialogFooter>
       </DialogContent>
     </Dialog>

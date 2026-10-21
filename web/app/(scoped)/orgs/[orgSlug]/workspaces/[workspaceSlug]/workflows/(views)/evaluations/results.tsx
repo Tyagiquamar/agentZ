@@ -15,7 +15,7 @@ import {
   ScanSearch,
 } from "lucide-react"
 import type { WorkflowEvaluation, EvaluationEvidenceReference } from "@/lib/gateway/client"
-import { Progress } from "@/components/ui/progress"
+import { Progress } from "@/components/interior/progress-bar"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -130,7 +130,7 @@ function ChartsSkeleton() {
   return (
     <div
       aria-hidden
-      className="grid min-w-0 grid-cols-1 gap-2 bg-muted/30 p-2 xl:grid-cols-2 motion-reduce:[&_[data-slot=skeleton]]:animate-none"
+      className="grid min-w-0 grid-cols-1 gap-2 bg-muted/30 p-2 motion-reduce:**:data-[slot=skeleton]:animate-none xl:grid-cols-2"
     >
       {["Score", "Score vs. usage", "Model comparison"].map((title, index) => (
         <section
@@ -141,7 +141,7 @@ function ChartsSkeleton() {
               : "h-80 overflow-hidden rounded-lg border bg-card"
           }
         >
-          <header className="flex h-12 items-center gap-2.5 border-b bg-gradient-to-r from-card to-muted/20 px-3.5">
+          <header className="flex h-12 items-center gap-2.5 border-b bg-linear-to-r from-card to-muted/20 px-3.5">
             <Skeleton className="size-4" />
             <h2 className="text-sm font-semibold">{title}</h2>
             {index > 0 ? <Skeleton className="ml-auto h-7 w-32" /> : null}
@@ -427,7 +427,7 @@ export function Results({
                 key={row.run_name}
                 tabIndex={0}
                 aria-label={`View ${row.model.label} execution`}
-                className="cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring"
+                className="cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
                 onClick={() => {
                   setSelected(row.run_name)
                   setTab("judgment")
@@ -456,7 +456,7 @@ export function Results({
                   {reason ? (
                     <Tooltip>
                       <TooltipTrigger asChild>{badge}</TooltipTrigger>
-                      <TooltipContent className="block break-words whitespace-pre-wrap">
+                      <TooltipContent className="block wrap-break-word whitespace-pre-wrap">
                         {reason}
                       </TooltipContent>
                     </Tooltip>
@@ -606,7 +606,7 @@ export function Results({
                           <h3 className="mb-2 text-sm font-medium">Findings</h3>
                           <ul className="flex list-disc flex-col gap-3 pl-5 text-sm">
                             {execution.judgment.evidence.map((item, index) => (
-                              <li key={index} className="leading-relaxed break-words">
+                              <li key={index} className="leading-relaxed wrap-break-word">
                                 {item}
                                 {execution.judgment?.references
                                   ?.filter((item) => item.evidence_index === index)

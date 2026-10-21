@@ -1,5 +1,6 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
 import { useActionState, useMemo, useState } from "react"
 import { CircleAlert, Save } from "lucide-react"
 import { toast } from "sonner"
@@ -9,10 +10,8 @@ import {
   type AssignmentFormState,
 } from "@/app/(scoped)/orgs/actions"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Button } from "@/components/ui/button"
 import { UserIdentity } from "@/components/ui/avatar"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Spinner } from "@/components/ui/spinner"
 import {
   Table,
   TableBody,
@@ -125,10 +124,15 @@ export function RoleAssignments({
         </Table>
       </div>
       <div className="flex justify-end px-4 pb-6 md:px-6">
-        <Button disabled={immutable || pending || !changed} type="submit">
-          {pending ? <Spinner /> : <Save data-icon="inline-start" />}
-          {pending ? "Saving..." : "Save assignments"}
-        </Button>
+        <LoadingButton
+          pending={pending}
+          pendingLabel={"Saving..."}
+          disabled={immutable || pending || !changed}
+          type="submit"
+        >
+          <Save data-icon="inline-start" />
+          {"Save assignments"}
+        </LoadingButton>
       </div>
     </form>
   )

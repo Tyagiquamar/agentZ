@@ -1,5 +1,8 @@
 "use client"
 
+import { HoldToConfirm } from "@/components/interior/hold-to-confirm"
+
+import { LoadingButton } from "@/components/interior/loading-button"
 import * as React from "react"
 import { useRouter } from "@bprogress/next/app"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
@@ -671,10 +674,14 @@ function EditSkillDialog({
                 Cancel
               </Button>
             </DialogClose>
-            <Button type="submit" disabled={pending || versions.length === 0}>
-              {pending ? <Spinner /> : <Pencil />}
+            <LoadingButton
+              pending={pending}
+              type="submit"
+              disabled={pending || versions.length === 0}
+            >
+              <Pencil />
               Update
-            </Button>
+            </LoadingButton>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -724,19 +731,20 @@ function DeleteDialog({
               Cancel
             </Button>
           </DialogClose>
-          <Button
+          <HoldToConfirm
+            pending={pending}
             type="button"
             variant="destructive"
             disabled={pending || hasRefs}
-            onClick={() => {
+            onConfirm={() => {
               startTransition(async () => {
                 await onDelete()
               })
             }}
           >
-            {pending ? <Spinner /> : <Trash2 />}
-            Delete
-          </Button>
+            <Trash2 />
+            Hold to delete
+          </HoldToConfirm>
         </DialogFooter>
       </DialogContent>
     </Dialog>

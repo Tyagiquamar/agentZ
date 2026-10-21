@@ -1,5 +1,8 @@
 "use client"
 
+import { HoldToConfirm } from "@/components/interior/hold-to-confirm"
+
+import { LoadingButton } from "@/components/interior/loading-button"
 import { Controller, useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
@@ -252,19 +255,26 @@ export function Projects({
   }
   if (pending) confirmReason = "Please wait for the current operation to finish."
 
-  let confirmLabel = detail?.project.deleting ? "Retry project deletion" : "Delete project"
-  if (dialog === "rename") confirmLabel = "Save name"
-  if (pending) confirmLabel = dialog === "rename" ? "Saving..." : "Deleting..."
-  const confirmButton = (
-    <Button
-      type="submit"
-      disabled={Boolean(confirmReason)}
-      variant={dialog === "rename" ? "default" : "destructive"}
-    >
-      {pending ? <Spinner data-icon="inline-start" /> : null}
-      {confirmLabel}
-    </Button>
-  )
+  const confirmButton =
+    dialog === "delete" ? (
+      <HoldToConfirm
+        pending={pending}
+        type="submit"
+        disabled={Boolean(confirmReason)}
+        variant="destructive"
+      >
+        {detail?.project.deleting ? "Hold to retry project deletion" : "Hold to delete project"}
+      </HoldToConfirm>
+    ) : (
+      <LoadingButton
+        pending={pending}
+        pendingLabel="Saving..."
+        type="submit"
+        disabled={Boolean(confirmReason)}
+      >
+        Save name
+      </LoadingButton>
+    )
 
   function confirmProject(values: z.infer<typeof projectNameSchema>) {
     if (!dialog || !targetProject || confirmReason) return
@@ -560,10 +570,10 @@ export function Projects({
                   Cancel
                 </Button>
               </DialogClose>
-              <Button disabled={pending || !repository} type="submit">
-                {pending ? <Spinner data-icon="inline-start" /> : <Plus data-icon="inline-start" />}
+              <LoadingButton pending={pending} disabled={pending || !repository} type="submit">
+                <Plus data-icon="inline-start" />
                 Add project
-              </Button>
+              </LoadingButton>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -724,7 +734,8 @@ export function CheckoutPicker({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button
+        <LoadingButton
+          pending={pending}
           variant="ghost"
           size="sm"
           role="combobox"
@@ -733,10 +744,10 @@ export function CheckoutPicker({
           disabled={disabled || pending}
           className="h-7 max-w-80 min-w-0 justify-start px-1.5 text-xs"
         >
-          {pending ? <Spinner /> : <GitBranch />}
+          <GitBranch />
           <span className="truncate">{label}</span>
           <ChevronDown className="ml-auto" />
-        </Button>
+        </LoadingButton>
       </PopoverTrigger>
       <PopoverContent align="start" side="top" className="w-96 max-w-[calc(100vw-2rem)] p-0">
         <Command
@@ -897,7 +908,8 @@ export function CheckoutPicker({
                 {snapshot?.total_count ?? 0} {snapshot?.total_count === 1 ? "branch" : "branches"}
               </span>
             )}
-            <Button
+            <LoadingButton
+              pending={snapshot?.refreshing || refs.isFetching}
               variant="ghost"
               size="icon-xs"
               aria-label="Refresh branches and worktrees"
@@ -916,12 +928,8 @@ export function CheckoutPicker({
                 })
               }
             >
-              {snapshot?.refreshing || refs.isFetching ? (
-                <Spinner />
-              ) : (
-                <RefreshCw className="size-3" />
-              )}
-            </Button>
+              <RefreshCw className="size-3" />
+            </LoadingButton>
           </div>
         </Command>
       </PopoverContent>

@@ -1,5 +1,7 @@
 "use client"
 
+import { HoldToConfirm } from "@/components/interior/hold-to-confirm"
+
 import Link from "next/link"
 import type { Route } from "next"
 import * as React from "react"
@@ -24,7 +26,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Spinner } from "@/components/ui/spinner"
 import { toast } from "sonner"
 import type { DeleteSandboxFormState } from "@/data/types"
 import { RelativeDateTime } from "@/components/ui/table"
@@ -160,7 +161,10 @@ function SandboxActions({
               <DropdownMenuItem
                 variant="destructive"
                 disabled={referenced}
-                onSelect={() => setOpen(true)}
+                onSelect={(event) => {
+                  event.preventDefault()
+                  setOpen(true)
+                }}
               >
                 <Trash2 />
                 Delete
@@ -224,14 +228,15 @@ function DeleteSandboxDialog({
             </Button>
           </DialogClose>
           <form action={action}>
-            <Button
+            <HoldToConfirm
+              pending={pending}
               type="submit"
               variant="destructive"
               disabled={pending || sandbox.metadata.referenced_by_agent}
             >
-              {pending ? <Spinner /> : <Trash2 />}
-              Delete
-            </Button>
+              <Trash2 />
+              Hold to delete
+            </HoldToConfirm>
           </form>
         </DialogFooter>
       </DialogContent>

@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { DisclosurePanel } from "@/components/interior/accordion"
 import { Accordion as AccordionPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
@@ -65,18 +66,21 @@ function AccordionContent({
 }: React.ComponentProps<typeof AccordionPrimitive.Content>) {
   return (
     <AccordionPrimitive.Content
+      asChild
       data-slot="accordion-content"
-      className="overflow-hidden text-sm data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down"
+      className="overflow-hidden text-sm data-[state=closed]:animate-accordion-up"
       {...props}
     >
-      <div
-        className={cn(
-          "pt-1 pb-3 [&_a]:underline [&_a]:underline-offset-3 [&_a]:hover:text-foreground [&_p:not(:last-child)]:mb-4",
-          className
-        )}
-      >
-        {children}
-      </div>
+      <DisclosurePanel>
+        <div
+          className={cn(
+            "pt-1 pb-3 [&_a]:underline [&_a]:underline-offset-3 [&_a]:hover:text-foreground [&_p:not(:last-child)]:mb-4",
+            className
+          )}
+        >
+          {children}
+        </div>
+      </DisclosurePanel>
     </AccordionPrimitive.Content>
   )
 }

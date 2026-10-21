@@ -1,5 +1,6 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
 import * as React from "react"
 import { toast } from "sonner"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -9,10 +10,8 @@ import type { PutSecretFormAction, PutSecretFormState } from "@/data/types"
 import { secretFormInputSchema } from "@/data/schema"
 import type * as z from "zod"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Button } from "@/components/ui/button"
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import {
   Sheet,
@@ -187,10 +186,15 @@ export function SecretSheet({
             </Alert>
           ) : null}
           <div className="shrink-0">
-            <Button type="submit" disabled={isPending} className="w-full">
-              {isPending ? <Spinner /> : <KeyRound data-icon="inline-start" />}
-              {isPending ? "Creating..." : "Create secret"}
-            </Button>
+            <LoadingButton
+              pending={isPending}
+              pendingLabel={"Creating..."}
+              type="submit"
+              className="w-full"
+            >
+              <KeyRound data-icon="inline-start" />
+              {"Create secret"}
+            </LoadingButton>
           </div>
         </form>
       </SheetContent>

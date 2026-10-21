@@ -16,7 +16,7 @@ export type AdminColumnLayout = {
   hiddenBelow?: "sm" | "md" | "lg" | "xl"
 }
 
-export type AdminDataGridProps<T> = {
+type AdminDataGridProps<T> = {
   ariaLabel: string
   className?: string
   rows: T[]

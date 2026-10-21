@@ -1,5 +1,6 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
 import dynamic from "next/dynamic"
 import { Controller, useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -36,8 +37,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Field, FieldError, FieldGroup, FieldLabel, FieldSet } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Slider } from "@/components/ui/slider"
-import { Spinner } from "@/components/ui/spinner"
+import { SliderDetents } from "@/components/interior/slider-detents"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
 const Cropper = dynamic(() => import("react-easy-crop"), { ssr: false })
@@ -299,8 +299,8 @@ export function OrganizationForm({ organization }: { organization: OrganizationS
                 />
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button
-                      aria-busy={photoBusy}
+                    <LoadingButton
+                      pending={photoBusy}
                       aria-label="Edit Organization photo"
                       className="absolute right-0 bottom-0 rounded-full shadow-sm"
                       disabled={busy}
@@ -308,8 +308,8 @@ export function OrganizationForm({ organization }: { organization: OrganizationS
                       type="button"
                       variant="outline"
                     >
-                      {photoBusy ? <Spinner /> : <Pencil />}
-                    </Button>
+                      <Pencil />
+                    </LoadingButton>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" sideOffset={6}>
                     <DropdownMenuGroup>
@@ -394,10 +394,16 @@ export function OrganizationForm({ organization }: { organization: OrganizationS
           </FieldGroup>
 
           <div className="flex justify-end pt-5">
-            <Button aria-busy={busy} disabled={busy} type="submit">
-              {pending ? <Spinner data-icon="inline-start" /> : <Save data-icon="inline-start" />}
-              {pending ? "Saving..." : "Save changes"}
-            </Button>
+            <LoadingButton
+              pending={pending}
+              pendingLabel={"Saving..."}
+              aria-busy={busy}
+              disabled={busy}
+              type="submit"
+            >
+              <Save data-icon="inline-start" />
+              {"Save changes"}
+            </LoadingButton>
           </div>
           <p aria-live="polite" className="sr-only">
             {pending ? "Saving..." : state.saved ? "Organization profile saved." : ""}
@@ -464,15 +470,17 @@ export function OrganizationForm({ organization }: { organization: OrganizationS
               <ZoomIn aria-hidden="true" />
               Zoom
             </FieldLabel>
-            <Slider
+            <SliderDetents
               aria-label="Zoom profile picture"
+              detents={[1, 1.5, 2, 2.5, 3]}
+              aria-valuetext={`${zoom.toFixed(2)} times`}
               disabled={photoBusy}
               id="organization-logo-zoom"
               max={3}
               min={1}
-              onValueChange={(values) => setZoom(values[0] ?? 1)}
+              onValueChange={setZoom}
               step={0.01}
-              value={[zoom]}
+              value={zoom}
             />
           </Field>
           {photoError ? <FieldError errors={[{ message: photoError }]} /> : null}
@@ -480,15 +488,15 @@ export function OrganizationForm({ organization }: { organization: OrganizationS
             <Button disabled={photoBusy} onClick={() => setSourceURL(undefined)} variant="outline">
               Cancel
             </Button>
-            <Button
+            <LoadingButton
+              pending={photoBusy}
               data-dialog-submit
               disabled={photoBusy || !sourceURL || !cropPixels}
               onClick={saveLogo}
               type="button"
             >
-              {photoBusy ? <Spinner data-icon="inline-start" /> : null}
               {photoStatus}
-            </Button>
+            </LoadingButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>

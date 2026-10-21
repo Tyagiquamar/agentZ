@@ -1,10 +1,9 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
 import { useFormStatus } from "react-dom"
 import { GitHubDark, GitHubLight } from "@ridemountainpig/svgl-react"
 import { Unplug } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Spinner } from "@/components/ui/spinner"
 
 export function GitHubConnectionButton({
   connected = false,
@@ -18,10 +17,8 @@ export function GitHubConnectionButton({
   const pendingLabel = connected ? "Disconnecting..." : "Connecting..."
 
   return (
-    <Button disabled={disabled || pending} variant="outline" type="submit">
-      {pending ? (
-        <Spinner data-icon="inline-start" aria-label={pendingLabel} />
-      ) : connected ? (
+    <LoadingButton pending={pending} disabled={disabled || pending} variant="outline" type="submit">
+      {connected ? (
         <Unplug data-icon="inline-start" aria-hidden="true" />
       ) : (
         <>
@@ -30,6 +27,6 @@ export function GitHubConnectionButton({
         </>
       )}
       {pending ? pendingLabel : label}
-    </Button>
+    </LoadingButton>
   )
 }

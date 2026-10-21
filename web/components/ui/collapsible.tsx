@@ -1,5 +1,6 @@
 "use client"
 
+import { DisclosurePanel } from "@/components/interior/accordion"
 import { Collapsible as CollapsiblePrimitive } from "radix-ui"
 
 function Collapsible({ ...props }: React.ComponentProps<typeof CollapsiblePrimitive.Root>) {
@@ -13,9 +14,14 @@ function CollapsibleTrigger({
 }
 
 function CollapsibleContent({
+  children,
   ...props
 }: React.ComponentProps<typeof CollapsiblePrimitive.CollapsibleContent>) {
-  return <CollapsiblePrimitive.CollapsibleContent data-slot="collapsible-content" {...props} />
+  return (
+    <CollapsiblePrimitive.CollapsibleContent data-slot="collapsible-content" {...props} asChild>
+      <DisclosurePanel>{children}</DisclosurePanel>
+    </CollapsiblePrimitive.CollapsibleContent>
+  )
 }
 
 export { Collapsible, CollapsibleTrigger, CollapsibleContent }

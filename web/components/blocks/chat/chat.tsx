@@ -13,7 +13,7 @@ import {
 } from "@/components/ai-elements/attachments"
 import { ChatMessage, MessageResponse } from "@/components/ai-elements/message"
 import { AgentGettingReady, useAgentReadiness } from "@/components/agent-readiness"
-import { Checkpoint, CheckpointIcon } from "@/components/ai-elements/checkpoint"
+import { Separator } from "@/components/ui/separator"
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "@/components/ai-elements/reasoning"
 import type {
   PromptInputController,
@@ -59,7 +59,10 @@ import {
   RevertDock,
   TodoDock,
 } from "@/components/blocks/chat/docks"
-import { CopyButton } from "@/components/ui/copy-button"
+import { NewItemsPill } from "@/components/interior/new-items-pill"
+import { SkeletonSwap } from "@/components/interior/skeleton-swap"
+import { TypingIndicator } from "@/components/interior/typing-indicator"
+import { CopyButton } from "@/components/interior/copy-button"
 import {
   type RenderEntry,
   projectTimeline,
@@ -90,6 +93,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog"
 import type { Message as OpencodeMessage, Part, QuestionAnswer, Session } from "@opencode-ai/sdk/v2"
 import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
@@ -98,7 +102,6 @@ import {
   SquareIcon,
   BrainIcon,
   BotIcon,
-  ArrowDownIcon,
   CheckIcon,
   ChevronDownIcon,
   CpuIcon,
@@ -110,6 +113,7 @@ import {
   Settings2Icon,
   Undo2Icon,
   CircleAlert,
+  BookmarkIcon,
 } from "lucide-react"
 import { motion } from "motion/react"
 import {
@@ -124,27 +128,19 @@ import {
 import { toast } from "sonner"
 import { z } from "zod"
 import {
-  ModelSelector,
-  ModelSelectorContent,
-  ModelSelectorEmpty,
-  ModelSelectorGroup,
-  ModelSelectorInput,
-  ModelSelectorItem,
-  ModelSelectorList,
-  ModelSelectorLogoGroup,
-  ModelSelectorName,
-  ModelSelectorTrigger,
-} from "@/components/ai-elements/model-selector"
+  Command,
+  CommandInput,
+  CommandList,
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
+} from "@/components/ui/command"
 import {
   Context,
-  ContextCacheUsage,
   ContextContent,
-  ContextContentBody,
   ContextContentHeader,
-  ContextInputUsage,
-  ContextOutputUsage,
-  ContextReasoningUsage,
   ContextTrigger,
+  ContextUsage,
 } from "@/components/ai-elements/context"
 import {
   Select,
@@ -506,7 +502,7 @@ function groupEntries(entries: RenderEntry[]): EntryGroup[] {
   return result
 }
 
-function ChatInner({
+export default function Chat({
   revertDisabled = false,
   createSession,
   composerContext,
@@ -1301,145 +1297,149 @@ function ChatInner({
           showStarter && "pointer-events-none opacity-0"
         )}
       >
-        {showHistorySkeleton ? (
-          <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 px-4 pt-4">
-            <Skeleton className="h-16 w-full rounded-md" />
-            <Skeleton className="h-24 w-full rounded-md" />
-            <Skeleton className="h-16 w-2/3 rounded-md" />
-          </div>
-        ) : !showStarter ? (
-          <LegendList<TimelineRow>
-            className="h-full min-h-0 overflow-x-hidden overscroll-y-contain [overflow-anchor:none]"
-            data={rows}
-            estimatedItemSize={96}
-            extraData={actorProfiles}
-            initialScrollAtEnd
-            keyExtractor={(row) => row.key}
-            recycleItems={false}
-            ListHeaderComponent={
-              hasEarlierMessages ? (
-                <div className="mx-auto w-[calc(100%-2rem)] max-w-3xl pt-4 pb-2">
-                  <button
-                    className="w-full py-1.5 text-xs text-muted-foreground/70 hover:text-foreground disabled:cursor-default"
-                    disabled={isLoadingEarlier}
-                    onClick={() => void loadEarlier()}
-                    type="button"
-                  >
-                    {isLoadingEarlier ? "Loading earlier turns..." : "Load earlier turns"}
-                  </button>
-                </div>
-              ) : (
-                <div className="h-4" />
-              )
-            }
-            ListFooterComponent={
-              <div
-                className="mx-auto flex w-[calc(100%-2rem)] max-w-3xl flex-col gap-4 pt-2"
-                style={{ paddingBottom: composerHeight + 16 }}
-              >
-                {pendingInputs.map(({ id, text, files, status, author }) => (
-                  <div
-                    key={id}
-                    className="flex flex-col items-end gap-2"
-                    aria-label="Pending message"
-                  >
-                    <div className="max-w-[80%] rounded-2xl bg-message p-3 text-sm text-message-foreground">
-                      {!coding && author ? (
-                        <div className="mb-1 text-xs text-muted-foreground">{author}</div>
-                      ) : null}
-                      {files.map((file, index) => (
-                        <div
-                          key={index}
-                          className="flex items-center gap-1.5 text-xs text-muted-foreground"
-                        >
-                          <PaperclipIcon className="size-3.5" />
-                          {file.filename}
-                        </div>
-                      ))}
-                      {text ? <MessageResponse>{text}</MessageResponse> : null}
-                    </div>
-                    <div
-                      role="status"
-                      className="flex items-center gap-1.5 text-xs text-muted-foreground"
-                    >
-                      <Spinner className="size-3" />
-                      {status}
-                    </div>
-                  </div>
-                ))}
-                <RevertDock
-                  items={reverted}
-                  onRestore={restoreMutation.mutate}
-                  pending={revertPending}
-                  restoringId={restoringId}
-                  summary={session?.summary}
-                />
-                {todos.length > 0 ? <TodoDock todos={todos} /> : null}
-                {permissionRequest ? (
-                  <PermissionDock
-                    onDecide={handlePermission}
-                    pending={isPermissionPending}
-                    request={permissionRequest}
-                  />
-                ) : null}
-                {questionRequest && planApproval && session ? (
-                  <PlanDock
-                    agentName={agentName}
-                    key={questionRequest.id}
-                    onSubmit={submitQuestionAnswer}
-                    pending={isQuestionPending}
-                    request={questionRequest}
-                    session={session}
-                    workspaceId={workspaceId}
-                  />
-                ) : null}
+        {!showStarter ? (
+          <SkeletonSwap
+            ready={!showHistorySkeleton}
+            className="h-full"
+            skeleton={
+              <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 px-4 pt-4">
+                <Skeleton className="h-16 w-full rounded-md" />
+                <Skeleton className="h-24 w-full rounded-md" />
+                <Skeleton className="h-16 w-2/3 rounded-md" />
               </div>
             }
-            maintainScrollAtEnd={timelineAtEnd ? { animated: false } : false}
-            maintainVisibleContentPosition={{ data: true, size: true }}
-            onScroll={(event) => {
-              const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent
-              setTimelineAtEnd(
-                contentOffset.y + layoutMeasurement.height >= contentSize.height - 24
-              )
-            }}
-            ref={timelineRef}
-            renderItem={({ item }) => (
-              <div
-                className={cn(
-                  "mx-auto w-[calc(100%-2rem)] max-w-3xl",
-                  item.type === "assistant" && item.isStreaming
-                    ? "pb-2"
-                    : item.type === "thinking" || item.type === "checkpoint"
-                      ? "pb-1.5"
-                      : "pb-4"
-                )}
-              >
-                <TimelineRowView
-                  agentName={agentName}
-                  actorProfiles={actorProfiles}
-                  onRevert={handleRevert}
-                  revertDisabled={revertDisabled || isBusy || isStopping || revertPending}
-                  row={item}
-                  workspaceId={workspaceId}
-                  workspacePath={workspacePath}
-                />
-              </div>
-            )}
-          />
-        ) : null}
-        {!timelineAtEnd && !showStarter ? (
-          <Button
-            aria-label="Scroll to latest message"
-            className="absolute left-1/2 z-20 -translate-x-1/2 rounded-full bg-background/80 shadow-sm backdrop-blur-md"
-            style={{ bottom: composerHeight + 8 }}
-            onClick={() => timelineRef.current?.scrollToEnd({ animated: true })}
-            size="icon"
-            variant="outline"
           >
-            <ArrowDownIcon />
-          </Button>
+            <LegendList<TimelineRow>
+              className="h-full min-h-0 overflow-x-hidden overscroll-y-contain [overflow-anchor:none]"
+              data={rows}
+              estimatedItemSize={96}
+              extraData={actorProfiles}
+              initialScrollAtEnd
+              keyExtractor={(row) => row.key}
+              recycleItems={false}
+              ListHeaderComponent={
+                hasEarlierMessages ? (
+                  <div className="mx-auto w-[calc(100%-2rem)] max-w-3xl pt-4 pb-2">
+                    <button
+                      className="w-full py-1.5 text-xs text-muted-foreground/70 hover:text-foreground disabled:cursor-default"
+                      disabled={isLoadingEarlier}
+                      onClick={() => void loadEarlier()}
+                      type="button"
+                    >
+                      {isLoadingEarlier ? "Loading earlier turns..." : "Load earlier turns"}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="h-4" />
+                )
+              }
+              ListFooterComponent={
+                <div
+                  className="mx-auto flex w-[calc(100%-2rem)] max-w-3xl flex-col gap-4 pt-2"
+                  style={{ paddingBottom: composerHeight + 16 }}
+                >
+                  {pendingInputs.map(({ id, text, files, status, author }) => (
+                    <div
+                      key={id}
+                      className="flex flex-col items-end gap-2"
+                      aria-label="Pending message"
+                    >
+                      <div className="max-w-[80%] rounded-2xl bg-message p-3 text-sm text-message-foreground">
+                        {!coding && author ? (
+                          <div className="mb-1 text-xs text-muted-foreground">{author}</div>
+                        ) : null}
+                        {files.map((file, index) => (
+                          <div
+                            key={index}
+                            className="flex items-center gap-1.5 text-xs text-muted-foreground"
+                          >
+                            <PaperclipIcon className="size-3.5" />
+                            {file.filename}
+                          </div>
+                        ))}
+                        {text ? <MessageResponse>{text}</MessageResponse> : null}
+                      </div>
+                      <div
+                        role="status"
+                        className="flex items-center gap-1.5 text-xs text-muted-foreground"
+                      >
+                        <Spinner className="size-3" />
+                        {status}
+                      </div>
+                    </div>
+                  ))}
+                  <RevertDock
+                    items={reverted}
+                    onRestore={restoreMutation.mutate}
+                    pending={revertPending}
+                    restoringId={restoringId}
+                    summary={session?.summary}
+                  />
+                  {todos.length > 0 ? <TodoDock todos={todos} /> : null}
+                  {permissionRequest ? (
+                    <PermissionDock
+                      onDecide={handlePermission}
+                      pending={isPermissionPending}
+                      request={permissionRequest}
+                    />
+                  ) : null}
+                  {questionRequest && planApproval && session ? (
+                    <PlanDock
+                      agentName={agentName}
+                      key={questionRequest.id}
+                      onSubmit={submitQuestionAnswer}
+                      pending={isQuestionPending}
+                      request={questionRequest}
+                      session={session}
+                      workspaceId={workspaceId}
+                    />
+                  ) : null}
+                </div>
+              }
+              maintainScrollAtEnd={timelineAtEnd ? { animated: false } : false}
+              maintainVisibleContentPosition={{ data: true, size: true }}
+              onScroll={(event) => {
+                const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent
+                setTimelineAtEnd(
+                  contentOffset.y + layoutMeasurement.height >= contentSize.height - 24
+                )
+              }}
+              ref={timelineRef}
+              renderItem={({ item }) => (
+                <div
+                  className={cn(
+                    "mx-auto w-[calc(100%-2rem)] max-w-3xl",
+                    item.type === "assistant" && item.isStreaming
+                      ? "pb-2"
+                      : item.type === "checkpoint"
+                        ? "pb-1.5"
+                        : "pb-4"
+                  )}
+                >
+                  <TimelineRowView
+                    agentName={agentName}
+                    actorProfiles={actorProfiles}
+                    onRevert={handleRevert}
+                    revertDisabled={revertDisabled || isBusy || isStopping || revertPending}
+                    row={item}
+                    workspaceId={workspaceId}
+                    workspacePath={workspacePath}
+                  />
+                </div>
+              )}
+            />
+          </SkeletonSwap>
         ) : null}
+        <NewItemsPill
+          visible={!timelineAtEnd && !showStarter}
+          latestId={rows.findLast((row) => row.type === "user" || row.type === "assistant")?.key}
+          scope={sessionId ?? "new"}
+          className="absolute left-1/2 z-20 -translate-x-1/2"
+          style={{ bottom: composerHeight + 8 }}
+          onClick={() => timelineRef.current?.scrollToEnd({ animated: true })}
+          size="icon"
+          variant="outline"
+        />
         {!showStarter ? <QuickTurnNav listRef={timelineRef} rows={rows} /> : null}
       </div>
       <motion.div
@@ -1482,6 +1482,7 @@ function ChatInner({
             onUpdate={updateInput}
             onRestore={restoreInput}
           />
+          {isBusy ? <TypingIndicator className="mb-2 self-start" /> : null}
           <div className={cn(styles.shell, "relative w-full pb-9")}>
             <PromptInput
               initialMessage={draftMessage}
@@ -1583,7 +1584,7 @@ function ChatInner({
                     layout="position"
                     transition={promptShiftTransition}
                   >
-                    <ModelSelector
+                    <Dialog
                       onOpenChange={setModelSelectorOpen}
                       open={agentReadiness.isGettingReady ? false : modelSelectorOpen}
                     >
@@ -1593,7 +1594,7 @@ function ChatInner({
                           !promptMobile && "@xl/chat:flex"
                         )}
                       >
-                        <ModelSelectorTrigger asChild>
+                        <DialogTrigger asChild>
                           <PromptInputButton
                             className="h-8 max-w-72 justify-start px-2"
                             disabled={inputDisabled}
@@ -1604,15 +1605,17 @@ function ChatInner({
                               <BrainIcon className="size-4 text-muted-foreground" />
                             )}
                             {agentReadiness.isGettingReady ? null : selectedModel?.name ? (
-                              <ModelSelectorName>{selectedModel.name}</ModelSelectorName>
+                              <span className="flex-1 truncate text-left">
+                                {selectedModel.name}
+                              </span>
                             ) : (
-                              <ModelSelectorName>Model</ModelSelectorName>
+                              <span className="flex-1 truncate text-left">Model</span>
                             )}
                             {agentReadiness.isGettingReady ? null : (
                               <ChevronDownIcon data-icon="inline-end" />
                             )}
                           </PromptInputButton>
-                        </ModelSelectorTrigger>
+                        </DialogTrigger>
                         {!agentReadiness.isGettingReady &&
                         contextUsage?.maxTokens &&
                         contextUsage.maxTokens > 0 ? (
@@ -1624,12 +1627,7 @@ function ChatInner({
                             <ContextTrigger className="gap-1 rounded-full px-2 hover:bg-foreground/6 aria-expanded:bg-foreground/8 data-[state=open]:bg-foreground/8 dark:hover:bg-foreground/10 dark:aria-expanded:bg-foreground/12 dark:data-[state=open]:bg-foreground/12" />
                             <ContextContent>
                               <ContextContentHeader />
-                              <ContextContentBody className="flex flex-col gap-2">
-                                <ContextInputUsage />
-                                <ContextOutputUsage />
-                                <ContextReasoningUsage />
-                                <ContextCacheUsage />
-                              </ContextContentBody>
+                              <ContextUsage />
                             </ContextContent>
                           </Context>
                         ) : null}
@@ -1691,7 +1689,10 @@ function ChatInner({
                             <DropdownMenuGroup>
                               <DropdownMenuItem
                                 disabled={inputDisabled}
-                                onSelect={() => setModelSelectorOpen(true)}
+                                onSelect={(event) => {
+                                  event.preventDefault()
+                                  setModelSelectorOpen(true)
+                                }}
                               >
                                 <BrainIcon />
                                 <span className="min-w-0 flex-1 truncate">
@@ -1742,12 +1743,7 @@ function ChatInner({
                                       usedTokens={contextUsage.usedTokens}
                                     >
                                       <ContextContentHeader className="p-0" />
-                                      <ContextContentBody className="flex flex-col gap-2 px-0 pt-2 pb-0">
-                                        <ContextInputUsage />
-                                        <ContextOutputUsage />
-                                        <ContextReasoningUsage />
-                                        <ContextCacheUsage />
-                                      </ContextContentBody>
+                                      <ContextUsage className="px-0 pt-2 pb-0" />
                                     </Context>
                                   </div>
                                 </DropdownMenuGroup>
@@ -1756,37 +1752,41 @@ function ChatInner({
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>
-                      <ModelSelectorContent>
-                        <ModelSelectorInput placeholder="Search models..." />
-                        <ModelSelectorList>
-                          <ModelSelectorEmpty>No models found.</ModelSelectorEmpty>
-                          {chefs.map((chef) => (
-                            <ModelSelectorGroup heading={chef} key={chef}>
-                              {models
-                                .filter((item) => item.chef === chef)
-                                .map((item) => (
-                                  <ModelSelectorItem
-                                    key={item.id}
-                                    onSelect={handleModelSelect}
-                                    value={item.id}
-                                  >
-                                    <BrainIcon />
-                                    <ModelSelectorName>{item.name}</ModelSelectorName>
-                                    <ModelSelectorLogoGroup>
-                                      <CpuIcon key={item.providerID} />
-                                    </ModelSelectorLogoGroup>
-                                    {selectedModelID === item.id ? (
-                                      <CheckIcon className="ml-auto" />
-                                    ) : (
-                                      <div className="ml-auto size-4" />
-                                    )}
-                                  </ModelSelectorItem>
-                                ))}
-                            </ModelSelectorGroup>
-                          ))}
-                        </ModelSelectorList>
-                      </ModelSelectorContent>
-                    </ModelSelector>
+                      <DialogContent
+                        aria-describedby={undefined}
+                        className="border-none! p-0 outline! outline-border! outline-solid!"
+                      >
+                        <DialogTitle className="sr-only">Model Selector</DialogTitle>
+                        <Command className="**:data-[slot=command-input-wrapper]:h-auto">
+                          <CommandInput className="h-auto py-3.5" placeholder="Search models..." />
+                          <CommandList>
+                            <CommandEmpty>No models found.</CommandEmpty>
+                            {chefs.map((chef) => (
+                              <CommandGroup heading={chef} key={chef}>
+                                {models
+                                  .filter((item) => item.chef === chef)
+                                  .map((item) => (
+                                    <CommandItem
+                                      key={item.id}
+                                      onSelect={handleModelSelect}
+                                      value={item.id}
+                                    >
+                                      <BrainIcon />
+                                      <span className="flex-1 truncate text-left">{item.name}</span>
+                                      <CpuIcon />
+                                      {selectedModelID === item.id ? (
+                                        <CheckIcon className="ml-auto" />
+                                      ) : (
+                                        <div className="ml-auto size-4" />
+                                      )}
+                                    </CommandItem>
+                                  ))}
+                              </CommandGroup>
+                            ))}
+                          </CommandList>
+                        </Command>
+                      </DialogContent>
+                    </Dialog>
                   </motion.div>
                   <motion.div
                     className="col-start-3 row-start-2"
@@ -1797,7 +1797,7 @@ function ChatInner({
                       type={showStop ? "button" : "submit"}
                       variant={showStop ? "destructive" : "default"}
                       size="icon"
-                      className="size-9 rounded-full shadow-xs transition-all duration-150 hover:scale-105 active:shadow-none enabled:inset-shadow-[0_1px_rgb(255_255_255_/_0.16)] disabled:hover:scale-100"
+                      className="size-9 rounded-full shadow-xs transition-all duration-150 hover:scale-105 active:shadow-none enabled:inset-shadow-[0_1px_rgb(255_255_255/0.16)] disabled:hover:scale-100"
                       aria-label={showStop ? "Stop run" : "Send message"}
                       disabled={showStop ? inputDisabled || !canStop : submitDisabled || blocked}
                       onClick={showStop ? () => void handleStop() : undefined}
@@ -1922,7 +1922,7 @@ function QuickTurnNav({
     <nav
       aria-label="Chat turns"
       className={cn(
-        "pointer-events-none absolute inset-y-0 left-0 z-40 hidden w-18 [@media(pointer:fine)]:block",
+        "pointer-events-none absolute inset-y-0 left-0 z-40 hidden w-18 pointer-fine:block",
         gutter >= 48
           ? "opacity-100"
           : "opacity-0 transition-opacity duration-150 focus-within:opacity-100 hover:opacity-100"
@@ -2231,25 +2231,15 @@ function TimelineRowView({
       )
     }
 
-    case "thinking": {
-      return (
-        <div className="text-sm text-muted-foreground">
-          <span className="inline-flex items-center gap-2">
-            <Spinner className="size-3.5" />
-            <span className="animate-pulse">Thinking...</span>
-          </span>
-        </div>
-      )
-    }
-
     case "checkpoint": {
       return (
-        <Checkpoint>
-          <CheckpointIcon />
+        <div className="flex items-center gap-0.5 overflow-hidden text-muted-foreground">
+          <BookmarkIcon className="size-4 shrink-0" />
           <span className="shrink-0 text-xs">
             {row.variant === "compaction" ? "Context compacted" : "Interrupted"}
           </span>
-        </Checkpoint>
+          <Separator />
+        </div>
       )
     }
 
@@ -2264,8 +2254,4 @@ function TimelineRowView({
       )
     }
   }
-}
-
-export default function Chat(props: ChatProps) {
-  return <ChatInner {...props} />
 }

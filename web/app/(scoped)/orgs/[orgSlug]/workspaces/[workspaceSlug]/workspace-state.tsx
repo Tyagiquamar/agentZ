@@ -1,12 +1,11 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
 import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useFormStatus } from "react-dom"
 import { RotateCcw } from "lucide-react"
 import { AdministrationState } from "@/components/administration"
-import { Button } from "@/components/ui/button"
-import { Spinner } from "@/components/ui/spinner"
 import type { Workspace } from "@/lib/gateway/client"
 import { retryWorkspaceAction } from "@/app/(scoped)/orgs/actions"
 
@@ -61,9 +60,9 @@ function RetryButton() {
   const { pending } = useFormStatus()
 
   return (
-    <Button disabled={pending} type="submit">
-      {pending ? <Spinner /> : <RotateCcw data-icon="inline-start" />}
-      {pending ? "Retrying..." : "Retry provisioning"}
-    </Button>
+    <LoadingButton pending={pending} pendingLabel={"Retrying..."} type="submit">
+      <RotateCcw data-icon="inline-start" />
+      {"Retry provisioning"}
+    </LoadingButton>
   )
 }

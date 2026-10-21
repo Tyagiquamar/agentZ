@@ -1,8 +1,56 @@
 "use client"
 
+import { AnimatePresence, motion, useReducedMotion } from "motion/react"
+import type { ReactNode } from "react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import type { WizardStep } from "./types"
+import type { LucideIcon } from "lucide-react"
+
+export type WizardStep = { id: string; title: string; icon: LucideIcon }
+
+export function WizardPanel({
+  children,
+  direction,
+  stepKey,
+}: {
+  children: ReactNode
+  direction: number
+  stepKey: string | number
+}) {
+  const reduced = useReducedMotion()
+  return (
+    <div className="relative w-full min-w-0 flex-1 bg-card">
+      <div className="flex h-full min-w-0 flex-col px-4 pb-4 sm:px-6 sm:pb-6">
+        <AnimatePresence custom={direction} mode="wait" initial={false}>
+          <motion.div
+            key={stepKey}
+            custom={direction}
+            variants={{
+              enter: (direction: number) => ({
+                opacity: 0,
+                x: reduced ? 0 : direction > 0 ? 24 : -24,
+              }),
+              center: { opacity: 1, x: 0 },
+              exit: (direction: number) => ({
+                opacity: 0,
+                x: reduced ? 0 : direction > 0 ? -24 : 24,
+              }),
+            }}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={
+              reduced ? { duration: 0 } : { type: "spring", stiffness: 260, damping: 34, mass: 0.8 }
+            }
+            className="flex min-h-full w-full min-w-0 flex-col"
+          >
+            {children}
+          </motion.div>
+        </AnimatePresence>
+      </div>
+    </div>
+  )
+}
 
 export function WizardStepNav<TStep extends WizardStep>({
   canVisitStepAction,
@@ -15,6 +63,7 @@ export function WizardStepNav<TStep extends WizardStep>({
   onStepSelectAction: (step: TStep, index: number) => void
   steps: readonly TStep[]
 }) {
+  const reduced = useReducedMotion()
   return (
     <ol
       className="flex w-full max-w-6xl list-none flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:gap-3"
@@ -51,7 +100,14 @@ export function WizardStepNav<TStep extends WizardStep>({
               disabled={disabled}
               onClick={() => onStepSelectAction(step, index)}
             >
-              <span
+              <motion.span
+                initial={false}
+                layout={!reduced}
+                transition={
+                  reduced
+                    ? { duration: 0 }
+                    : { type: "spring", stiffness: 520, damping: 40, mass: 0.5 }
+                }
                 className={cn(
                   "flex size-6 items-center justify-center rounded-full lg:size-8 [&_svg:not([class*='size-'])]:size-3.5 lg:[&_svg:not([class*='size-'])]:size-4",
                   isInactive
@@ -60,7 +116,7 @@ export function WizardStepNav<TStep extends WizardStep>({
                 )}
               >
                 <Icon />
-              </span>
+              </motion.span>
               <span className="min-w-0 truncate text-sm font-medium sm:whitespace-nowrap">
                 {step.title}
               </span>

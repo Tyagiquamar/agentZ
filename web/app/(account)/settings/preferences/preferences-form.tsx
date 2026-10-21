@@ -5,14 +5,7 @@ import { toast } from "sonner"
 import { useTheme } from "next-themes"
 import { Monitor, Moon, Sun, CircleAlert } from "lucide-react"
 import type { ThemePreference } from "@/data/user-preferences"
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import { SegmentedControl } from "@/components/interior/segmented-control"
 import { Switch } from "@/components/ui/switch"
 import { savePreferencesAction, type PreferencesFormState } from "./actions"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -65,24 +58,42 @@ export function PreferencesForm({
           <h2 className="text-base font-semibold tracking-normal">Theme</h2>
           <p className="text-sm text-muted-foreground">We save this choice to your account.</p>
         </div>
-        <Select disabled={pending} onValueChange={onThemeChange} value={preferences.theme}>
-          <SelectTrigger aria-label="Theme" className="w-32 shrink-0">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              <SelectItem value="system">
-                <Monitor /> System
-              </SelectItem>
-              <SelectItem value="light">
-                <Sun /> Light
-              </SelectItem>
-              <SelectItem value="dark">
-                <Moon /> Dark
-              </SelectItem>
-            </SelectGroup>
-          </SelectContent>
-        </Select>
+        <SegmentedControl<ThemePreference>
+          label="Theme"
+          className="shrink-0"
+          disabled={pending}
+          value={preferences.theme}
+          onValueChange={onThemeChange}
+          options={[
+            {
+              value: "system",
+              label: (
+                <>
+                  <Monitor />
+                  <span className="sr-only sm:not-sr-only">System</span>
+                </>
+              ),
+            },
+            {
+              value: "light",
+              label: (
+                <>
+                  <Sun />
+                  <span className="sr-only sm:not-sr-only">Light</span>
+                </>
+              ),
+            },
+            {
+              value: "dark",
+              label: (
+                <>
+                  <Moon />
+                  <span className="sr-only sm:not-sr-only">Dark</span>
+                </>
+              ),
+            },
+          ]}
+        />
       </div>
 
       <div className="flex items-start justify-between gap-6 py-2">

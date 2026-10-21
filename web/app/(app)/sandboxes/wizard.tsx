@@ -1,5 +1,6 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
 import type { Route } from "next"
 import Link from "next/link"
 import { useRouter } from "@bprogress/next/app"
@@ -457,14 +458,14 @@ function IdentityForm({
         />
       </FieldGroup>
       <StepActions>
-        <Button type="submit" onClick={onAdvanceAction} disabled={form.formState.isSubmitting}>
+        <LoadingButton
+          pending={form.formState.isSubmitting}
+          type="submit"
+          onClick={onAdvanceAction}
+        >
           Next
-          {form.formState.isSubmitting ? (
-            <Spinner data-icon="inline-end" />
-          ) : (
-            <ArrowRight data-icon="inline-end" />
-          )}
-        </Button>
+          <ArrowRight data-icon="inline-end" />
+        </LoadingButton>
       </StepActions>
     </form>
   )
@@ -511,14 +512,14 @@ function PackageStep({
           <ArrowLeft data-icon="inline-start" />
           Previous
         </Button>
-        <Button type="submit" onClick={onAdvanceAction} disabled={form.formState.isSubmitting}>
+        <LoadingButton
+          pending={form.formState.isSubmitting}
+          type="submit"
+          onClick={onAdvanceAction}
+        >
           Next
-          {form.formState.isSubmitting ? (
-            <Spinner data-icon="inline-end" />
-          ) : (
-            <ArrowRight data-icon="inline-end" />
-          )}
-        </Button>
+          <ArrowRight data-icon="inline-end" />
+        </LoadingButton>
       </StepActions>
     </form>
   )
@@ -1070,18 +1071,15 @@ function McpStep({
           <ArrowLeft data-icon="inline-start" />
           Previous
         </Button>
-        <Button
+        <LoadingButton
+          pending={form.formState.isSubmitting}
           type="submit"
           onClick={onAdvanceAction}
           disabled={form.formState.isSubmitting || selected.some((ref) => ref.tools.length === 0)}
         >
           Next
-          {form.formState.isSubmitting ? (
-            <Spinner data-icon="inline-end" />
-          ) : (
-            <ArrowRight data-icon="inline-end" />
-          )}
-        </Button>
+          <ArrowRight data-icon="inline-end" />
+        </LoadingButton>
       </StepActions>
     </form>
   )
@@ -1230,14 +1228,14 @@ function SkillsStep({
           <ArrowLeft data-icon="inline-start" />
           Previous
         </Button>
-        <Button type="submit" onClick={onAdvanceAction} disabled={form.formState.isSubmitting}>
+        <LoadingButton
+          pending={form.formState.isSubmitting}
+          type="submit"
+          onClick={onAdvanceAction}
+        >
           Next
-          {form.formState.isSubmitting ? (
-            <Spinner data-icon="inline-end" />
-          ) : (
-            <ArrowRight data-icon="inline-end" />
-          )}
-        </Button>
+          <ArrowRight data-icon="inline-end" />
+        </LoadingButton>
       </StepActions>
     </form>
   )
@@ -1432,10 +1430,10 @@ function ModelsStep({
                   <ExternalLink data-icon="inline-end" />
                 </Link>
               </Button>
-              <Button
+              <LoadingButton
+                pending={refreshing}
                 type="button"
                 variant="ghost"
-                disabled={refreshing}
                 onClick={() =>
                   startRefresh(async () => {
                     const providerResult = await refreshInferenceProvidersAction(scope)
@@ -1459,8 +1457,8 @@ function ModelsStep({
                   })
                 }
               >
-                {refreshing ? <Spinner /> : <RefreshCw />} Refresh
-              </Button>
+                <RefreshCw /> Refresh
+              </LoadingButton>
             </div>
             {refreshError ? (
               <Alert variant="destructive">
@@ -1804,14 +1802,15 @@ function ModelsStep({
           <ArrowLeft data-icon="inline-start" />
           Previous
         </Button>
-        <Button
+        <LoadingButton
+          pending={submitting}
           type="submit"
           onClick={onAdvanceAction}
           disabled={submitting || (providers.length === 0 && pools.length === 0)}
         >
           Next
-          {submitting ? <Spinner data-icon="inline-end" /> : <ArrowRight data-icon="inline-end" />}
-        </Button>
+          <ArrowRight data-icon="inline-end" />
+        </LoadingButton>
       </StepActions>
     </form>
   )
@@ -2055,7 +2054,7 @@ function AllowedHostsStep({
               </InputGroupAddon>
             </InputGroup>
             {secretHostSuggestions ? (
-              <React.Suspense fallback={<AllowedHostSuggestionsLoading />}>
+              <React.Suspense fallback=<AllowedHostSuggestionsLoading />>
                 <AllowedHostSuggestions
                   hosts={hosts}
                   secretHostSuggestions={secretHostSuggestions}
@@ -2112,10 +2111,10 @@ function AllowedHostsStep({
           <ArrowLeft data-icon="inline-start" />
           Previous
         </Button>
-        <Button type="submit" disabled={pending}>
-          {pending ? <Spinner /> : <Box data-icon="inline-start" />}
+        <LoadingButton pending={pending} type="submit">
+          <Box data-icon="inline-start" />
           {pending ? pendingLabel : submitLabel}
-        </Button>
+        </LoadingButton>
       </StepActions>
     </form>
   )

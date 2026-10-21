@@ -1,5 +1,6 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
 import { useActionState, useId, useMemo, useState } from "react"
 import { toast } from "sonner"
 import {
@@ -58,7 +59,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Spinner } from "@/components/ui/spinner"
 import { DisabledReason } from "@/components/ui/tooltip"
 
 const shareLayout: Record<string, AdminColumnLayout> = {
@@ -144,10 +144,10 @@ export function AgentOwnerForm({
           </FieldGroup>
           <div className="flex justify-end">
             {pending || owner ? (
-              <Button aria-busy={pending} type="submit" disabled={pending}>
-                {pending ? <Spinner /> : <RefreshCw />}
-                {pending ? "Transferring..." : "Transfer owner"}
-              </Button>
+              <LoadingButton pending={pending} pendingLabel={"Transferring..."} type="submit">
+                <RefreshCw />
+                {"Transfer owner"}
+              </LoadingButton>
             ) : (
               <DisabledReason reason="Choose a different eligible user to transfer ownership.">
                 <Button type="submit" disabled>
@@ -394,10 +394,10 @@ function AgentShareDialogForm({
               </Button>
             </DisabledReason>
           ) : (
-            <Button aria-busy={pending} data-dialog-submit disabled={pending} type="submit">
-              {pending ? <Spinner /> : <Share2 data-icon="inline-start" />}
+            <LoadingButton pending={pending} data-dialog-submit type="submit">
+              <Share2 data-icon="inline-start" />
               {pending ? "Saving..." : editing ? "Save changes" : "Save share"}
-            </Button>
+            </LoadingButton>
           )}
         </DialogFooter>
       </form>
@@ -560,9 +560,9 @@ function AgentShareActions({
       </form>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button aria-label="Share actions" disabled={pending} size="icon" variant="ghost">
-            {pending ? <Spinner /> : <MoreHorizontal />}
-          </Button>
+          <LoadingButton pending={pending} aria-label="Share actions" size="icon" variant="ghost">
+            <MoreHorizontal />
+          </LoadingButton>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuGroup>

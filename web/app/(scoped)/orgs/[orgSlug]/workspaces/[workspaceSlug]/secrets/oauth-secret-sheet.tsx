@@ -1,5 +1,6 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
 import * as React from "react"
 import { toast } from "sonner"
 import Fuse from "fuse.js"
@@ -45,7 +46,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
-import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { oauthSecretFormInputSchema } from "@/data/schema"
 import type { PutSecretFormAction, PutSecretFormState } from "@/data/types"
@@ -836,7 +836,8 @@ export function OAuthSecretSheet({
                 />
                 <input type="hidden" {...register("provider")} />
                 <input type="hidden" {...register("oauth_discovery_state")} />
-                <Button
+                <LoadingButton
+                  pending={discoveryIconState === "loading"}
                   type="button"
                   variant="ghost"
                   size="icon-sm"
@@ -847,16 +848,14 @@ export function OAuthSecretSheet({
                   disabled={oauthQuery.fetchStatus === "fetching"}
                   aria-label="Discover OAuth metadata"
                 >
-                  {discoveryIconState === "loading" ? (
-                    <Spinner aria-hidden="true" />
-                  ) : discoveryIconState === "success" ? (
+                  {discoveryIconState === "success" ? (
                     <Check />
                   ) : discoveryIconState === "error" ? (
                     <CircleAlert />
                   ) : (
                     <RefreshCw />
                   )}
-                </Button>
+                </LoadingButton>
               </div>
               {errors.endpoint_url ? (
                 <FieldError errors={[errors.endpoint_url]} id="oauth-secret-endpoint-url-error" />
@@ -992,15 +991,16 @@ export function OAuthSecretSheet({
             </Alert>
           ) : null}
           <div className="flex justify-end">
-            <Button
+            <LoadingButton
+              pending={isSubmitting || oauthPopupFlowId !== undefined}
               type="submit"
               disabled={
                 isSubmitting || oauthPopupFlowId !== undefined || isDiscoveryPendingForCurrentURL
               }
             >
-              {isSubmitting || oauthPopupFlowId ? <Spinner /> : <Cable data-icon="inline-start" />}
+              <Cable data-icon="inline-start" />
               {oauthPopupFlowId ? "Waiting for OAuth" : isSubmitting ? "Connecting" : "Connect"}
-            </Button>
+            </LoadingButton>
           </div>
         </form>
       </SheetContent>

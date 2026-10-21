@@ -50,7 +50,13 @@ export function RoleTableActions({
               </Link>
             </DropdownMenuItem>
             {!immutable ? (
-              <DropdownMenuItem variant="destructive" onSelect={() => setDeleteOpen(true)}>
+              <DropdownMenuItem
+                variant="destructive"
+                onSelect={(event) => {
+                  event.preventDefault()
+                  setDeleteOpen(true)
+                }}
+              >
                 <Trash2 />
                 Delete
               </DropdownMenuItem>

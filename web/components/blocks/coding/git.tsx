@@ -1,5 +1,8 @@
 "use client"
 
+import { HoldToConfirm } from "@/components/interior/hold-to-confirm"
+
+import { LoadingButton } from "@/components/interior/loading-button"
 import { Controller, useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
@@ -537,6 +540,18 @@ export function GitChanges({
       </Empty>
     )
 
+  function confirmStash() {
+    if (!data || !stashAction) return
+    mutation.mutate({
+      operation: stashAction,
+      comparison: stashScope,
+      revision: data.revision,
+      stash: stash?.oid,
+      message: stashMessage || undefined,
+      restore_index: restoreIndex,
+    })
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {status.error ? (
@@ -695,12 +710,12 @@ export function GitChanges({
                 </TooltipContent>
               </Tooltip>
               {canStageHunk ? (
-                <Button
+                <LoadingButton
+                  pending={staging?.hunk !== undefined}
                   size="sm"
                   variant="ghost"
                   disabled={hunkStagingDisabled}
                   aria-label={comparison === "staged" ? "Unstage hunk" : "Stage hunk"}
-                  aria-busy={staging?.hunk !== undefined}
                   onClick={() => {
                     if (selectedDiff)
                       stage(
@@ -710,15 +725,9 @@ export function GitChanges({
                       )
                   }}
                 >
-                  {staging?.hunk !== undefined ? (
-                    <Spinner aria-hidden="true" />
-                  ) : comparison === "staged" ? (
-                    <Minus />
-                  ) : (
-                    <Plus />
-                  )}
+                  {comparison === "staged" ? <Minus /> : <Plus />}
                   {comparison === "staged" ? "Unstage" : "Stage"} hunk
-                </Button>
+                </LoadingButton>
               ) : null}
 
               <DropdownMenu>
@@ -759,20 +768,16 @@ export function GitChanges({
           <Tooltip>
             <TooltipTrigger asChild>
               <span className="inline-flex">
-                <Button
+                <LoadingButton
+                  pending={refresh.isPending || status.isFetching || review.isFetching}
                   variant="ghost"
                   size="icon-sm"
                   aria-label="Refresh changes"
                   disabled={busy || status.isFetching || review.isFetching}
-                  aria-busy={refresh.isPending || status.isFetching || review.isFetching}
                   onClick={() => refresh.mutate()}
                 >
-                  {refresh.isPending || status.isFetching || review.isFetching ? (
-                    <Spinner />
-                  ) : (
-                    <RefreshCw />
-                  )}
-                </Button>
+                  <RefreshCw />
+                </LoadingButton>
               </span>
             </TooltipTrigger>
             <TooltipContent side="bottom" sideOffset={6}>
@@ -794,7 +799,12 @@ export function GitChanges({
             </Tooltip>
             <DropdownMenuContent align="end">
               <DropdownMenuGroup>
-                <DropdownMenuItem onSelect={() => setStashPicker(true)}>
+                <DropdownMenuItem
+                  onSelect={(event) => {
+                    event.preventDefault()
+                    setStashPicker(true)
+                  }}
+                >
                   <Archive /> Browse stashes
                 </DropdownMenuItem>
                 <DropdownMenuItem
@@ -836,20 +846,17 @@ export function GitChanges({
             <Tooltip>
               <TooltipTrigger asChild>
                 <span className="inline-flex">
-                  <Button
+                  <LoadingButton
+                    pending={sync.isPending && sync.variables.action === "pull"}
                     variant="outline"
                     size="sm"
                     aria-label="Pull"
                     disabled={syncDisabled || !data.remote_head || data.files.length > 0}
                     onClick={() => sync.mutate({ action: "pull" })}
                   >
-                    {sync.isPending && sync.variables.action === "pull" ? (
-                      <Spinner />
-                    ) : (
-                      <ArrowDown />
-                    )}
+                    <ArrowDown />
                     Pull
-                  </Button>
+                  </LoadingButton>
                 </span>
               </TooltipTrigger>
               <TooltipContent side="bottom" sideOffset={6}>
@@ -859,7 +866,8 @@ export function GitChanges({
             <Tooltip>
               <TooltipTrigger asChild>
                 <span className="inline-flex">
-                  <Button
+                  <LoadingButton
+                    pending={sync.isPending && sync.variables.action === "push"}
                     variant="outline"
                     size="sm"
                     aria-label={data.remote_head === "" ? "Publish branch" : "Push"}
@@ -868,9 +876,9 @@ export function GitChanges({
                       sync.mutate({ action: "push" })
                     }}
                   >
-                    {sync.isPending && sync.variables.action === "push" ? <Spinner /> : <ArrowUp />}
+                    <ArrowUp />
                     {data.remote_head === "" ? "Publish branch" : "Push"}
-                  </Button>
+                  </LoadingButton>
                 </span>
               </TooltipTrigger>
               <TooltipContent side="bottom" sideOffset={6}>
@@ -1044,7 +1052,8 @@ export function GitChanges({
                     </span>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <Button
+                        <LoadingButton
+                          pending={suggestion.isPending}
                           type="button"
                           variant="ghost"
                           size="icon-sm"
@@ -1052,8 +1061,8 @@ export function GitChanges({
                           disabled={stagingDisabled || suggestion.isPending || !stagedFiles.length}
                           onClick={() => suggestion.mutate()}
                         >
-                          {suggestion.isPending ? <Spinner /> : <Sparkles />}
-                        </Button>
+                          <Sparkles />
+                        </LoadingButton>
                       </TooltipTrigger>
                       <TooltipContent>Generate commit message</TooltipContent>
                     </Tooltip>
@@ -1065,7 +1074,8 @@ export function GitChanges({
                     >
                       Cancel
                     </Button>
-                    <Button
+                    <LoadingButton
+                      pending={sync.isPending && sync.variables.action === "commit"}
                       type="submit"
                       size="sm"
                       disabled={
@@ -1076,13 +1086,8 @@ export function GitChanges({
                         !stagedFiles.length
                       }
                     >
-                      {sync.isPending && sync.variables.action === "commit" ? (
-                        <Spinner />
-                      ) : (
-                        <GitCommitHorizontal />
-                      )}{" "}
-                      Commit staged
-                    </Button>
+                      <GitCommitHorizontal /> Commit staged
+                    </LoadingButton>
                   </div>
                 </form>
               </PopoverContent>
@@ -1617,30 +1622,21 @@ export function GitChanges({
             <Button variant="outline" disabled={busy} onClick={() => setStashAction(undefined)}>
               Cancel
             </Button>
-            <Button
-              variant={stashAction === "stash_drop" ? "destructive" : "default"}
-              disabled={busy}
-              onClick={() => {
-                if (stashAction)
-                  mutation.mutate({
-                    operation: stashAction,
-                    comparison: stashScope,
-                    revision: data.revision,
-                    stash: stash?.oid,
-                    message: stashMessage || undefined,
-                    restore_index: restoreIndex,
-                  })
-              }}
-            >
-              {busy ? <Spinner /> : stashAction === "stash_drop" ? <Trash2 /> : <ArchiveRestore />}
-              {stashAction === "stash_create"
-                ? "Stash changes"
-                : stashAction === "stash_drop"
-                  ? "Drop stash"
+            {stashAction === "stash_drop" ? (
+              <HoldToConfirm pending={busy} variant="destructive" onConfirm={confirmStash}>
+                <Trash2 />
+                Hold to drop stash
+              </HoldToConfirm>
+            ) : (
+              <LoadingButton pending={busy} onClick={confirmStash}>
+                <ArchiveRestore />
+                {stashAction === "stash_create"
+                  ? "Stash changes"
                   : stashAction === "stash_pop"
                     ? "Apply and remove"
                     : "Apply and keep"}
-            </Button>
+              </LoadingButton>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

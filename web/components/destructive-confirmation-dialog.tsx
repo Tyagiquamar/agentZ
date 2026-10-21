@@ -1,5 +1,7 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
+import { HoldToConfirm } from "@/components/interior/hold-to-confirm"
 import type { Route } from "next"
 import { startTransition, useActionState, useId, useState } from "react"
 import { useRouter } from "@bprogress/next/app"
@@ -21,7 +23,6 @@ import {
 } from "@/components/ui/dialog"
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Spinner } from "@/components/ui/spinner"
 
 export function DestructiveConfirmationDialog({
   action,
@@ -152,14 +153,27 @@ export function DestructiveConfirmationDialog({
             <Button onClick={() => setOpen(false)} type="button" variant="outline">
               Cancel
             </Button>
-            <Button
-              disabled={value !== confirmation || pending}
-              type="submit"
-              variant="destructive"
-            >
-              {pending ? <Spinner data-icon="inline-start" /> : <Icon data-icon="inline-start" />}
-              {pending ? (kind === "disable" ? "Disabling..." : "Deleting...") : submitLabel}
-            </Button>
+            {kind === "delete" ? (
+              <HoldToConfirm
+                pending={pending}
+                disabled={value !== confirmation}
+                type="submit"
+                variant="destructive"
+              >
+                <Icon data-icon="inline-start" />
+                Hold to {submitLabel.toLowerCase()}
+              </HoldToConfirm>
+            ) : (
+              <LoadingButton
+                pending={pending}
+                type="submit"
+                variant="destructive"
+                disabled={value !== confirmation}
+              >
+                <Icon data-icon="inline-start" />
+                {pending ? "Disabling..." : submitLabel}
+              </LoadingButton>
+            )}
           </DialogFooter>
         </form>
       </DialogContent>
@@ -167,7 +181,7 @@ export function DestructiveConfirmationDialog({
   )
 }
 
-export type DestructiveConfirmationState = {
+type DestructiveConfirmationState = {
   error?: string
   fingerprint?: string
   href?: Route

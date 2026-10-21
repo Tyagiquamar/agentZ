@@ -70,7 +70,7 @@ type FileTreeContextValue = {
 
 const FileTreeContext = React.createContext<FileTreeContextValue | null>(null)
 
-export type FileTreeProps = Omit<HTMLAttributes<HTMLDivElement>, "onSelect"> & {
+type FileTreeProps = Omit<HTMLAttributes<HTMLDivElement>, "onSelect"> & {
   onSelect?: (path: string) => void
   selectedPath?: string
 }
@@ -114,7 +114,7 @@ export function FileTree({ className, children, onSelect, selectedPath, ...props
   )
 }
 
-export type FileTreeFolderProps = HTMLAttributes<HTMLDivElement> & {
+type FileTreeFolderProps = HTMLAttributes<HTMLDivElement> & {
   name: string
   path: string
 }
@@ -157,7 +157,7 @@ export function FileTreeFolder({ path, name, className, children, ...props }: Fi
   )
 }
 
-export type FileTreeFileProps = ComponentProps<"button"> & {
+type FileTreeFileProps = ComponentProps<"button"> & {
   name: string
   path: string
 }

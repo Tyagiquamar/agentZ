@@ -1,5 +1,6 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
 import * as React from "react"
 import {
   closestCenter,
@@ -64,7 +65,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
-import { Spinner } from "@/components/ui/spinner"
 import { Switch } from "@/components/ui/switch"
 import {
   getInferencePoolUsageAction,
@@ -528,10 +528,10 @@ export function PoolSheet({
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={pending}>
-                {pending ? <Spinner /> : <Save data-icon="inline-start" />}
+              <LoadingButton pending={pending} type="submit">
+                <Save data-icon="inline-start" />
                 {pool ? "Save changes" : "Create Pool"}
-              </Button>
+              </LoadingButton>
             </div>
           </SheetFooter>
         </form>

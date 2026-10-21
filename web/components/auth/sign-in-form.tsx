@@ -1,5 +1,6 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
 import Link from "next/link"
 import * as React from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -9,10 +10,8 @@ import { z } from "zod"
 import type { AuthError, SocialProvider } from "@/app/(auth)/shared"
 import { authErrorMessages } from "@/app/(auth)/shared"
 import { authClient } from "@/lib/auth-client"
-import { Button } from "@/components/ui/button"
 import { Field, FieldError, FieldGroup, FieldLabel, FieldSeparator } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Spinner } from "@/components/ui/spinner"
 import { SocialAuthButtons } from "./social-auth-buttons"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
@@ -202,19 +201,16 @@ export function SignInForm({
             />
           </FieldGroup>
           <div className="flex flex-col gap-3">
-            <Button
+            <LoadingButton
+              pending={pendingAction === "password"}
               type="submit"
               size="lg"
               aria-invalid={passwordActionError ? "true" : undefined}
               disabled={locked}
             >
-              {pendingAction === "password" ? (
-                <Spinner data-icon="inline-start" />
-              ) : (
-                <LogIn data-icon="inline-start" />
-              )}
+              <LogIn data-icon="inline-start" />
               Sign in
-            </Button>
+            </LoadingButton>
             {passwordActionError ? (
               <Alert variant="destructive">
                 <CircleAlert aria-hidden="true" />

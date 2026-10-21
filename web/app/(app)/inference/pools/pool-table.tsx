@@ -1,5 +1,7 @@
 "use client"
 
+import { HoldToConfirm } from "@/components/interior/hold-to-confirm"
+
 import * as React from "react"
 import {
   experimental_streamedQuery as streamedQuery,
@@ -362,16 +364,32 @@ function PoolActions({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuGroup>
-            <DropdownMenuItem onSelect={view}>
+            <DropdownMenuItem
+              onSelect={(event) => {
+                event.preventDefault()
+                view()
+              }}
+            >
               <Eye /> View
             </DropdownMenuItem>
             {pool.can_modify ? (
-              <DropdownMenuItem onSelect={edit}>
+              <DropdownMenuItem
+                onSelect={(event) => {
+                  event.preventDefault()
+                  edit()
+                }}
+              >
                 <Pencil /> Edit
               </DropdownMenuItem>
             ) : null}
             {pool.can_delete ? (
-              <DropdownMenuItem variant="destructive" onSelect={() => setDeleteOpen(true)}>
+              <DropdownMenuItem
+                variant="destructive"
+                onSelect={(event) => {
+                  event.preventDefault()
+                  setDeleteOpen(true)
+                }}
+              >
                 <Trash2 /> Delete
               </DropdownMenuItem>
             ) : null}
@@ -424,10 +442,10 @@ function DeletePoolDialog({
               Cancel
             </Button>
           </DialogClose>
-          <Button
+          <HoldToConfirm
+            pending={pending}
             variant="destructive"
-            disabled={pending}
-            onClick={() =>
+            onConfirm={() =>
               startTransition(async () => {
                 const result = await deleteInferencePoolAction(scope, pool.id)
                 if (result.error) {
@@ -441,8 +459,8 @@ function DeletePoolDialog({
               })
             }
           >
-            {pending ? <Spinner /> : <Trash2 />} Delete
-          </Button>
+            <Trash2 /> Hold to delete
+          </HoldToConfirm>
         </DialogFooter>
       </DialogContent>
     </Dialog>

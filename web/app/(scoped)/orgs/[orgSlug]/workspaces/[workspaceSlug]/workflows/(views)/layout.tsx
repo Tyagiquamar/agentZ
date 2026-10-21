@@ -1,7 +1,11 @@
 import { Suspense } from "react"
 import { headers } from "next/headers"
 import { notFound } from "next/navigation"
-import { AdministrationPageHeader, AdministrationState } from "@/components/administration"
+import {
+  AdministrationLoadingState,
+  AdministrationPageHeader,
+  AdministrationState,
+} from "@/components/administration"
 import { Skeleton } from "@/components/ui/skeleton"
 import { resolvePageSelection } from "@/data/page-selection"
 import { getWorkspaceScope } from "@/data/workspaces"
@@ -25,7 +29,7 @@ export default function WorkflowLayout({
       >
         <Filters params={params} />
       </Suspense>
-      {children}
+      <Suspense fallback={<AdministrationLoadingState />}>{children}</Suspense>
     </main>
   )
 }

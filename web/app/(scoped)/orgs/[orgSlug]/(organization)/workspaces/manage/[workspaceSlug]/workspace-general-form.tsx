@@ -1,5 +1,6 @@
 "use client"
 
+import { LoadingButton } from "@/components/interior/loading-button"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Controller, useForm } from "react-hook-form"
 import { z } from "zod"
@@ -8,10 +9,8 @@ import { toast } from "sonner"
 import { updateWorkspaceAction } from "@/app/(scoped)/orgs/actions"
 import { workspaceNameSchema } from "@/data/schema"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Button } from "@/components/ui/button"
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Spinner } from "@/components/ui/spinner"
 
 const workspaceFormSchema = z.object({ name: workspaceNameSchema })
 
@@ -75,10 +74,10 @@ export function WorkspaceGeneralForm({
         />
       </FieldGroup>
       <div className="flex justify-end">
-        <Button disabled={pending} type="submit">
-          {pending ? <Spinner aria-hidden="true" /> : <Save data-icon="inline-start" />}
-          {pending ? "Updating..." : "Update Workspace"}
-        </Button>
+        <LoadingButton pending={pending} pendingLabel={"Updating..."} type="submit">
+          <Save data-icon="inline-start" />
+          {"Update Workspace"}
+        </LoadingButton>
       </div>
     </form>
   )

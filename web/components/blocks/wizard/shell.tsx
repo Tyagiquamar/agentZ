@@ -1,8 +1,7 @@
 "use client"
 
-import { WizardPanel } from "./panel"
-import { WizardStepNav } from "./step-nav"
-import type { WizardShellProps, WizardStep } from "./types"
+import { WizardPanel, WizardStepNav, type WizardStep } from "@/components/interior/wizard-steps"
+import type { ReactNode } from "react"
 import { Separator } from "@/components/ui/separator"
 
 export function WizardShell<TStep extends WizardStep>({
@@ -13,7 +12,15 @@ export function WizardShell<TStep extends WizardStep>({
   direction,
   onStepSelectAction,
   steps,
-}: WizardShellProps<TStep>) {
+}: {
+  steps: readonly TStep[]
+  currentIndex: number
+  currentStepId: TStep["id"]
+  direction: number
+  children: ReactNode
+  canVisitStepAction: (step: TStep, index: number) => boolean
+  onStepSelectAction: (step: TStep, index: number) => void
+}) {
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col items-center">
       <div className="flex w-full justify-start px-4 sm:justify-center sm:px-6">

@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { motion, useReducedMotion } from "motion/react"
 import { Command as CommandPrimitive } from "cmdk"
 
 import { cn } from "@/lib/utils"
@@ -44,7 +45,8 @@ function CommandInput({
 }
 
 function CommandList({ className, ...props }: React.ComponentProps<typeof CommandPrimitive.List>) {
-  const { onTouchMoveCapture, onWheelCapture, ...rest } = props
+  const { children, onTouchMoveCapture, onWheelCapture, ...rest } = props
+  const reduced = useReducedMotion()
 
   return (
     <CommandPrimitive.List
@@ -62,7 +64,17 @@ function CommandList({ className, ...props }: React.ComponentProps<typeof Comman
         onWheelCapture?.(event)
       }}
       {...rest}
-    />
+    >
+      <motion.div
+        layout={reduced ? false : "position"}
+        initial={false}
+        transition={
+          reduced ? { duration: 0 } : { type: "spring", stiffness: 520, damping: 34, mass: 0.45 }
+        }
+      >
+        {children}
+      </motion.div>
+    </CommandPrimitive.List>
   )
 }
 

@@ -1,5 +1,8 @@
 "use client"
 
+import { HoldToConfirm } from "@/components/interior/hold-to-confirm"
+
+import { LoadingButton } from "@/components/interior/loading-button"
 import { useId, useLayoutEffect, useRef, useState } from "react"
 import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
@@ -49,7 +52,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Field, FieldLabel, FieldError, FieldDescription, FieldGroup } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Slider } from "@/components/ui/slider"
+import { SliderDetents } from "@/components/interior/slider-detents"
 import { Textarea } from "@/components/ui/textarea"
 import { MultiSelectDropdown } from "@/components/ui/multi-select-dropdown"
 import {
@@ -71,7 +74,6 @@ import {
 } from "@/components/ui/sheet"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Spinner } from "@/components/ui/spinner"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { dayjs } from "@/lib/format"
 
@@ -83,7 +85,7 @@ export function EvaluationsSkeleton() {
     <>
       <div
         aria-hidden
-        className="flex flex-wrap items-center gap-2 px-4 pt-4 pb-1 sm:px-6 motion-reduce:[&_[data-slot=skeleton]]:animate-none"
+        className="flex flex-wrap items-center gap-2 px-4 pt-4 pb-1 motion-reduce:**:data-[slot=skeleton]:animate-none sm:px-6"
       >
         <Skeleton className="h-11 w-full sm:h-8 sm:w-[28rem]" />
         <Skeleton className="h-5 w-20 rounded-full" />
@@ -405,10 +407,15 @@ export function Evaluations({
             >
               Keep evaluation
             </Button>
-            <Button variant="destructive" disabled={actionPending} onClick={remove}>
-              {actionPending ? <Spinner /> : <Trash2 />}
-              {actionPending ? "Deleting…" : "Delete evaluation"}
-            </Button>
+            <HoldToConfirm
+              pending={actionPending}
+              pendingLabel={"Deleting…"}
+              variant="destructive"
+              onConfirm={remove}
+            >
+              <Trash2 />
+              {"Hold to delete evaluation"}
+            </HoldToConfirm>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -430,7 +437,7 @@ export function Evaluations({
             <div
               role="status"
               aria-label="Loading models"
-              className="flex min-h-0 flex-1 flex-col motion-reduce:[&_[data-slot=skeleton]]:animate-none"
+              className="flex min-h-0 flex-1 flex-col motion-reduce:**:data-[slot=skeleton]:animate-none"
             >
               <div aria-hidden className="flex-1 overflow-y-auto px-4 pb-4">
                 <FieldGroup>
@@ -544,7 +551,7 @@ function EvaluationLabel({ evaluation }: { evaluation: WorkflowEvaluationSummary
       <span className="sr-only">
         {date} · {names.join(", ") || "No models"}
       </span>
-      <CalendarClock aria-hidden className="text-muted-foreground" />
+      <CalendarClock aria-hidden className="shrink-0 text-muted-foreground" />
       <span aria-hidden className="shrink-0 text-muted-foreground">
         {date}
       </span>
@@ -807,15 +814,16 @@ function EvaluationForm({
                     {concurrency}
                   </output>
                 </div>
-                <Slider
+                <SliderDetents
                   id="evaluation-concurrency"
+                  detents={[1, 2, 3, 4, 5]}
                   aria-labelledby="evaluation-concurrency-label"
                   min={1}
                   max={5}
                   step={1}
-                  value={[concurrency]}
-                  onValueChange={([value]) => {
-                    setConcurrency(value ?? 1)
+                  value={concurrency}
+                  onValueChange={(value) => {
+                    setConcurrency(value)
                     setErrors((errors) => errors.filter((error) => error.field !== "concurrency"))
                   }}
                   aria-invalid={errors.some((error) => error.field === "concurrency")}
@@ -987,10 +995,10 @@ function EvaluationForm({
             ? "Uses saved transcripts. Workflows will not run again."
             : "Runs can change shared files and services."}
         </p>
-        <Button type="submit" disabled={pending}>
-          {pending ? <Spinner /> : <Play />}
+        <LoadingButton pending={pending} type="submit">
+          <Play />
           {retry ? "Judge executions" : "Run evaluation"}
-        </Button>
+        </LoadingButton>
       </SheetFooter>
     </form>
   )
