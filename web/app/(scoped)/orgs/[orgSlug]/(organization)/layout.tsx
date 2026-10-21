@@ -1,8 +1,8 @@
+import { missingRoute } from "@/data/route-memory"
 import { Suspense } from "react"
 import type { Route } from "next"
 import type { Metadata } from "next"
-import { headers } from "next/headers"
-import { notFound, redirect } from "next/navigation"
+import { redirect } from "next/navigation"
 import { AgentZTransition } from "@/components/scope-transition"
 import {
   AdministrationLayout,
@@ -12,11 +12,7 @@ import {
 import { AppShell } from "@/components/blocks/app-shell"
 import { AppSidebar } from "@/components/blocks/sidebar/sidebar"
 import { ThemeSync } from "@/components/theme-sync"
-import {
-  activateOrganization,
-  scheduleOrganizationRouteMemory,
-  resolveOrganizationSlug,
-} from "@/data/organizations"
+import { activateOrganization, resolveOrganizationSlug } from "@/data/organizations"
 import { getCurrentUserPreferences } from "@/data/user-preferences"
 import { getWorkspaceDirectory } from "@/data/workspaces"
 import { ensureTenant } from "@/lib/gateway/client/sdk.gen"
@@ -52,7 +48,7 @@ async function OrganizationContent({ children, params }: LayoutProps<"/orgs/[org
     redirect(signInURL({ returnTo: `/orgs/${orgSlug}` }))
   }
   if (result.kind === "not-found") {
-    notFound()
+    return missingRoute(`/orgs/${orgSlug}`)
   }
 
   const preferences = await getCurrentUserPreferences()
@@ -144,17 +140,6 @@ async function OrganizationContent({ children, params }: LayoutProps<"/orgs/[org
   const workspaceResult = await getWorkspaceDirectory(result.organization.slug)
   if (!workspaceResult.directory) {
     throw new Error("workspace directory unavailable after organisation resolution")
-  }
-
-  const root = `/orgs/${result.organization.slug}`
-  const requestHeaders = await headers()
-  const requestedPath = requestHeaders.get("x-agentz-pathname") ?? root
-  const requestedURL = new URL(requestedPath, "http://agentz.local")
-  const rememberedPath = requestedURL.pathname.startsWith(`${root}/event-trail/`)
-    ? `${root}/event-trail`
-    : requestedURL.pathname
-  if (rememberedPath !== root) {
-    await scheduleOrganizationRouteMemory(result.organization.id, rememberedPath, null)
   }
 
   return (

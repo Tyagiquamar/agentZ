@@ -1,3 +1,4 @@
+import { RememberRoute } from "@/data/route-memory"
 import { Suspense } from "react"
 import { AdministrationLoadingState, AdministrationState } from "@/components/administration"
 import { activateOrganization, resolveOrganizationSlug } from "@/data/organizations"
@@ -25,11 +26,14 @@ async function OrganizationSkillsContent({ params }: PageProps<"/orgs/[orgSlug]/
   if (!tenant.data.skill_capabilities.read) return <AdministrationState kind="forbidden" />
 
   return (
-    <SkillsClient
-      agents={[]}
-      canCreateImmutable={tenant.data.skill_capabilities.create}
-      canReadImmutable={tenant.data.skill_capabilities.read}
-      pageScope={{ kind: "organization", organizationName: scope.organization.name }}
-    />
+    <>
+      <RememberRoute />
+      <SkillsClient
+        agents={[]}
+        canCreateImmutable={tenant.data.skill_capabilities.create}
+        canReadImmutable={tenant.data.skill_capabilities.read}
+        pageScope={{ kind: "organization", organizationName: scope.organization.name }}
+      />
+    </>
   )
 }

@@ -1,3 +1,4 @@
+import { RememberRoute } from "@/data/route-memory"
 import { Suspense } from "react"
 import { AdministrationLoadingState, AdministrationState } from "@/components/administration"
 import { activateOrganization, resolveOrganizationSlug } from "@/data/organizations"
@@ -27,11 +28,14 @@ async function NewOrganizationSandboxContent({
   const tenant = await ensureTenant({ client: getGatewayServerClient(), throwOnError: true })
   if (!tenant.data?.sandbox_capabilities.create) return <AdministrationState kind="forbidden" />
   return (
-    <NewSandboxPage
-      basePath={`/orgs/${scope.organization.slug}/sandboxes`}
-      providersHref={{
-        pathname: `/orgs/${scope.organization.slug}/inference/providers`,
-      }}
-    />
+    <>
+      <RememberRoute />
+      <NewSandboxPage
+        basePath={`/orgs/${scope.organization.slug}/sandboxes`}
+        providersHref={{
+          pathname: `/orgs/${scope.organization.slug}/inference/providers`,
+        }}
+      />
+    </>
   )
 }

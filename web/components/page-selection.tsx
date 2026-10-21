@@ -17,10 +17,12 @@ import { usePathname, useSearchParams } from "next/navigation"
 import { useRouter } from "@bprogress/next/app"
 import {
   encodeSelectionHistory,
+  invalidateSelections,
   readSelectionHistory,
   rememberSelection,
   restoreSelection,
   selectionCookie,
+  selectionFields,
   selectionGroups,
   selectionPages,
   selectionURL,
@@ -28,13 +30,20 @@ import {
   type SelectionHistory,
   type SelectionPage,
 } from "@/lib/page-selection"
+import type { ResolvedPageSelection } from "@/data/page-selection"
 
 type SelectionContextValue = {
   scope: string
   basePath: string
   history: SelectionHistory
   read: () => SelectionHistory
-  remember: (page: SelectionPage, selected: PageSelection, requested: PageSelection) => void
+  remember: (
+    page: SelectionPage,
+    selected: PageSelection | undefined,
+    requested: PageSelection,
+    invalid: PageSelection[],
+    resolvedAt: number
+  ) => boolean
 }
 
 const SelectionContext = createContext<SelectionContextValue | null>(null)
@@ -54,6 +63,7 @@ export function PageSelectionProvider({
   const [history, setHistory] = useState(initialHistory)
   const channel = useRef<BroadcastChannel | null>(null)
   const storageUnavailable = useRef(false)
+  const invalidated = useRef<{ resource: PageSelection; at: number }[]>([])
 
   function read() {
     if (storageUnavailable.current) return history
@@ -73,7 +83,15 @@ export function PageSelectionProvider({
     const update = () => refresh()
     try {
       channel.current = new BroadcastChannel(selectionCookie)
-      channel.current.addEventListener("message", update)
+      channel.current.onmessage = (
+        event: MessageEvent<{ scope: string; invalid: PageSelection[]; at: number } | null>
+      ) => {
+        if (event.data?.scope === scope) {
+          const { invalid, at } = event.data
+          invalidated.current.push(...invalid.map((resource) => ({ resource, at })))
+        }
+        refresh()
+      }
     } catch {
       // Focus still refreshes link defaults when cross-tab messaging is unavailable.
     }
@@ -84,22 +102,45 @@ export function PageSelectionProvider({
       channel.current = null
       window.removeEventListener("focus", update)
     }
-  }, [])
+  }, [scope])
 
-  function remember(page: SelectionPage, selected: PageSelection, requested: PageSelection) {
-    const next = rememberSelection(read(), scope, page, selected, requested)
+  function remember(
+    page: SelectionPage,
+    selected: PageSelection | undefined,
+    requested: PageSelection,
+    invalid: PageSelection[],
+    resolvedAt: number
+  ) {
+    const at = resolvedAt
+    invalidated.current.push(...invalid.map((resource) => ({ resource, at })))
+    if (
+      selected &&
+      invalidated.current.some(
+        ({ resource, at }) =>
+          at > resolvedAt &&
+          selectionFields.every(
+            (field) => resource[field] === undefined || selected[field] === resource[field]
+          )
+      )
+    )
+      return false
+    const current = read()
+    let next = invalidateSelections(current, scope, invalid)
+    if (selected) next = rememberSelection(next, scope, page, selected, requested)
     const value = encodeSelectionHistory(next)
+    if (value === encodeSelectionHistory(current)) return true
     try {
       document.cookie = `${selectionCookie}=${value}; Path=/; Max-Age=15552000; SameSite=Lax${location.protocol === "https:" ? "; Secure" : ""}`
       storageUnavailable.current = !document.cookie
         .split("; ")
         .includes(`${selectionCookie}=${value}`)
-      channel.current?.postMessage(null)
+      channel.current?.postMessage({ scope, invalid, at })
     } catch {
       // Keep this tab usable when browser persistence is disabled.
       storageUnavailable.current = true
     }
     setHistory(next)
+    return true
   }
 
   return (
@@ -113,14 +154,16 @@ export function PageSelectionProvider({
 export function RememberPageSelection({
   selected,
   requested,
-}: {
-  selected: PageSelection
-  requested: PageSelection
-}) {
+  invalid,
+  error,
+  resolvedAt,
+}: Pick<ResolvedPageSelection, "selected" | "requested" | "invalid" | "error" | "resolvedAt">) {
   const context = useContext(SelectionContext)
   const pathname = usePathname()
+  const router = useRouter()
   const selectedKey = JSON.stringify(selected)
   const requestedKey = JSON.stringify(requested)
+  const invalidKey = JSON.stringify(invalid)
   const commit = useEffectEvent(() => {
     if (!context || document.visibilityState === "hidden") return
     const page = selectionPages.find((page) => pathname === `${context.basePath}/${page}`)
@@ -130,7 +173,11 @@ export function RememberPageSelection({
       Object.entries(requested).some(([key, value]) => search.has(key) && search.get(key) !== value)
     )
       return
-    context.remember(page, selected, requested)
+    if (!context.remember(page, error ? undefined : selected, requested, invalid, resolvedAt)) {
+      router.replace(selectionURL(pathname, search, {}, true))
+      return
+    }
+    if (error) return
     const changed = selectionGroups(page, requested)
       .flat()
       .some((key) => requested[key] !== selected[key])
@@ -140,8 +187,12 @@ export function RememberPageSelection({
   })
   useEffect(() => {
     commit()
-  }, [pathname, selectedKey, requestedKey])
-  return null
+  }, [pathname, selectedKey, requestedKey, invalidKey, error, resolvedAt])
+  return error?.code === "not_found" ? (
+    <Link href={pathname as Route} className="px-6 py-2 text-sm underline underline-offset-4">
+      Choose an available resource
+    </Link>
+  ) : null
 }
 
 /** Keep prefetched URLs and the eventual click aligned with the latest defaults. */
@@ -165,7 +216,8 @@ export function SelectionLink<T extends string>({
       if (value !== null) requested[field] = value
     }
     const selected = restoreSelection(history, context.scope, page, requested)
-    return (selectionURL(url.pathname, url.searchParams, selected, false) + url.hash) as Route<T>
+    return (selectionURL(url.pathname, url.searchParams, selected, false, requested) +
+      url.hash) as Route<T>
   }
   const target = destination(context?.history)
   return (
@@ -197,7 +249,7 @@ export function useSelectResource(replace = false) {
       context && selectionPages.find((page) => pathname === `${context.basePath}/${page}`)
     const selected =
       context && page ? restoreSelection(context.read(), context.scope, page, requested) : requested
-    const href = selectionURL(pathname, search, selected, true)
+    const href = selectionURL(pathname, search, selected, true, requested)
     startTransition(() => {
       if (replace) router.replace(href)
       else router.push(href)

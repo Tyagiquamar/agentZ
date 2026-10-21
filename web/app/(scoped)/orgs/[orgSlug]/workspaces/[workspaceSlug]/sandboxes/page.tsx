@@ -1,3 +1,4 @@
+import { RememberRoute } from "@/data/route-memory"
 import { Suspense } from "react"
 import { AdministrationLoadingState, AdministrationState } from "@/components/administration"
 import { getWorkspaceScope } from "@/data/workspaces"
@@ -25,16 +26,19 @@ async function WorkspaceSandboxes({
     return <AdministrationState kind="forbidden" />
   const basePath = `/orgs/${scope.scope.organization.slug}/workspaces/${scope.workspace.slug}/sandboxes`
   return (
-    <SandboxesPage
-      basePath={basePath}
-      capabilities={scope.workspace.capabilities.sandboxes}
-      pageScope={{
-        kind: "workspace",
-        organizationName: scope.scope.organization.name,
-        workspaceName: scope.workspace.name,
-      }}
-      searchParams={searchParams}
-      workspaceId={scope.workspace.id}
-    />
+    <>
+      <RememberRoute />
+      <SandboxesPage
+        basePath={basePath}
+        capabilities={scope.workspace.capabilities.sandboxes}
+        pageScope={{
+          kind: "workspace",
+          organizationName: scope.scope.organization.name,
+          workspaceName: scope.workspace.name,
+        }}
+        searchParams={searchParams}
+        workspaceId={scope.workspace.id}
+      />
+    </>
   )
 }

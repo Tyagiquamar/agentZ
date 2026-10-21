@@ -1,7 +1,7 @@
+import { RememberRoute, missingRoute } from "@/data/route-memory"
 import { searchParamStringSchema } from "@/lib/search-params"
 import { Suspense } from "react"
 import type { Route } from "next"
-import { notFound } from "next/navigation"
 import {
   AdministrationLoadingState,
   AdministrationPageHeader,
@@ -28,7 +28,7 @@ async function UserStateContent({
 }: PageProps<"/orgs/[orgSlug]/users/status/[state]">) {
   const [{ orgSlug, state }, { page_token }] = await Promise.all([params, searchParams])
   if (state !== "active" && state !== "invited" && state !== "disabled") {
-    notFound()
+    return missingRoute()
   }
 
   const tab: MemberTab = state
@@ -46,6 +46,7 @@ async function UserStateContent({
   ] satisfies RouteTab[]
   return (
     <div className="flex min-w-0 flex-col gap-6">
+      <RememberRoute />
       <AdministrationPageHeader
         actions={<CreateInvitationDialog orgSlug={orgSlug} roles={data.roles} teams={data.teams} />}
         title="Users"

@@ -1,7 +1,7 @@
+import { missingRoute } from "@/data/route-memory"
 import { Suspense } from "react"
 import type { Route } from "next"
 import type { Metadata } from "next"
-import { notFound } from "next/navigation"
 import { AdministrationLoadingState } from "@/components/administration"
 import { RouteTabs, type RouteTab } from "@/components/route-tabs"
 import { SidebarTrigger } from "@/components/ui/sidebar"
@@ -32,7 +32,7 @@ export default function TeamLayout(props: LayoutProps<"/orgs/[orgSlug]/teams/[te
 async function TeamContent({ children, params }: LayoutProps<"/orgs/[orgSlug]/teams/[teamId]">) {
   const { orgSlug, teamId } = await params
   const team = await getTeamDetail(orgSlug, teamId)
-  if (!team) notFound()
+  if (!team) return missingRoute()
   const root = `/orgs/${orgSlug}/teams/${teamId}`
   const tabs = [
     { href: root as Route, label: "Summary" },

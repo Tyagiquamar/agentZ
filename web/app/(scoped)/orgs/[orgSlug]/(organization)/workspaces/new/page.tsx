@@ -1,3 +1,4 @@
+import { RememberRoute } from "@/data/route-memory"
 import { Suspense } from "react"
 import { AdministrationLoadingState, AdministrationState } from "@/components/administration"
 import { getWorkspaceCreation } from "@/data/workspaces"
@@ -24,10 +25,13 @@ async function NewWorkspaceContent({ params }: PageProps<"/orgs/[orgSlug]/worksp
   }
 
   return (
-    <WorkspaceForm
-      candidates={result.candidates}
-      orgSlug={result.scope.organization.slug}
-      resources={result.resources}
-    />
+    <>
+      <RememberRoute />
+      <WorkspaceForm
+        candidates={result.candidates}
+        orgSlug={result.scope.organization.slug}
+        resources={result.resources}
+      />
+    </>
   )
 }

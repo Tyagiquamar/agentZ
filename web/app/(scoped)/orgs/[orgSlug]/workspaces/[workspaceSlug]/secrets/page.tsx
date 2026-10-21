@@ -1,3 +1,4 @@
+import { RememberRoute } from "@/data/route-memory"
 import { Suspense } from "react"
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
@@ -70,7 +71,7 @@ async function WorkspaceSecrets({
   if (!firstReadableAgent) {
     return (
       <main className="flex min-w-0 flex-1 flex-col gap-6 p-0">
-        <RememberPageSelection selected={state.selected} requested={state.requested} />
+        <RememberPageSelection {...state} />
         <AdministrationPageHeader title="Secrets" />
         <AdministrationState kind="forbidden" />
       </main>
@@ -108,6 +109,7 @@ async function WorkspaceSecrets({
 
   return (
     <main className="flex min-w-0 flex-1 flex-col gap-0 p-0">
+      <RememberRoute />
       <AdministrationPageHeader
         actions={
           writableAgent ? (
@@ -121,7 +123,7 @@ async function WorkspaceSecrets({
         }
         title="Secrets"
       />
-      <RememberPageSelection selected={state.selected} requested={state.requested} />
+      <RememberPageSelection {...state} />
       <SecretsFilters agents={readableAgents} selectedAgentName={selectedAgent.name} />
       <SecretTable
         agentName={selectedAgent.name}

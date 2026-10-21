@@ -1,5 +1,5 @@
+import { RememberRoute, missingRoute } from "@/data/route-memory"
 import { Suspense } from "react"
-import { notFound } from "next/navigation"
 import { deleteWorkspaceAction } from "@/app/(scoped)/orgs/actions"
 import { AdministrationLoadingState, AdministrationState } from "@/components/administration"
 import { DestructiveConfirmationDialog } from "@/components/destructive-confirmation-dialog"
@@ -27,17 +27,18 @@ async function ManageWorkspaceContent({
   if (scope.scope.kind !== "ready" || !scope.scope.organization.superadmin) {
     return <AdministrationState kind="forbidden" />
   }
-  if (scope.kind !== "ready") notFound()
+  if (scope.kind !== "ready") return missingRoute()
   const impact = await getDestructiveImpact(orgSlug, {
     operation: "workspace_delete",
     targetId: scope.workspace.id,
     targetType: "workspace",
   })
   if (impact === undefined) return <AdministrationState kind="forbidden" />
-  if (impact === null) notFound()
+  if (impact === null) return missingRoute()
 
   return (
     <div className="flex min-w-0 flex-col gap-10">
+      <RememberRoute />
       <section className="flex flex-col gap-4">
         <h2 className="px-4 text-lg font-medium md:px-6">Workspace Details</h2>
         <WorkspaceGeneralForm

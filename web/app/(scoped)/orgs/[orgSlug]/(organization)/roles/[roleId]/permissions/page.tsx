@@ -1,6 +1,6 @@
+import { RememberRoute, missingRoute } from "@/data/route-memory"
 import { AdministrationLoadingState } from "@/components/administration"
 import { Suspense } from "react"
-import { notFound } from "next/navigation"
 import { getRoleEditorData } from "@/data/roles"
 import { RoleEditor } from "../../role-editor"
 
@@ -23,8 +23,13 @@ async function RolePermissionsContent({
   const roleId = decodeURIComponent(encodedRoleId)
   const data = await getRoleEditorData(orgSlug, roleId)
   if (!data?.role) {
-    notFound()
+    return missingRoute()
   }
 
-  return <RoleEditor key={data.role.updatedAt} data={data} />
+  return (
+    <>
+      <RememberRoute />
+      <RoleEditor key={data.role.updatedAt} data={data} />
+    </>
+  )
 }

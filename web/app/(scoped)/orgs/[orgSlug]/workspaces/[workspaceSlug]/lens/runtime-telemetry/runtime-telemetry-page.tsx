@@ -1,3 +1,4 @@
+import { RememberRoute } from "@/data/route-memory"
 import { Suspense } from "react"
 import RuntimeTelemetryLoading from "./loading"
 import { AdministrationPageHeader } from "@/components/administration"
@@ -243,10 +244,17 @@ async function Filters({
   selection: Promise<ResolvedPageSelection>
 }) {
   const state = await selection
-  if (state.error) return <ErrorPanel message={state.error.message} />
+  if (state.error)
+    return (
+      <>
+        <RememberPageSelection {...state} />
+        <ErrorPanel message={state.error.message} />
+      </>
+    )
   return (
     <>
-      <RememberPageSelection selected={state.selected} requested={state.requested} />
+      <RememberRoute />
+      <RememberPageSelection {...state} />
       <LensFilters
         workspaceId={state.workspaceId}
         agents={state.agents}

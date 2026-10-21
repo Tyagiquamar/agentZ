@@ -138,6 +138,7 @@ type NavSessionsProps = {
 }
 
 const allAgentsValue = "__all_agents__"
+const chatDeletionSource = crypto.randomUUID()
 
 const chatSessionKeys = {
   preference: (workspaceId: string) => ["chatSessionPreference", workspaceId] as const,
@@ -537,11 +538,20 @@ function NavSessionsContent({
   })
   useEffect(() => {
     const channel = new BroadcastChannel(`chatSessionDeletion:${workspaceId}`)
-    channel.onmessage = (event: MessageEvent<Pick<ChatSession, "agent_name" | "session_id">>) => {
+    channel.onmessage = (
+      event: MessageEvent<Pick<ChatSession, "agent_name" | "session_id"> & { source?: string }>
+    ) => {
+      // The deleting tab already opens a fresh draft with its chosen agent.
+      if (event.data.source === chatDeletionSource) return
       void removeChatSessionFromCache(queryClient, workspaceId, event.data)
+      const agent = encodeURIComponent(event.data.agent_name)
+      const session = encodeURIComponent(event.data.session_id)
+      if (location.pathname === `${workspacePath}/agents/${agent}/sessions/${session}`) {
+        router.replace(`${workspacePath}/sessions/new`)
+      }
     }
     return () => channel.close()
-  }, [queryClient, workspaceId])
+  }, [queryClient, workspaceId, workspacePath, router])
 
   const watch = useQuery(chatSessionWatchOptions(workspaceId, userId))
 
@@ -1560,7 +1570,8 @@ function SessionCard({
       channel.postMessage({
         agent_name: session.agent_name,
         session_id: session.session_id,
-      } satisfies Pick<ChatSession, "agent_name" | "session_id">)
+        source: chatDeletionSource,
+      } satisfies Pick<ChatSession, "agent_name" | "session_id"> & { source: string })
       channel.close()
       toast.success("Chat deleted")
       setConfirmingDelete(false)

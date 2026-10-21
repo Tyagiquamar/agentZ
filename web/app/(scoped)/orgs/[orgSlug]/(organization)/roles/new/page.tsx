@@ -1,3 +1,4 @@
+import { RememberRoute } from "@/data/route-memory"
 import { Suspense } from "react"
 import { AdministrationLoadingState, AdministrationState } from "@/components/administration"
 import { getRoleEditorData } from "@/data/roles"
@@ -20,5 +21,10 @@ async function NewRoleContent({ params }: PageProps<"/orgs/[orgSlug]/roles/new">
     return <AdministrationState kind="forbidden" />
   }
 
-  return <RoleEditor data={data} />
+  return (
+    <>
+      <RememberRoute />
+      <RoleEditor data={data} />
+    </>
+  )
 }

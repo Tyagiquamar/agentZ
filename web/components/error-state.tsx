@@ -1,7 +1,11 @@
 "use client"
 
 import Image from "next/image"
+import Link from "next/link"
+import type { Route } from "next"
+import { usePathname, useRouter } from "next/navigation"
 import { useEffect } from "react"
+import { routeFallback } from "@/lib/page-selection"
 import { ArrowLeft, RefreshCw } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -107,6 +111,30 @@ export function ErrorState({
 type RouteErrorProps = {
   error: Error & { digest?: string }
   unstable_retry: () => void
+}
+
+/** Unknown saved paths recover only when this boundary actually mounts. */
+export function MissingPage() {
+  const pathname = usePathname()
+  const router = useRouter()
+  const fallback = routeFallback(pathname)
+  useEffect(() => {
+    if (new URLSearchParams(location.search).has("__restore")) {
+      router.replace(`${fallback}?__recovered=1` as Route)
+    }
+  }, [fallback, router])
+  return (
+    <main className="flex min-h-80 w-full flex-1 items-center justify-center px-6 py-12">
+      <div className="w-full max-w-2xl">
+        <ErrorState kind="not-found" />
+        <div className="flex justify-center">
+          <Button asChild>
+            <Link href={fallback}>Return to available pages</Link>
+          </Button>
+        </div>
+      </div>
+    </main>
+  )
 }
 
 export function PageError({ error, unstable_retry }: RouteErrorProps) {

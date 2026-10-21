@@ -1,7 +1,7 @@
+import { RememberRoute, missingRoute } from "@/data/route-memory"
 import type { Metadata } from "next"
 import type { UrlObject } from "node:url"
 import { Suspense } from "react"
-import { notFound } from "next/navigation"
 import { listSandboxesCachedQuery } from "@/data/sandbox.queries"
 import { listMcpConnectionsCachedQuery } from "@/data/mcp.queries"
 import { listSkills } from "@/lib/gateway/client"
@@ -98,7 +98,7 @@ async function UpdateSandboxContent({
 
   const sandbox = sandboxes.sandboxes.find((item) => item.name === name)
   if (!sandbox) {
-    notFound()
+    return missingRoute()
   }
   if (!sandbox.can_modify) {
     return <AdministrationState kind="forbidden" />
@@ -124,6 +124,7 @@ async function UpdateSandboxContent({
 
   return (
     <main className="flex min-h-0 flex-1 flex-col gap-6 pb-4 sm:pb-6">
+      <RememberRoute />
       <AdministrationPageHeader title="Update sandbox" />
       <SandboxWizard
         key={wizardKey}

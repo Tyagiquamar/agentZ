@@ -1,5 +1,6 @@
 "use server"
 
+import { invalidateResource } from "@/data/page-selection"
 import type { Route } from "next"
 import { redirect } from "next/navigation"
 import { updateTag } from "next/cache"
@@ -181,6 +182,11 @@ export async function deleteWorkflowScheduleFormAction(
     return { error: result.error }
   }
 
+  await invalidateResource(scope.workspaceId, {
+    agent_name: agentName,
+    workflow_name: parsed.data.workflow_name,
+    schedule_name: parsed.data.name,
+  })
   finishWorkflowScheduleMutation(scope, agentName)
   return { success: true }
 }

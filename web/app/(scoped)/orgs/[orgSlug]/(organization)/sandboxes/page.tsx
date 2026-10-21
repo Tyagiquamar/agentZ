@@ -1,3 +1,4 @@
+import { RememberRoute } from "@/data/route-memory"
 import { Suspense } from "react"
 import { AdministrationLoadingState, AdministrationState } from "@/components/administration"
 import { activateOrganization, resolveOrganizationSlug } from "@/data/organizations"
@@ -28,11 +29,14 @@ async function OrganizationSandboxesContent({
   if (!tenant.data.sandbox_capabilities.read) return <AdministrationState kind="forbidden" />
 
   return (
-    <SandboxesPage
-      basePath={`/orgs/${scope.organization.slug}/sandboxes`}
-      capabilities={tenant.data.sandbox_capabilities}
-      pageScope={{ kind: "organization", organizationName: scope.organization.name }}
-      searchParams={searchParams}
-    />
+    <>
+      <RememberRoute />
+      <SandboxesPage
+        basePath={`/orgs/${scope.organization.slug}/sandboxes`}
+        capabilities={tenant.data.sandbox_capabilities}
+        pageScope={{ kind: "organization", organizationName: scope.organization.name }}
+        searchParams={searchParams}
+      />
+    </>
   )
 }

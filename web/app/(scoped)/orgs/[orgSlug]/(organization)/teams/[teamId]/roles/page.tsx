@@ -1,6 +1,6 @@
+import { RememberRoute, missingRoute } from "@/data/route-memory"
 import { Suspense } from "react"
 import dynamic from "next/dynamic"
-import { notFound } from "next/navigation"
 import { AdministrationLoadingState, AdministrationState } from "@/components/administration"
 import { AssignmentForm } from "@/components/assignment-form"
 import { getTeamEffectiveAccessDetail } from "@/data/access"
@@ -29,9 +29,10 @@ async function TeamRolesContent({ params }: PageProps<"/orgs/[orgSlug]/teams/[te
   if (detail === undefined || editor === undefined) {
     return <AdministrationState kind="forbidden" />
   }
-  if (detail === null || !editor.team) notFound()
+  if (detail === null || !editor.team) return missingRoute()
   return (
     <div className="flex min-w-0 flex-col gap-8 pb-6">
+      <RememberRoute />
       <AssignmentForm
         kind="team"
         name={editor.team.name}

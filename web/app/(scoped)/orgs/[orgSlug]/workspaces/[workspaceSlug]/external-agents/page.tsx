@@ -1,3 +1,4 @@
+import { RememberRoute } from "@/data/route-memory"
 import { Suspense } from "react"
 import { connection } from "next/server"
 import {
@@ -37,5 +38,10 @@ async function ExternalAgentsContent({
         <AdministrationState kind="forbidden" />
       </main>
     )
-  return <ExternalAgents orgSlug={orgSlug} workspaceSlug={workspaceSlug} {...result} />
+  return (
+    <>
+      <RememberRoute />
+      <ExternalAgents orgSlug={orgSlug} workspaceSlug={workspaceSlug} {...result} />
+    </>
+  )
 }

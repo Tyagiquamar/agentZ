@@ -1,8 +1,8 @@
+import { missingRoute } from "@/data/route-memory"
 import { Suspense } from "react"
 import type { Route } from "next"
 import type { Metadata } from "next"
 import Link from "next/link"
-import { notFound } from "next/navigation"
 import { Activity, MessageCircle, MoreHorizontal } from "lucide-react"
 import { AdministrationLoadingState } from "@/components/administration"
 import { RouteTabs, type RouteTab } from "@/components/route-tabs"
@@ -46,12 +46,12 @@ async function WorkspaceAgentContent({
   const { orgSlug, workspaceSlug, agentName } = await params
   const scope = await getWorkspaceScope(orgSlug, workspaceSlug)
   if (scope.kind !== "ready") {
-    notFound()
+    return missingRoute()
   }
 
   const detail = await getWorkspaceAgentDetail(scope.workspace.id, agentName)
   if (!detail) {
-    notFound()
+    return missingRoute()
   }
 
   const workspacePath = `/orgs/${scope.scope.organization.slug}/workspaces/${scope.workspace.slug}`

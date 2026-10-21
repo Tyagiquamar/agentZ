@@ -1,3 +1,4 @@
+import { RememberRoute } from "@/data/route-memory"
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import { Suspense, type ComponentProps } from "react"
@@ -88,6 +89,7 @@ async function DashboardContent({
   const workspacePath = `/orgs/${scope.scope.organization.slug}/workspaces/${scope.workspace.slug}`
   return (
     <Suspense fallback={<DashboardSkeleton dashboard={loaded.dashboard} />}>
+      <RememberRoute />
       <DashboardData
         dashboard={loaded.dashboard}
         dashboards={listed.dashboards}
@@ -114,17 +116,20 @@ async function DashboardData(
     maxPoints
   )
   return (
-    <DashboardView
-      key={JSON.stringify([
-        props.workspaceId,
-        props.dashboard.agent_name,
-        props.dashboard.name,
-        props.from,
-        props.to,
-      ])}
-      {...props}
-      initialData={initialData}
-      maxPoints={maxPoints}
-    />
+    <>
+      <RememberRoute />
+      <DashboardView
+        key={JSON.stringify([
+          props.workspaceId,
+          props.dashboard.agent_name,
+          props.dashboard.name,
+          props.from,
+          props.to,
+        ])}
+        {...props}
+        initialData={initialData}
+        maxPoints={maxPoints}
+      />
+    </>
   )
 }

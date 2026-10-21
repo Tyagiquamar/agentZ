@@ -1,3 +1,4 @@
+import { RememberRoute } from "@/data/route-memory"
 import { Suspense } from "react"
 import { AdministrationLoadingState, AdministrationState } from "@/components/administration"
 import { getWorkspaceScope } from "@/data/workspaces"
@@ -24,12 +25,15 @@ async function NewWorkspaceSandboxContent({
     return <AdministrationState kind="forbidden" />
   const basePath = `/orgs/${scope.scope.organization.slug}/workspaces/${scope.workspace.slug}/sandboxes`
   return (
-    <NewSandboxPage
-      basePath={basePath}
-      providersHref={{
-        pathname: `/orgs/${scope.scope.organization.slug}/workspaces/${scope.workspace.slug}/inference/providers`,
-      }}
-      workspaceId={scope.workspace.id}
-    />
+    <>
+      <RememberRoute />
+      <NewSandboxPage
+        basePath={basePath}
+        providersHref={{
+          pathname: `/orgs/${scope.scope.organization.slug}/workspaces/${scope.workspace.slug}/inference/providers`,
+        }}
+        workspaceId={scope.workspace.id}
+      />
+    </>
   )
 }

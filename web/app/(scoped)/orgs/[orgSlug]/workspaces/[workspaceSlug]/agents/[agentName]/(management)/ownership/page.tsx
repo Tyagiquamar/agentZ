@@ -1,5 +1,5 @@
+import { RememberRoute, missingRoute } from "@/data/route-memory"
 import { Suspense } from "react"
-import { notFound } from "next/navigation"
 import {
   AdministrationLoadingState,
   AccessSourceChip,
@@ -38,12 +38,12 @@ async function AgentOwnershipContent({
   const { orgSlug, workspaceSlug, agentName } = await params
   const scope = await getWorkspaceScope(orgSlug, workspaceSlug)
   if (scope.kind !== "ready") {
-    notFound()
+    return missingRoute()
   }
 
   const detail = await getWorkspaceAgentDetail(scope.workspace.id, agentName)
   if (!detail) {
-    notFound()
+    return missingRoute()
   }
   if (!detail.agent.capabilities.manage_ownership) {
     return <AdministrationState kind="forbidden" />
@@ -57,6 +57,7 @@ async function AgentOwnershipContent({
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
+      <RememberRoute />
       <AgentOwnerForm
         actionScope={actionScope}
         agentName={agentName}

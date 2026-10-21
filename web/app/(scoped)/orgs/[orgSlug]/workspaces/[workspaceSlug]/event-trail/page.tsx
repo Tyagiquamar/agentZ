@@ -1,3 +1,4 @@
+import { RememberRoute } from "@/data/route-memory"
 import type { ListEventTrailEventsData } from "@/lib/gateway/client"
 import { EventTrailEvents } from "@/app/(scoped)/orgs/[orgSlug]/(organization)/event-trail/event-trail-events"
 import { AdministrationPageHeader, AdministrationState } from "@/components/administration"
@@ -30,12 +31,15 @@ export default async function WorkspaceEventTrailPage({
   }
 
   return (
-    <EventTrailEvents
-      actorImages={result.actorImages}
-      chart={result.chart}
-      eventTrail={result.eventTrail}
-      filters={body.filters}
-      workspace={result.workspace}
-    />
+    <>
+      <RememberRoute />
+      <EventTrailEvents
+        actorImages={result.actorImages}
+        chart={result.chart}
+        eventTrail={result.eventTrail}
+        filters={body.filters}
+        workspace={result.workspace}
+      />
+    </>
   )
 }

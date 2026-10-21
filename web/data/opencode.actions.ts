@@ -1,5 +1,6 @@
 "use server"
 
+import { invalidateResource } from "@/data/page-selection"
 import { isRedirectError } from "next/dist/client/components/redirect-error"
 import * as z from "zod"
 import { createAgentOpencodeClient } from "@/lib/opencode/server-client"
@@ -45,6 +46,10 @@ export async function deleteAgentSessionAction(
       }
     }
 
+    await invalidateResource(workspaceId, {
+      agent_name: agentName,
+      session_id: parsed.data.sessionID,
+    })
     return {
       error: undefined,
       success: true,

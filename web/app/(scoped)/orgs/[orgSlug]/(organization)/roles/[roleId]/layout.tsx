@@ -1,7 +1,7 @@
+import { missingRoute } from "@/data/route-memory"
 import { Suspense } from "react"
 import type { Route } from "next"
 import type { Metadata } from "next"
-import { notFound } from "next/navigation"
 import { AdministrationLoadingState } from "@/components/administration"
 import { RouteTabs, type RouteTab } from "@/components/route-tabs"
 import { SidebarTrigger } from "@/components/ui/sidebar"
@@ -35,7 +35,7 @@ async function RoleContent({ children, params }: LayoutProps<"/orgs/[orgSlug]/ro
   const roleId = decodeURIComponent(encodedRoleId)
   const data = await getRoleEditorData(orgSlug, roleId)
   if (!data?.role) {
-    notFound()
+    return missingRoute()
   }
 
   const root = `/orgs/${orgSlug}/roles/${roleId}`

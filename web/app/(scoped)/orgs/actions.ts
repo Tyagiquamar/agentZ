@@ -1,5 +1,6 @@
 "use server"
 
+import { invalidateRoute } from "@/data/route-memory"
 import { randomUUID } from "node:crypto"
 import { eq } from "drizzle-orm"
 import type { Route } from "next"
@@ -395,6 +396,8 @@ export async function removeMembershipAction(
     return { error: "The Membership no longer satisfies this action." }
   }
 
+  if (operation === "membership_remove")
+    await invalidateRoute(`/orgs/${orgSlug}/users/${encodeURIComponent(memberId)}`)
   revalidatePath(`/orgs/${orgSlug}/users/status/active`, "page")
   revalidatePath(`/orgs/${orgSlug}/users/status/disabled`, "page")
   return { href: `/orgs/${orgSlug}/users/status/active` as Route }
@@ -904,6 +907,7 @@ export async function deleteOrganizationRoleAction(
     }
   }
 
+  await invalidateRoute(`/orgs/${orgSlug}/roles/${encodeURIComponent(roleId)}`)
   updateTag(`organization:${result.organizationId}:roles`)
   updateTag(agentsTag)
   revalidatePath(`/orgs/${orgSlug}/roles`)
@@ -1036,6 +1040,9 @@ export async function deleteWorkspaceRoleAction(
     }
   }
 
+  await invalidateRoute(
+    `/orgs/${orgSlug}/workspaces/${workspaceSlug}/roles/${encodeURIComponent(roleId)}`
+  )
   updateTag(`organization:${result.organizationId}:workspace:${result.workspaceId}:roles`)
   updateTag(agentsTag)
   revalidatePath(`/orgs/${orgSlug}/workspaces/${workspaceSlug}/roles`)
@@ -1176,6 +1183,7 @@ export async function deleteTeamAction(
     return { error: "The Team no longer meets the deletion requirements." }
   }
 
+  await invalidateRoute(`/orgs/${orgSlug}/teams/${encodeURIComponent(teamId)}`)
   updateTag(`organization:${result.organizationId}:teams`)
   updateTag(agentsTag)
   for (const memberId of result.affectedMemberIds) {

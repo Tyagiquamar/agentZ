@@ -1,10 +1,10 @@
+import { RememberRoute, missingRoute } from "@/data/route-memory"
 import { searchParamStringSchema } from "@/lib/search-params"
 import { Suspense } from "react"
 import dynamic from "next/dynamic"
 import type { Metadata } from "next"
 import Link from "next/link"
 import type { Route } from "next"
-import { notFound } from "next/navigation"
 import { removeMembershipAction } from "@/app/(scoped)/orgs/actions"
 import { AdministrationLoadingState, AdministrationState } from "@/components/administration"
 import { AssignmentForm } from "@/components/assignment-form"
@@ -63,7 +63,7 @@ async function UserDetailContent({
   const tab = searchParamStringSchema.parse((await searchParams).tab)
   const data = await getMemberAdministration(orgSlug, memberId)
   if (data === undefined) return <AdministrationState kind="forbidden" />
-  if (data === null) notFound()
+  if (data === null) return missingRoute()
   const activeTab = ["access", "agents", "keys", "activity"].includes(tab ?? "") ? tab : "summary"
   const root = `/orgs/${orgSlug}/users/${memberId}`
   const tabs = [
@@ -76,6 +76,7 @@ async function UserDetailContent({
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
+      <RememberRoute />
       <header className="flex min-w-0 flex-col gap-4 px-4 pt-4 md:px-6 md:pt-6">
         <div className="flex flex-wrap items-start gap-2">
           <SidebarTrigger className="mt-0.5 shrink-0" />

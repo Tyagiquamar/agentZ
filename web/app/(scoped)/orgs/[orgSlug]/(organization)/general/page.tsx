@@ -1,3 +1,4 @@
+import { RememberRoute } from "@/data/route-memory"
 import { Suspense } from "react"
 import { AdministrationLoadingState, AdministrationState } from "@/components/administration"
 import { resolveOrganizationSlug } from "@/data/organizations"
@@ -24,5 +25,10 @@ async function GeneralContent({ params }: PageProps<"/orgs/[orgSlug]/general">) 
     return <AdministrationState kind="forbidden" />
   }
 
-  return <OrganizationForm organization={result.organization} />
+  return (
+    <>
+      <RememberRoute />
+      <OrganizationForm organization={result.organization} />
+    </>
+  )
 }

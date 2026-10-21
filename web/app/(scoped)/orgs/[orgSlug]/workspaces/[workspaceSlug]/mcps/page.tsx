@@ -1,3 +1,4 @@
+import { RememberRoute } from "@/data/route-memory"
 import { Suspense } from "react"
 import { AdministrationLoadingState, AdministrationState } from "@/components/administration"
 import { getWorkspaceScope } from "@/data/workspaces"
@@ -25,17 +26,20 @@ async function WorkspaceMcp({
     return <AdministrationState kind="forbidden" />
   const basePath = `/orgs/${orgSlug}/workspaces/${workspaceSlug}/mcps`
   return (
-    <McpPage
-      basePath={basePath}
-      canCreate={scope.workspace.capabilities.mcp_connections.create}
-      organizationId={scope.scope.organization.id}
-      pageScope={{
-        kind: "workspace",
-        organizationName: scope.scope.organization.name,
-        workspaceName: scope.workspace.name,
-      }}
-      searchParams={searchParams}
-      workspaceId={scope.workspace.id}
-    />
+    <>
+      <RememberRoute />
+      <McpPage
+        basePath={basePath}
+        canCreate={scope.workspace.capabilities.mcp_connections.create}
+        organizationId={scope.scope.organization.id}
+        pageScope={{
+          kind: "workspace",
+          organizationName: scope.scope.organization.name,
+          workspaceName: scope.workspace.name,
+        }}
+        searchParams={searchParams}
+        workspaceId={scope.workspace.id}
+      />
+    </>
   )
 }

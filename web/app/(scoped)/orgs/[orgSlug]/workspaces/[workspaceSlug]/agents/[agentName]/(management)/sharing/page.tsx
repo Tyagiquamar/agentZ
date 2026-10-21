@@ -1,6 +1,6 @@
+import { RememberRoute, missingRoute } from "@/data/route-memory"
 import { searchParamStringSchema } from "@/lib/search-params"
 import { Suspense } from "react"
-import { notFound } from "next/navigation"
 import { UsersRound } from "lucide-react"
 import { AdministrationLoadingState, AdministrationState } from "@/components/administration"
 import type { AgentActionScope } from "@/data/agent.actions"
@@ -30,7 +30,7 @@ async function AgentSharingContent({
   ])
   const scope = await getWorkspaceScope(orgSlug, workspaceSlug)
   if (scope.kind !== "ready") {
-    notFound()
+    return missingRoute()
   }
 
   const detail = await getWorkspaceAgentDetail(
@@ -39,7 +39,7 @@ async function AgentSharingContent({
     searchParamStringSchema.parse(page_token)
   )
   if (!detail) {
-    notFound()
+    return missingRoute()
   }
   if (!detail.agent.capabilities.share) {
     return <AdministrationState kind="forbidden" />
@@ -61,6 +61,7 @@ async function AgentSharingContent({
 
   return (
     <section className="flex min-w-0 flex-col gap-3">
+      <RememberRoute />
       <div className="flex items-center justify-between gap-4 px-4 md:px-6">
         <h2 className="flex items-center gap-2 text-lg font-medium">
           <UsersRound aria-hidden className="size-4 text-muted-foreground" />

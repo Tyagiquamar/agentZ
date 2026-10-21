@@ -1,3 +1,4 @@
+import { RememberRoute } from "@/data/route-memory"
 import type { ListEventTrailEventsData } from "@/lib/gateway/client"
 import { eventTrailQuerySchema, listOrganizationEventTrailEvents } from "@/data/event-trail"
 import { EventTrailEvents } from "./event-trail-events"
@@ -24,11 +25,14 @@ export default async function EventTrailPage({
   }
 
   return (
-    <EventTrailEvents
-      actorImages={eventTrail.actorImages}
-      chart={eventTrail.chart}
-      eventTrail={eventTrail.eventTrail}
-      filters={body.filters}
-    />
+    <>
+      <RememberRoute />
+      <EventTrailEvents
+        actorImages={eventTrail.actorImages}
+        chart={eventTrail.chart}
+        eventTrail={eventTrail.eventTrail}
+        filters={body.filters}
+      />
+    </>
   )
 }

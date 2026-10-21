@@ -1,5 +1,6 @@
+import { RememberRoute, missingRoute } from "@/data/route-memory"
 import { Suspense } from "react"
-import { notFound, redirect } from "next/navigation"
+import { redirect } from "next/navigation"
 import { getWorkspaceScope } from "@/data/workspaces"
 import { listAllAgentsCachedQuery } from "@/data/agent.queries"
 import { listCodingProjects } from "@/lib/gateway/client"
@@ -25,7 +26,7 @@ export default function ProjectsPage(props: Props) {
 async function ProjectsContent({ params, searchParams }: Props) {
   const [{ orgSlug, workspaceSlug }, search] = await Promise.all([params, searchParams])
   const scope = await getWorkspaceScope(orgSlug, workspaceSlug)
-  if (scope.kind !== "ready" || scope.workspace.type !== "coding") notFound()
+  if (scope.kind !== "ready" || scope.workspace.type !== "coding") return missingRoute()
   if (search.project)
     redirect(
       `/orgs/${orgSlug}/workspaces/${workspaceSlug}/sessions/new?${new URLSearchParams({ project: search.project, ...(search.agent ? { agent: search.agent } : {}) })}`
@@ -38,16 +39,19 @@ async function ProjectsContent({ params, searchParams }: Props) {
   if (projects.error || agents.error) throw new Error("Could not load projects")
   const usableAgents = agents.agents.filter((agent) => agent.capabilities.use)
   return (
-    <Projects
-      projects={projects.data}
-      agentNames={usableAgents.map((agent) => agent.name)}
-      workspaceId={scope.workspace.id}
-      workspacePath={`/orgs/${orgSlug}/workspaces/${workspaceSlug}`}
-      pageScope={{
-        kind: "workspace",
-        organizationName: scope.scope.organization.name,
-        workspaceName: scope.workspace.name,
-      }}
-    />
+    <>
+      <RememberRoute />
+      <Projects
+        projects={projects.data}
+        agentNames={usableAgents.map((agent) => agent.name)}
+        workspaceId={scope.workspace.id}
+        workspacePath={`/orgs/${orgSlug}/workspaces/${workspaceSlug}`}
+        pageScope={{
+          kind: "workspace",
+          organizationName: scope.scope.organization.name,
+          workspaceName: scope.workspace.name,
+        }}
+      />
+    </>
   )
 }

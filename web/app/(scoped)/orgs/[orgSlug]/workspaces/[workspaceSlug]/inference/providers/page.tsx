@@ -1,3 +1,4 @@
+import { RememberRoute } from "@/data/route-memory"
 import { Suspense } from "react"
 import { AdministrationLoadingState, AdministrationState } from "@/components/administration"
 import { searchParamStringSchema } from "@/lib/search-params"
@@ -26,15 +27,18 @@ async function WorkspaceInferenceProviders({
   if (scope.kind !== "ready" || !scope.workspace.capabilities.inference_providers.read)
     return <AdministrationState kind="forbidden" />
   return (
-    <InferenceProvidersPage
-      capabilities={scope.workspace.capabilities.inference_providers}
-      pageToken={searchParamStringSchema.parse(page_token)}
-      pageScope={{
-        kind: "workspace",
-        organizationName: scope.scope.organization.name,
-        workspaceName: scope.workspace.name,
-      }}
-      scope={{ workspaceId: scope.workspace.id }}
-    />
+    <>
+      <RememberRoute />
+      <InferenceProvidersPage
+        capabilities={scope.workspace.capabilities.inference_providers}
+        pageToken={searchParamStringSchema.parse(page_token)}
+        pageScope={{
+          kind: "workspace",
+          organizationName: scope.scope.organization.name,
+          workspaceName: scope.workspace.name,
+        }}
+        scope={{ workspaceId: scope.workspace.id }}
+      />
+    </>
   )
 }

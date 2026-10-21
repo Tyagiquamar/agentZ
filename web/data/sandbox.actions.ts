@@ -1,5 +1,6 @@
 "use server"
 
+import { invalidateRoute } from "@/data/route-memory"
 import { updateTag } from "next/cache"
 import {
   createSandbox,
@@ -332,6 +333,7 @@ export async function deleteSandboxFormAction(
     return { error: result.error }
   }
 
+  await invalidateRoute(`${scope.basePath}/update/${encodeURIComponent(sandboxName.data)}`)
   updateTag(sandboxesTag)
   updateTag(skillsTag)
   return { success: true }

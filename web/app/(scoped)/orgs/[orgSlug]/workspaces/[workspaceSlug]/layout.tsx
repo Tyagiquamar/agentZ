@@ -1,3 +1,4 @@
+import { missingRoute } from "@/data/route-memory"
 import { PageSelectionProvider } from "@/components/page-selection"
 import { getSelectionHistory } from "@/data/page-selection"
 import { CodingActivity } from "@/components/blocks/coding/git-actions"
@@ -5,7 +6,7 @@ import { Suspense } from "react"
 import type { Route } from "next"
 import type { Metadata } from "next"
 import { headers } from "next/headers"
-import { notFound, permanentRedirect, redirect } from "next/navigation"
+import { permanentRedirect, redirect } from "next/navigation"
 import { AgentZTransition } from "@/components/scope-transition"
 import {
   AdministrationLayout,
@@ -15,7 +16,6 @@ import {
 import { AppShell } from "@/components/blocks/app-shell"
 import { AppSidebar } from "@/components/blocks/sidebar/sidebar"
 import { ThemeSync } from "@/components/theme-sync"
-import { scheduleOrganizationRouteMemory } from "@/data/organizations"
 import { getCurrentUserPreferences } from "@/data/user-preferences"
 import { getWorkspaceScope } from "@/data/workspaces"
 import { signInURL } from "@/lib/sign-in-redirect"
@@ -54,8 +54,11 @@ async function WorkspaceContent({
   if (result.scope.kind === "unauthorized") {
     redirect(signInURL({ returnTo: `/orgs/${orgSlug}/workspaces/${workspaceSlug}` }))
   }
-  if (result.scope.kind === "not-found" || result.kind === "not-found") {
-    notFound()
+  if (result.scope.kind === "not-found") {
+    return missingRoute(`/orgs/${orgSlug}`)
+  }
+  if (result.kind === "not-found") {
+    return missingRoute(`/orgs/${orgSlug}/workspaces/${workspaceSlug}`)
   }
 
   const preferences = await getCurrentUserPreferences()
@@ -116,7 +119,7 @@ async function WorkspaceContent({
     )
   }
   if (result.kind !== "ready") {
-    notFound()
+    return missingRoute(`/orgs/${orgSlug}/workspaces/${workspaceSlug}`)
   }
 
   const requestHeaders = await headers()
@@ -132,17 +135,6 @@ async function WorkspaceContent({
   }
 
   const root = `/orgs/${result.scope.organization.slug}/workspaces/${result.workspace.slug}`
-  const rememberedPath = requestedURL.pathname.startsWith(`${root}/event-trail/`)
-    ? `${root}/event-trail`
-    : requestedURL.pathname
-  if (rememberedPath !== root) {
-    await scheduleOrganizationRouteMemory(
-      result.scope.organization.id,
-      rememberedPath,
-      result.workspace.id
-    )
-  }
-
   const selectionScope = JSON.stringify([
     result.scope.organizationSession.session.user.id,
     result.scope.organization.id,

@@ -1,3 +1,4 @@
+import { RememberRoute } from "@/data/route-memory"
 import { Suspense } from "react"
 import { and, asc, eq, isNull } from "drizzle-orm"
 import { AdministrationLoadingState, AdministrationState } from "@/components/administration"
@@ -62,15 +63,18 @@ async function ApplicationsContent({ params }: PageProps<"/orgs/[orgSlug]/applic
       .orderBy(asc(schema.oauthClientOrigins.origin)),
   ])
   return (
-    <Applications
-      organizationId={result.organization.id}
-      clients={clients.map((client) => ({
-        ...client,
-        authorizedOrigins: origins
-          .filter((entry) => entry.clientId === client.clientId)
-          .map((entry) => entry.origin),
-      }))}
-      delegationEnabled={setting?.enabled ?? false}
-    />
+    <>
+      <RememberRoute />
+      <Applications
+        organizationId={result.organization.id}
+        clients={clients.map((client) => ({
+          ...client,
+          authorizedOrigins: origins
+            .filter((entry) => entry.clientId === client.clientId)
+            .map((entry) => entry.origin),
+        }))}
+        delegationEnabled={setting?.enabled ?? false}
+      />
+    </>
   )
 }

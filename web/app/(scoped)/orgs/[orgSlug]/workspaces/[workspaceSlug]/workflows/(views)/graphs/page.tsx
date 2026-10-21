@@ -1,3 +1,4 @@
+import { RememberRoute } from "@/data/route-memory"
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import { Suspense } from "react"
@@ -50,11 +51,19 @@ async function WorkspaceWorkflows({
 }
 
 async function WorkflowContent({ selection }: { selection: Promise<ResolvedPageSelection> }) {
-  const { selected, requested, workflow, error } = await selection
-  if (error) return <ErrorPanel message={error.message} />
+  const state = await selection
+  const { selected, workflow, error } = state
+  if (error)
+    return (
+      <>
+        <RememberPageSelection {...state} />
+        <ErrorPanel message={error.message} />
+      </>
+    )
   return (
     <>
-      <RememberPageSelection selected={selected} requested={requested} />
+      <RememberRoute />
+      <RememberPageSelection {...state} />
       {!selected.agent_name ? (
         <EmptyState message="No agents available" />
       ) : !workflow ? (

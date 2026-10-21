@@ -4,6 +4,8 @@ import {
   encodeSelectionHistory,
   readSelectionHistory,
   rememberSelection,
+  invalidateSelections,
+  routeFallback,
   restoreSelection,
   selectionCookie,
   selectionURL,
@@ -203,5 +205,76 @@ test("Lens sessions stay under their native or external parent on both pages", (
       restoreSelection(choices, scope, page, { app_client_id: "new" }).session_id,
       undefined
     )
+  }
+})
+
+test("deletion invalidates related pages and descendants while preserving scopes and parents", () => {
+  const saved: SelectionHistory = [
+    [scope, "workflows/graphs", { agent_name: "a", workflow_name: "gone" }],
+    [scope, "workflows/evaluations", { agent_name: "a", workflow_name: "gone" }],
+    [
+      scope,
+      "workflows/triggers/runs/graph",
+      { agent_name: "a", workflow_name: "gone", run_name: "run" },
+    ],
+    [scope, "workflows/graphs", { agent_name: "b", workflow_name: "gone" }],
+    ["another scope", "workflows/graphs", { agent_name: "a", workflow_name: "gone" }],
+    [scope, "lens/traces", { agent_name: "a", session_id: "session" }],
+  ]
+  const pruned = invalidateSelections(saved, scope, [{ agent_name: "a", workflow_name: "gone" }])
+  assert.deepEqual(
+    pruned.slice(0, 3).map((entry) => entry[2]),
+    Array(3).fill({ agent_name: "a" })
+  )
+  assert.deepEqual(pruned.slice(3), saved.slice(3))
+  const removed = invalidateSelections(pruned, scope, [{ agent_name: "a" }])
+  assert.deepEqual(removed, saved.slice(3, 5))
+})
+
+test("session deletion respects native and external composite identities", () => {
+  const saved: SelectionHistory = [
+    [scope, "lens/traces", { app_client_id: "one", session_id: "shared-id" }],
+    [scope, "lens/mcp", { app_client_id: "one", session_id: "shared-id" }],
+    [scope, "lens/traces", { app_client_id: "two", session_id: "shared-id" }],
+    [scope, "lens/mcp", { agent_name: "one", session_id: "shared-id" }],
+  ]
+  const pruned = invalidateSelections(saved, scope, [
+    { app_client_id: "one", session_id: "shared-id" },
+  ])
+  assert.deepEqual(
+    pruned.slice(0, 2).map((entry) => entry[2]),
+    Array(2).fill({ app_client_id: "one" })
+  )
+  assert.deepEqual(pruned.slice(2), saved.slice(2))
+})
+
+test("navigation marks only inherited choices and removes hints from committed URLs", () => {
+  const selected = { agent_name: "agent", workflow_name: "saved-workflow" }
+  const url = selectionURL("/page", new URLSearchParams("sort_by=name"), selected, true, {
+    agent_name: "agent",
+  })
+  assert.equal(new URL(url, "http://test").searchParams.get("__remembered"), "workflow_name")
+  assert.equal(
+    new URL(
+      selectionURL("/page", new URLSearchParams(url.split("?")[1]), selected, false),
+      "http://test"
+    ).searchParams.has("__remembered"),
+    false
+  )
+})
+test("missing detail routes recover within their directory without repeating deleted IDs", () => {
+  const root = "/orgs/org/workspaces/workspace"
+  const cases = [
+    [`${root}/agents/deleted/sharing`, `${root}/agents`],
+    [`${root}/agents/deleted/sessions/session`, `${root}/sessions/new`],
+    [`${root}/sandboxes/update/deleted`, `${root}/sandboxes`],
+    ["/orgs/org/roles/deleted/permissions", "/orgs/org/roles"],
+    ["/orgs/org/users/deleted", "/orgs/org/users/status/active"],
+    ["/orgs/org/workspaces/manage/deleted/inherited/skills", "/orgs/org/workspaces"],
+    [root, "/orgs/org"],
+    ["/orgs/deleted", "/settings/account"],
+  ] as const
+  for (const [path, fallback] of cases) {
+    assert.equal(routeFallback(path), fallback)
   }
 })

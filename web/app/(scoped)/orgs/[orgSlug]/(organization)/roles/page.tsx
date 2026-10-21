@@ -1,3 +1,4 @@
+import { RememberRoute } from "@/data/route-memory"
 import type { Route } from "next"
 import Link from "next/link"
 import { Plus } from "lucide-react"
@@ -27,6 +28,7 @@ export default async function RolesPage({
   }
   return (
     <div className="flex min-w-0 flex-col gap-6">
+      <RememberRoute />
       <AdministrationPageHeader
         actions={
           <Button asChild>

@@ -1,3 +1,4 @@
+import { RememberRoute } from "@/data/route-memory"
 import { redirect } from "next/navigation"
 import { AdministrationPageHeader, AdministrationState } from "@/components/administration"
 import { resolveWorkspaceDestination } from "@/data/workspaces"
@@ -17,6 +18,7 @@ export default async function WorkspacePage({
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
+      {destination ? <RememberRoute /> : null}
       <AdministrationPageHeader title="Overview" />
       <AdministrationState
         kind={destination ? "empty" : "forbidden"}

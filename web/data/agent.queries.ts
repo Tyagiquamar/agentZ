@@ -109,8 +109,9 @@ export async function getWorkspaceAgentDetail(
 
   const client = getGatewayServerClient(workspaceId)
   const agents = await listAgents({ query: { agent_name: [agentName], limit: 1 }, client })
+  if (agents.error) throw new Error("Could not load agent", { cause: agents.error })
   const agent = agents.data?.agents.find((item) => item.name === agentName)
-  if (agents.error || !agent) return undefined
+  if (!agent) return undefined
 
   const canManageAccess = agent.capabilities.share || agent.capabilities.manage_ownership
   const [owner, targets, shares] = await Promise.all([
@@ -124,7 +125,12 @@ export async function getWorkspaceAgentDetail(
         })
       : undefined,
   ])
-  if (owner.error || targets?.error || shares?.error) return undefined
+  if (owner.error) {
+    if (owner.error.code === "not_found") return undefined
+    throw new Error("Could not load agent owner", { cause: owner.error })
+  }
+  if (targets?.error) throw new Error("Could not load agent access", { cause: targets.error })
+  if (shares?.error) throw new Error("Could not load agent shares", { cause: shares.error })
 
   const accessTargets = targets?.data.targets ?? []
   const targetsByID = new Map(accessTargets.map((target) => [target.id, target]))

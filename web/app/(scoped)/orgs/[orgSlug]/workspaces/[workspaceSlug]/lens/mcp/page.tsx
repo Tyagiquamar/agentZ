@@ -1,3 +1,4 @@
+import { RememberRoute } from "@/data/route-memory"
 import type { Metadata } from "next"
 import { Suspense } from "react"
 import * as z from "zod"
@@ -104,10 +105,17 @@ async function Filters({
   selection: Promise<ResolvedPageSelection>
 }) {
   const [{ range }, scope] = await Promise.all([searchParams, selection])
-  if (scope.error) return <ErrorPanel message={scope.error.message} />
+  if (scope.error)
+    return (
+      <>
+        <RememberPageSelection {...scope} />
+        <ErrorPanel message={scope.error.message} />
+      </>
+    )
   return (
     <>
-      <RememberPageSelection selected={scope.selected} requested={scope.requested} />
+      <RememberRoute />
+      <RememberPageSelection {...scope} />
       <LensFilters
         workspaceId={scope.workspaceId}
         defaultAppClientID={scope.defaultAppClientID}
@@ -141,7 +149,12 @@ async function Graph({
   const scope = await selection
 
   if (scope.error) {
-    return <ErrorPanel message={scope.error.message} />
+    return (
+      <>
+        <RememberPageSelection {...scope} />
+        <ErrorPanel message={scope.error.message} />
+      </>
+    )
   }
 
   if (!scope.subject) {

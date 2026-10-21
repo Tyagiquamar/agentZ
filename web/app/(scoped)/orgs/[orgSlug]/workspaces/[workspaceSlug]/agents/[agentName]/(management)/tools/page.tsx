@@ -1,5 +1,5 @@
+import { RememberRoute, missingRoute } from "@/data/route-memory"
 import { Suspense } from "react"
-import { notFound } from "next/navigation"
 import { AdministrationLoadingState, AdministrationState } from "@/components/administration"
 import { getWorkspaceScope } from "@/data/workspaces"
 import { listAgentTools } from "@/lib/gateway/client"
@@ -25,7 +25,7 @@ async function AgentToolsContent({
 }: PageProps<"/orgs/[orgSlug]/workspaces/[workspaceSlug]/agents/[agentName]/tools">) {
   const { orgSlug, workspaceSlug, agentName } = await params
   const scope = await getWorkspaceScope(orgSlug, workspaceSlug)
-  if (scope.kind !== "ready") notFound()
+  if (scope.kind !== "ready") return missingRoute()
 
   const result = await listAgentTools({
     client: getGatewayServerClient(scope.workspace.id),
@@ -40,5 +40,10 @@ async function AgentToolsContent({
       />
     )
   }
-  return <AgentTools agentName={agentName} workspaceId={scope.workspace.id} initial={result.data} />
+  return (
+    <>
+      <RememberRoute />
+      <AgentTools agentName={agentName} workspaceId={scope.workspace.id} initial={result.data} />
+    </>
+  )
 }

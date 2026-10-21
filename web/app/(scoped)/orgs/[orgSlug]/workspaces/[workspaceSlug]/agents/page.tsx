@@ -1,3 +1,4 @@
+import { RememberRoute } from "@/data/route-memory"
 import { Suspense } from "react"
 import { AgentDialog } from "@/app/agent/agent-dialog"
 import { AgentTable } from "@/app/agent-table"
@@ -104,6 +105,7 @@ async function WorkspaceAgents({
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
+      <RememberRoute />
       <AdministrationPageHeader
         actions={
           scope.workspace.capabilities.agents.author ? (

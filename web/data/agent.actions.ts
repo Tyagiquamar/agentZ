@@ -1,5 +1,6 @@
 "use server"
 
+import { invalidateResource } from "@/data/page-selection"
 import * as z from "zod"
 import { revalidatePath, updateTag } from "next/cache"
 import {
@@ -17,7 +18,7 @@ import {
 } from "@/lib/gateway/client"
 import type { CreateAgentFormState, DeleteAgentFormState, WorkspacePath } from "@/data/types"
 import { createAgentSimpleFormSchema } from "@/data/schema"
-import { agentsTag, skillsTag } from "@/data/cache"
+import { agentsTag, skillsTag, agentWorkflowsTag, workflowRunsTag } from "@/data/cache"
 import { getGatewayServerClient } from "@/lib/gateway/server-client"
 import {
   zAgentShareCapability,
@@ -218,6 +219,9 @@ export async function deleteAgentFormAction(
     return { error: result.error }
   }
 
+  await invalidateResource(scope.workspaceId, { agent_name: agentName })
+  updateTag(`${agentWorkflowsTag(agentName)}:${scope.workspaceId}`)
+  updateTag(`${workflowRunsTag}:${scope.workspaceId}`)
   updateTag(agentsTag)
   updateTag(skillsTag)
   return { success: true }

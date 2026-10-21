@@ -1,5 +1,6 @@
+import { RememberRoute, missingRoute } from "@/data/route-memory"
 import type { Metadata, Route } from "next"
-import { notFound, redirect } from "next/navigation"
+import { redirect } from "next/navigation"
 import { Suspense } from "react"
 import { Shimmer } from "@/components/ai-elements/shimmer"
 import { activateOrganization, resolveOrganizationSlug } from "@/data/organizations"
@@ -36,7 +37,7 @@ async function OrganizationProvisioning({ params }: { params: Promise<{ orgSlug:
     redirect(signInURL({ returnTo: `/orgs/${orgSlug}/setting-up` }))
   }
   if (scope.kind !== "ready") {
-    notFound()
+    return missingRoute()
   }
   await activateOrganization(scope.organization.id)
   const tenant = await ensureTenant({
@@ -52,6 +53,7 @@ async function OrganizationProvisioning({ params }: { params: Promise<{ orgSlug:
 
   return (
     <main className="flex min-h-svh w-full items-center justify-center">
+      <RememberRoute />
       <meta httpEquiv="refresh" content="2" />
       <Shimmer className="text-center">We are provisioning this Organisation.</Shimmer>
     </main>

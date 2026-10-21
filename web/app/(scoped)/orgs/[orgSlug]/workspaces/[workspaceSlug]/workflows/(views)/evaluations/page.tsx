@@ -1,3 +1,4 @@
+import { RememberRoute } from "@/data/route-memory"
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import { Suspense } from "react"
@@ -32,15 +33,23 @@ async function Content({
   const [route, search] = await Promise.all([params, searchParams])
   const scope = await getWorkspaceScope(route.orgSlug, route.workspaceSlug)
   if (scope.kind !== "ready" || scope.workspace.type === "coding") notFound()
-  const { selected, requested, agents, workflow, error } = await resolvePageSelection(
+  const state = await resolvePageSelection(
     scope,
     "workflows/evaluations",
     searchSchema.parse(search)
   )
-  if (error) return <AdministrationState kind="failed" description={error.message} />
+  const { workflow, agents, error } = state
+  if (error)
+    return (
+      <>
+        <RememberPageSelection {...state} />
+        <AdministrationState kind="failed" description={error.message} />
+      </>
+    )
   return (
     <>
-      <RememberPageSelection selected={selected} requested={requested} />
+      <RememberRoute />
+      <RememberPageSelection {...state} />
       {workflow ? (
         <Evaluations
           key={`${workflow.agent_name}:${workflow.workflow_name}`}

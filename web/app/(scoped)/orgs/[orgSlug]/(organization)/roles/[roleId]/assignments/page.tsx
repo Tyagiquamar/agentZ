@@ -1,6 +1,6 @@
+import { RememberRoute, missingRoute } from "@/data/route-memory"
 import { AdministrationLoadingState } from "@/components/administration"
 import { Suspense } from "react"
-import { notFound } from "next/navigation"
 import { getOrganizationRoleUsers } from "@/data/roles"
 import { RoleAssignments } from "../../role-assignments"
 
@@ -23,16 +23,19 @@ async function RoleAssignmentsContent({
   const roleId = decodeURIComponent(encodedRoleId)
   const data = await getOrganizationRoleUsers(orgSlug, roleId)
   if (!data?.role) {
-    notFound()
+    return missingRoute()
   }
 
   return (
-    <RoleAssignments
-      immutable={data.role.systemRole !== "superadmin" && data.role.immutable}
-      name={data.role.name}
-      orgSlug={orgSlug}
-      roleId={roleId}
-      users={data.users}
-    />
+    <>
+      <RememberRoute />
+      <RoleAssignments
+        immutable={data.role.systemRole !== "superadmin" && data.role.immutable}
+        name={data.role.name}
+        orgSlug={orgSlug}
+        roleId={roleId}
+        users={data.users}
+      />
+    </>
   )
 }

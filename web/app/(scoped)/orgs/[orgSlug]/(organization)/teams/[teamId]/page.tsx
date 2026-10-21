@@ -1,6 +1,6 @@
+import { RememberRoute, missingRoute } from "@/data/route-memory"
 import { AdministrationLoadingState } from "@/components/administration"
 import { Suspense } from "react"
-import { notFound } from "next/navigation"
 import { getDestructiveImpact } from "@/data/operations"
 import { getTeamEditorData } from "@/data/teams"
 import { TeamDelete } from "../team-delete"
@@ -26,9 +26,10 @@ async function TeamSummaryContent({ params }: PageProps<"/orgs/[orgSlug]/teams/[
       targetType: "team",
     }),
   ])
-  if (!data?.team) notFound()
+  if (!data?.team) return missingRoute()
   return (
     <div className="flex flex-col gap-6">
+      <RememberRoute />
       <TeamForm data={data} embedded orgSlug={orgSlug} />
       {impact ? (
         <TeamDelete

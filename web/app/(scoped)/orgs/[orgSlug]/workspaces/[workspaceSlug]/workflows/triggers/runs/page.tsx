@@ -1,3 +1,4 @@
+import { RememberRoute } from "@/data/route-memory"
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import { Suspense } from "react"
@@ -88,12 +89,19 @@ async function Filters({
   selection: Promise<ResolvedPageSelection>
 }) {
   const state = await selection
-  if (state.error) return <ErrorPanel message={state.error.message} />
+  if (state.error)
+    return (
+      <>
+        <RememberPageSelection {...state} />
+        <ErrorPanel message={state.error.message} />
+      </>
+    )
   const displays =
     state.selected.type === "webhook" ? await listWebhookAPIKeyDisplaysCachedQuery(workspaceId) : {}
   return (
     <>
-      <RememberPageSelection selected={state.selected} requested={state.requested} />
+      <RememberRoute />
+      <RememberPageSelection {...state} />
       <RunsFilters
         agents={state.agents}
         schedules={state.schedules}

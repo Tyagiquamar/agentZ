@@ -1,3 +1,4 @@
+import { RememberRoute } from "@/data/route-memory"
 import type { Route } from "next"
 import { redirect } from "next/navigation"
 import { AdministrationPageHeader, AdministrationState } from "@/components/administration"
@@ -27,6 +28,7 @@ export default async function OrganizationPage({
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
+      <RememberRoute />
       <AdministrationPageHeader title="Overview" />
       <AdministrationState
         description="Your Roles and Teams do not grant access to any Workspace."

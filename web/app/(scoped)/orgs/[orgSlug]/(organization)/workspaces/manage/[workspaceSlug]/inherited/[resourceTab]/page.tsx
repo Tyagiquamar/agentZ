@@ -1,5 +1,5 @@
+import { RememberRoute, missingRoute } from "@/data/route-memory"
 import { Suspense } from "react"
-import { notFound } from "next/navigation"
 import { InheritedResourceForm } from "@/app/(scoped)/orgs/[orgSlug]/workspaces/[workspaceSlug]/settings/inherited/inherited-resource-form"
 import { AdministrationLoadingState, AdministrationState } from "@/components/administration"
 import { listInferenceProvidersCachedQuery } from "@/data/inference-provider.queries"
@@ -42,7 +42,7 @@ async function InheritedResourceContent({
     "inference-providers": { label: "Inference Providers", type: "inference_provider" },
   }
   const resource = resources[resourceTab]
-  if (!resource) notFound()
+  if (!resource) return missingRoute()
   const result = await getWorkspaceInheritedResources(
     orgSlug,
     workspaceSlug,
@@ -75,16 +75,19 @@ async function InheritedResourceContent({
   }
 
   return (
-    <InheritedResourceForm
-      displayNames={displayNames}
-      iconSources={iconSources}
-      label={resource.label}
-      orgSlug={orgSlug}
-      resources={result.resources}
-      resourceType={resource.type}
-      sortBy={sorting.sort_by}
-      sortOrder={sorting.sort_order}
-      workspaceSlug={workspaceSlug}
-    />
+    <>
+      <RememberRoute />
+      <InheritedResourceForm
+        displayNames={displayNames}
+        iconSources={iconSources}
+        label={resource.label}
+        orgSlug={orgSlug}
+        resources={result.resources}
+        resourceType={resource.type}
+        sortBy={sorting.sort_by}
+        sortOrder={sorting.sort_order}
+        workspaceSlug={workspaceSlug}
+      />
+    </>
   )
 }

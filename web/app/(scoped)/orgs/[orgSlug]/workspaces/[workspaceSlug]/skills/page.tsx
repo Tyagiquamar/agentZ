@@ -1,3 +1,4 @@
+import { RememberRoute } from "@/data/route-memory"
 import { Suspense } from "react"
 import { AdministrationLoadingState, AdministrationState } from "@/components/administration"
 import { listAgentsCachedQuery } from "@/data/agent.queries"
@@ -28,16 +29,19 @@ async function WorkspaceSkills({
     return <AdministrationState kind="forbidden" />
   }
   return (
-    <SkillsClient
-      agents={agents}
-      canCreateImmutable={scope.workspace.capabilities.skills.create}
-      canReadImmutable={scope.workspace.capabilities.skills.read}
-      pageScope={{
-        kind: "workspace",
-        organizationName: scope.scope.organization.name,
-        workspaceName: scope.workspace.name,
-      }}
-      workspaceId={scope.workspace.id}
-    />
+    <>
+      <RememberRoute />
+      <SkillsClient
+        agents={agents}
+        canCreateImmutable={scope.workspace.capabilities.skills.create}
+        canReadImmutable={scope.workspace.capabilities.skills.read}
+        pageScope={{
+          kind: "workspace",
+          organizationName: scope.scope.organization.name,
+          workspaceName: scope.workspace.name,
+        }}
+        workspaceId={scope.workspace.id}
+      />
+    </>
   )
 }

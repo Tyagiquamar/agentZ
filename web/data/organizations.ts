@@ -3,10 +3,8 @@ import "server-only"
 import type { Route } from "next"
 import { cache } from "react"
 import { and, asc, countDistinct, eq, isNotNull, isNull, or } from "drizzle-orm"
-import { after } from "next/server"
 import { getDB, schema } from "@/db"
 import { getAuth, getAuthSession } from "@/lib/auth"
-import { dayjs } from "@/lib/format"
 
 export type OrganizationSummary = {
   id: string
@@ -320,55 +318,13 @@ export async function resolveOrganizationDestination(
   return organizationDestination(organization, lastContext?.route)
 }
 
-export async function scheduleOrganizationRouteMemory(
-  organizationId: string,
-  route: string,
-  workspaceId: string | null
-) {
-  const organizationSession = await getOrganizationSession()
-  const organization = organizationSession?.organizations.find(
-    (candidate) => candidate.id === organizationId
-  )
-  if (!organizationSession || !organization) {
-    return
-  }
-
-  const root = `/orgs/${organization.slug}`
-  if (route !== root && !route.startsWith(`${root}/`)) {
-    return
-  }
-
-  const userId = organizationSession.session.user.id
-  after(async () => {
-    await getDB()
-      .insert(schema.lastAccessibleContexts)
-      .values({
-        organizationId: organization.id,
-        route,
-        userId,
-        workspaceId,
-      })
-      .onConflictDoUpdate({
-        target: [
-          schema.lastAccessibleContexts.userId,
-          schema.lastAccessibleContexts.organizationId,
-        ],
-        set: {
-          route,
-          updatedAt: dayjs().toDate(),
-          workspaceId,
-        },
-      })
-  })
-}
-
 function organizationDestination(organization: OrganizationSummary, savedRoute?: string): Route {
   const root = `/orgs/${organization.slug}`
   if (savedRoute?.startsWith(`${root}/`)) {
     const segments = savedRoute.slice(root.length + 1).split("/")
     const workspaceLanding = segments[0] === "workspaces" && segments.length === 2
     if (!workspaceLanding) {
-      return savedRoute as Route
+      return `${savedRoute}?__restore=1` as Route
     }
   }
 

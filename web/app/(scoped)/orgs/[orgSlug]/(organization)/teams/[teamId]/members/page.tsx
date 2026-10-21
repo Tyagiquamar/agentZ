@@ -1,6 +1,6 @@
+import { RememberRoute, missingRoute } from "@/data/route-memory"
 import { AdministrationLoadingState } from "@/components/administration"
 import { Suspense } from "react"
-import { notFound } from "next/navigation"
 import { UserIdentity } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -28,9 +28,10 @@ export default function TeamMembersPage(
 async function TeamMembersContent({ params }: PageProps<"/orgs/[orgSlug]/teams/[teamId]/members">) {
   const { orgSlug, teamId } = await params
   const team = await getTeamDetail(orgSlug, teamId)
-  if (!team) notFound()
+  if (!team) return missingRoute()
   return (
     <div className="w-full min-w-0 border-b">
+      <RememberRoute />
       <Table aria-label={`${team.name} members`}>
         <TableHeader>
           <TableRow>

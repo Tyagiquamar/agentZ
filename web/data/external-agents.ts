@@ -1,3 +1,4 @@
+import { invalidateResource } from "@/data/page-selection"
 import "server-only"
 
 import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm"
@@ -222,6 +223,7 @@ export async function changeExternalAgent(
       await tx.delete(schema.oauthClients).where(eq(schema.oauthClients.clientId, clientId))
       await tx.execute(sql`select pg_notify('agentz_external_agents', ${agent.workspaceId})`)
     })
+    await invalidateResource(scope.workspace.id, { app_client_id: clientId })
     return
   }
   await revokeOAuthApplication(clientId, agent.userId)

@@ -1,3 +1,4 @@
+import { RememberRoute } from "@/data/route-memory"
 import { searchParamStringSchema } from "@/lib/search-params"
 import { Suspense } from "react"
 import { AdministrationLoadingState, AdministrationState } from "@/components/administration"
@@ -31,11 +32,14 @@ async function OrganizationInferenceProvidersContent({
   if (!tenant.data?.inference_provider_capabilities.read)
     return <AdministrationState kind="forbidden" />
   return (
-    <InferenceProvidersPage
-      capabilities={tenant.data.inference_provider_capabilities}
-      pageToken={searchParamStringSchema.parse(page_token)}
-      pageScope={{ kind: "organization", organizationName: scope.organization.name }}
-      scope={{}}
-    />
+    <>
+      <RememberRoute />
+      <InferenceProvidersPage
+        capabilities={tenant.data.inference_provider_capabilities}
+        pageToken={searchParamStringSchema.parse(page_token)}
+        pageScope={{ kind: "organization", organizationName: scope.organization.name }}
+        scope={{}}
+      />
+    </>
   )
 }

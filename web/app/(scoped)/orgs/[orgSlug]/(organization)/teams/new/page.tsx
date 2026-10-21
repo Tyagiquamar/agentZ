@@ -1,3 +1,4 @@
+import { RememberRoute } from "@/data/route-memory"
 import { Suspense } from "react"
 import { getTeamEditorData } from "@/data/teams"
 import { AdministrationLoadingState, AdministrationState } from "@/components/administration"
@@ -17,5 +18,10 @@ async function NewTeamContent({ params }: PageProps<"/orgs/[orgSlug]/teams/new">
   const { orgSlug } = await params
   const data = await getTeamEditorData(orgSlug)
   if (!data) return <AdministrationState kind="forbidden" />
-  return <TeamForm data={data} orgSlug={orgSlug} />
+  return (
+    <>
+      <RememberRoute />
+      <TeamForm data={data} orgSlug={orgSlug} />
+    </>
+  )
 }

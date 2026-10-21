@@ -1,3 +1,4 @@
+import { RememberRoute } from "@/data/route-memory"
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import { Suspense } from "react"
@@ -47,11 +48,18 @@ async function WorkflowRunGraphContent({
   }
   const parsed = workflowRunGraphSearchParamsSchema.parse(search)
   const state = await resolvePageSelection(workspace, "workflows/triggers/runs/graph", parsed)
-  if (state.error) return <ErrorPanel message={state.error.message} />
+  if (state.error)
+    return (
+      <>
+        <RememberPageSelection {...state} />
+        <ErrorPanel message={state.error.message} />
+      </>
+    )
   const { selected, workflow, workflowRun } = state
   return (
     <>
-      <RememberPageSelection selected={state.selected} requested={state.requested} />
+      <RememberRoute />
+      <RememberPageSelection {...state} />
       <WorkflowRunGraphFilters
         agents={state.agents}
         workflows={state.workflows}

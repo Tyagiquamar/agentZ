@@ -1,7 +1,8 @@
+import { RememberRoute, missingRoute } from "@/data/route-memory"
 import { randomInt } from "node:crypto"
 import type { Metadata } from "next"
 import { headers } from "next/headers"
-import { notFound, redirect } from "next/navigation"
+import { redirect } from "next/navigation"
 import { Projects, ProjectPicker } from "@/components/blocks/coding/projects"
 import { CodingChat } from "@/components/blocks/coding/chat"
 import { ChatShell } from "@/components/blocks/chat/chat-shell"
@@ -32,7 +33,7 @@ export default async function NewChatPage({
     headers(),
   ])
   const scope = await getWorkspaceScope(orgSlug, workspaceSlug)
-  if (scope.kind !== "ready") notFound()
+  if (scope.kind !== "ready") return missingRoute()
 
   const [agentsResult, preference, authSession] = await Promise.all([
     listAllAgentsCachedQuery(scope.workspace.id),
@@ -50,6 +51,7 @@ export default async function NewChatPage({
   if (!selected) {
     return (
       <main className="grid h-full flex-1 place-items-center px-6">
+        <RememberRoute />
         <div className="max-w-sm text-center">
           <h1 className="text-xl font-semibold">No agent is ready for chat</h1>
           <p className="mt-2 text-sm text-muted-foreground">
@@ -79,35 +81,47 @@ export default async function NewChatPage({
       }
       if (projects.data.length === 0)
         return (
-          <Projects
-            projects={[]}
-            agentNames={agents.map((agent) => agent.name)}
-            workspaceId={scope.workspace.id}
-            workspacePath={workspacePath}
-          />
+          <>
+            <RememberRoute />
+            <Projects
+              projects={[]}
+              agentNames={agents.map((agent) => agent.name)}
+              workspaceId={scope.workspace.id}
+              workspacePath={workspacePath}
+            />
+          </>
         )
-      return <ProjectPicker projects={projects.data} workspacePath={workspacePath} />
+      return (
+        <>
+          <RememberRoute />
+          <ProjectPicker projects={projects.data} workspacePath={workspacePath} />
+        </>
+      )
     }
     const project = await getCodingProject({
       client: getGatewayServerClient(scope.workspace.id),
       path: { projectId: query.project },
     })
-    if (project.response?.status === 404) notFound()
+    if (project.response?.status === 404) return missingRoute()
     if (project.error) throw new Error("Could not load project", { cause: project.error })
     return (
-      <CodingChat
-        key={project.data.project.id}
-        project={project.data.project}
-        greetingIndex={randomInt(5)}
-        agentNames={agents.map((agent) => agent.name)}
-        chatPreferences={preference.data}
-        workspaceId={scope.workspace.id}
-        workspacePath={workspacePath}
-      />
+      <>
+        <RememberRoute />
+        <CodingChat
+          key={project.data.project.id}
+          project={project.data.project}
+          greetingIndex={randomInt(5)}
+          agentNames={agents.map((agent) => agent.name)}
+          chatPreferences={preference.data}
+          workspaceId={scope.workspace.id}
+          workspacePath={workspacePath}
+        />
+      </>
     )
   }
   return (
     <main className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden p-0">
+      <RememberRoute />
       <ChatShell
         agentName={selected.name}
         agentNames={agents.map((agent) => agent.name)}

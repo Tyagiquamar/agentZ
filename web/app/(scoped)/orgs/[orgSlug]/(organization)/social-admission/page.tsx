@@ -1,3 +1,4 @@
+import { RememberRoute } from "@/data/route-memory"
 import { Suspense } from "react"
 import {
   AdministrationLoadingState,
@@ -26,6 +27,7 @@ async function SocialAdmissionContent({ params }: PageProps<"/orgs/[orgSlug]/soc
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
+      <RememberRoute />
       <AdministrationPageHeader title="Social admission" />
       <SocialAdmissionForm data={data} orgSlug={orgSlug} />
     </div>

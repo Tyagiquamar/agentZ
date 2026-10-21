@@ -47,6 +47,7 @@ export function proxy(request: NextRequest) {
   if (getSessionCookie(request)) {
     const requestHeaders = new Headers(request.headers)
     requestHeaders.set("x-agentz-pathname", `${request.nextUrl.pathname}${request.nextUrl.search}`)
+    requestHeaders.set("x-agentz-visit-start", new Date().toISOString())
     return NextResponse.next({ request: { headers: requestHeaders } })
   }
 

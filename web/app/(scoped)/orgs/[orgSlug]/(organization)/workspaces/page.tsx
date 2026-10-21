@@ -1,3 +1,4 @@
+import { RememberRoute } from "@/data/route-memory"
 import { searchParamStringSchema } from "@/lib/search-params"
 import { Suspense } from "react"
 import type { Route } from "next"
@@ -43,6 +44,7 @@ async function WorkspacesContent({
   }
   return (
     <div className="flex flex-col gap-6">
+      <RememberRoute />
       <AdministrationPageHeader
         actions={
           result.directory.can_create ? (

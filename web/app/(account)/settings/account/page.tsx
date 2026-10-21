@@ -5,6 +5,7 @@ import * as z from "zod"
 import { GitHubDark, GitHubLight, Google } from "@ridemountainpig/svgl-react"
 import { Mail } from "lucide-react"
 import { ErrorState } from "@/components/error-state"
+import { RestoredRoute } from "@/components/scope-transition"
 import { AdministrationPageHeader } from "@/components/administration"
 import { headers } from "next/headers"
 import { authErrorParamSchema, socialProviderSchema, type AuthError } from "@/app/(auth)/shared"
@@ -39,6 +40,7 @@ export default function AccountPage({
 }) {
   return (
     <main className="flex min-w-0 flex-1 flex-col gap-6 p-0">
+      <RestoredRoute />
       <AdministrationPageHeader title="Account" />
       <Suspense fallback={<ProviderSkeleton />}>
         <IdentityProviders />

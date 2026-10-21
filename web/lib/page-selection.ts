@@ -1,3 +1,4 @@
+import type { Route } from "next"
 import { z } from "zod"
 
 export const selectionCookie = "agentz-selection-v1"
@@ -31,9 +32,30 @@ const selectionSchema = z.object({
 
 export type PageSelection = z.infer<typeof selectionSchema>
 export type SelectionField = keyof PageSelection
+export const selectionFields = selectionSchema.keyof().options
 
 const historySchema = z.array(z.tuple([z.string(), z.enum(selectionPages), selectionSchema]))
 export type SelectionHistory = z.infer<typeof historySchema>
+
+/** Remove a missing resource and its descendants without losing other parents. */
+export function invalidateSelections(
+  history: SelectionHistory,
+  scope: string,
+  missing: PageSelection[]
+): SelectionHistory {
+  return history.flatMap(([key, page, saved]): SelectionHistory => {
+    if (key !== scope) return [[key, page, saved]]
+    const next = { ...saved }
+    const groups = selectionGroups(page, saved)
+    for (const resource of missing) {
+      const fields = selectionFields.filter((field) => resource[field] !== undefined)
+      if (!fields.length || !fields.every((field) => saved[field] === resource[field])) continue
+      const index = groups.findLastIndex((group) => group.some((field) => fields.includes(field)))
+      for (const field of groups.slice(index).flat()) delete next[field]
+    }
+    return next.agent_name || next.app_client_id ? [[key, page, next]] : []
+  })
+}
 
 /** Cookie data is the only untyped boundary; malformed preferences are disposable. */
 export function readSelectionHistory(value: string | undefined): SelectionHistory {
@@ -150,12 +172,20 @@ export function selectionURL(
   pathname: string,
   search: URLSearchParams,
   selection: PageSelection,
-  resetPage: boolean
+  resetPage: boolean,
+  explicit?: PageSelection
 ): string {
   const next = new URLSearchParams(search)
-  for (const field of Object.keys(selectionSchema.shape)) next.delete(field)
+  next.delete("__remembered")
+  for (const field of selectionFields) next.delete(field)
   for (const [field, value] of Object.entries(selection)) {
     if (value) next.set(field, value)
+  }
+  if (explicit) {
+    const remembered = selectionFields.filter(
+      (field) => selection[field] !== undefined && explicit[field] === undefined
+    )
+    if (remembered.length) next.set("__remembered", remembered.join(","))
   }
   if (resetPage) {
     for (const key of [
@@ -169,4 +199,22 @@ export function selectionURL(
   }
   const query = next.toString()
   return query ? `${pathname}?${query}` : pathname
+}
+
+/** Keep recovery inside the resource's directory instead of repeating the saved redirect. */
+export function routeFallback(path: string): Route {
+  const parts = path.split("/")
+  if (!parts[2]) return "/settings/account"
+  const root = `/orgs/${parts[2]}`
+  if (parts[3] === "workspaces" && parts[4] === "manage") return `${root}/workspaces` as Route
+  const workspace = parts[3] === "workspaces" && parts[4] !== undefined
+  const base = workspace ? `${root}/workspaces/${parts[4]}` : root
+  const tail = parts.slice(workspace ? 5 : 3)
+  if (tail[0] === "users") return `${base}/users/status/active` as Route
+  if (tail[0] === "agents" && tail[2] === "sessions") return `${base}/sessions/new` as Route
+  if (["agents", "teams", "roles", "sandboxes"].includes(tail[0] ?? "")) {
+    return `${base}/${tail[0]}` as Route
+  }
+  if (base !== path) return base as Route
+  return workspace ? (root as Route) : "/settings/account"
 }

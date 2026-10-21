@@ -1,8 +1,8 @@
+import { missingRoute } from "@/data/route-memory"
 import { Suspense } from "react"
 import type { Route } from "next"
 import type { Metadata } from "next"
 import Link from "next/link"
-import { notFound } from "next/navigation"
 import { ExternalLink } from "lucide-react"
 import {
   AdministrationLoadingState,
@@ -47,7 +47,7 @@ async function ManageWorkspaceContent({
   if (scope.scope.kind !== "ready" || !scope.scope.organization.superadmin) {
     return <AdministrationState kind="forbidden" />
   }
-  if (scope.kind !== "ready") notFound()
+  if (scope.kind !== "ready") return missingRoute()
 
   const root = `/orgs/${orgSlug}/workspaces/manage/${workspaceSlug}`
   const tabs = [

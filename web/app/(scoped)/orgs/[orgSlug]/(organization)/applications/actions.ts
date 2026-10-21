@@ -1,6 +1,13 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
+import { cookies, headers } from "next/headers"
+import {
+  encodeSelectionHistory,
+  invalidateSelections,
+  readSelectionHistory,
+  selectionCookie,
+} from "@/lib/page-selection"
 import {
   changeOAuthApplication,
   saveOAuthApplication,
@@ -42,6 +49,26 @@ export async function changeApplicationAction(
 ) {
   try {
     const result = await changeOAuthApplication(organizationId, clientId, operation)
+    if (operation === "delete") {
+      const jar = await cookies()
+      const current = jar.get(selectionCookie)?.value
+      let history = readSelectionHistory(
+        current === undefined ? undefined : encodeURIComponent(current)
+      )
+      const previous = encodeSelectionHistory(history)
+      // Client IDs are global; the deleted app cannot remain valid in another saved scope.
+      for (const scope of new Set(history.map(([scope]) => scope))) {
+        history = invalidateSelections(history, scope, [{ app_client_id: clientId }])
+      }
+      const next = encodeSelectionHistory(history)
+      if (next !== previous)
+        jar.set(selectionCookie, decodeURIComponent(next), {
+          path: "/",
+          maxAge: 15552000,
+          sameSite: "lax",
+          secure: (await headers()).get("x-forwarded-proto") === "https",
+        })
+    }
     revalidatePath("/orgs", "layout")
     return result
   } catch (error) {

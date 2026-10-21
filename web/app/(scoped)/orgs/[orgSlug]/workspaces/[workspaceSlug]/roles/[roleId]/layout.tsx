@@ -1,7 +1,7 @@
+import { missingRoute } from "@/data/route-memory"
 import { Suspense } from "react"
 import type { Route } from "next"
 import type { Metadata } from "next"
-import { notFound } from "next/navigation"
 import { RoleDelete } from "@/app/(scoped)/orgs/[orgSlug]/(organization)/roles/role-delete"
 import { AdministrationLoadingState } from "@/components/administration"
 import { RouteTabs, type RouteTab } from "@/components/route-tabs"
@@ -40,7 +40,7 @@ async function WorkspaceRoleContent({
   const roleId = decodeURIComponent(encodedRoleId)
   const data = await getWorkspaceRoleEditorData(orgSlug, workspaceSlug, roleId)
   if (!data?.role) {
-    notFound()
+    return missingRoute()
   }
 
   const root = `/orgs/${orgSlug}/workspaces/${workspaceSlug}/roles/${roleId}`

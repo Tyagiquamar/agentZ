@@ -193,7 +193,10 @@ export async function listTraceSessionFilterAction(
   if (!sessionListResult.data) {
     return {
       data: undefined,
-      error: { code: "session_list_failed", message: "Could not load trace sessions" },
+      error: {
+        code: sessionListResult.response.status === 404 ? "not_found" : "session_list_failed",
+        message: "Could not load trace sessions",
+      },
     }
   }
 

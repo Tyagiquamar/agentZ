@@ -1,5 +1,6 @@
 "use server"
 
+import { invalidateResource } from "@/data/page-selection"
 import type { Route } from "next"
 import { updateTag } from "next/cache"
 import * as z from "zod"
@@ -68,6 +69,11 @@ export async function deleteWorkflowRunAction(
     }
   }
 
+  await invalidateResource(scope.workspaceId, {
+    agent_name: agentName,
+    workflow_name: workflowName,
+    run_name: parsed.data.run_name,
+  })
   updateTag(workflowRunsTag)
 
   return {

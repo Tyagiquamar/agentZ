@@ -2,8 +2,25 @@
 
 import type { Route } from "next"
 import Image from "next/image"
-import { useRouter } from "next/navigation"
-import { createContext, useContext, useTransition } from "react"
+import { usePathname, useRouter } from "next/navigation"
+import { createContext, useContext, useEffect, useTransition } from "react"
+
+import { toast } from "sonner"
+
+/** Remove restoration hints after arrival so copied links retain explicit-link behavior. */
+export function RestoredRoute() {
+  const pathname = usePathname()
+  useEffect(() => {
+    const url = new URL(location.href)
+    if (!url.searchParams.has("__restore") && !url.searchParams.has("__recovered")) return
+    if (url.searchParams.has("__recovered"))
+      toast.info("The previously viewed resource is no longer available.")
+    url.searchParams.delete("__restore")
+    url.searchParams.delete("__recovered")
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`)
+  }, [pathname])
+  return null
+}
 
 type ScopeTransition = {
   isPending: boolean

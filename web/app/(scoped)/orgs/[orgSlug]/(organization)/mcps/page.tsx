@@ -1,3 +1,4 @@
+import { RememberRoute } from "@/data/route-memory"
 import { Suspense } from "react"
 import { AdministrationLoadingState, AdministrationState } from "@/components/administration"
 import { activateOrganization, resolveOrganizationSlug } from "@/data/organizations"
@@ -25,12 +26,15 @@ async function OrganizationMcpContent({ params, searchParams }: PageProps<"/orgs
   if (!tenant.data.mcp_connection_capabilities.read) return <AdministrationState kind="forbidden" />
   const basePath = `/orgs/${orgSlug}/mcps`
   return (
-    <McpPage
-      basePath={basePath}
-      canCreate={tenant.data.mcp_connection_capabilities.create}
-      organizationId={scope.organization.id}
-      pageScope={{ kind: "organization", organizationName: scope.organization.name }}
-      searchParams={searchParams}
-    />
+    <>
+      <RememberRoute />
+      <McpPage
+        basePath={basePath}
+        canCreate={tenant.data.mcp_connection_capabilities.create}
+        organizationId={scope.organization.id}
+        pageScope={{ kind: "organization", organizationName: scope.organization.name }}
+        searchParams={searchParams}
+      />
+    </>
   )
 }

@@ -1,6 +1,6 @@
+import { RememberRoute, missingRoute } from "@/data/route-memory"
 import { AdministrationLoadingState } from "@/components/administration"
 import { Suspense } from "react"
-import { notFound } from "next/navigation"
 import {
   Table,
   TableBody,
@@ -32,16 +32,17 @@ async function WorkspaceAgentContent({
   const { orgSlug, workspaceSlug, agentName } = await params
   const scope = await getWorkspaceScope(orgSlug, workspaceSlug)
   if (scope.kind !== "ready") {
-    notFound()
+    return missingRoute()
   }
 
   const detail = await getWorkspaceAgentDetail(scope.workspace.id, agentName)
   if (!detail) {
-    notFound()
+    return missingRoute()
   }
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
+      <RememberRoute />
       <section className="min-w-0 space-y-3">
         <h2 className="px-4 text-lg font-medium md:px-6">Runtime configuration</h2>
         <div className="w-full min-w-0 border-b">
