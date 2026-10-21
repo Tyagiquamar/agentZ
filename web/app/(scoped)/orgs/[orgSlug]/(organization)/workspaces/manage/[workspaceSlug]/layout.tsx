@@ -86,7 +86,7 @@ async function ManageWorkspaceContent({
         </div>
         <RouteTabs label="Workspace administration" tabs={tabs} />
       </header>
-      {children}
+      <Suspense fallback={<AdministrationLoadingState />}>{children}</Suspense>
     </div>
   )
 }

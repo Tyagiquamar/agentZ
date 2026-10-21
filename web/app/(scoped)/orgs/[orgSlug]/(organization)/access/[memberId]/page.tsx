@@ -9,5 +9,5 @@ export default async function AccessDetailPage({
   params: Promise<{ memberId: string; orgSlug: string }>
 }) {
   const { memberId, orgSlug } = await params
-  redirect(`/orgs/${orgSlug}/users/${memberId}?tab=access` as Route)
+  redirect(`/orgs/${orgSlug}/users/${memberId}/access` as Route)
 }

@@ -46,7 +46,7 @@ export function TraceInspectorSheet({
     <SheetContent
       size="full"
       aria-describedby={description ? descriptionId : undefined}
-      className="gap-0 overflow-hidden border-l bg-background p-0 text-sm shadow-2xl md:w-[89vw] lg:w-[84vw] [&_svg]:size-4"
+      className="gap-0 overflow-hidden border-l bg-background p-0 text-sm shadow-2xl md:w-[89vw] lg:w-[84vw] [&_svg]:size-4 [&_svg]:shrink-0"
     >
       <SheetHeader>
         <SheetTitle className="text-md truncate">{title}</SheetTitle>
@@ -245,14 +245,14 @@ export function TraceInspectorDetail({
 }) {
   return (
     <div className="flex flex-col lg:h-full">
-      <div className="flex h-10 shrink-0 items-center justify-between bg-muted/10 px-4 lg:px-5 [&_svg]:size-4">
+      <div className="flex h-10 shrink-0 items-center justify-between bg-muted/10 px-4 lg:px-5 [&_svg]:size-4 [&_svg]:shrink-0">
         <div className="flex min-w-0 items-center gap-3">
           <span className="text-sm text-muted-foreground">Inspect:</span>
           <span className="truncate text-sm font-medium">{title}</span>
         </div>
       </div>
       <div className="overflow-auto px-4 py-4 lg:min-h-0 lg:flex-1 lg:px-6">
-        <div className="mb-5 flex flex-wrap items-center gap-3 text-sm text-muted-foreground lg:gap-4 [&_svg]:size-4">
+        <div className="mb-5 flex flex-wrap items-center gap-3 text-sm text-muted-foreground lg:gap-4 [&_svg]:size-4 [&_svg]:shrink-0">
           {started ? (
             <span className="inline-flex items-center gap-1">
               <Calendar />

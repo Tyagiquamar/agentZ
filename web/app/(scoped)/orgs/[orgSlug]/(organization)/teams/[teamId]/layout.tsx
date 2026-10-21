@@ -53,7 +53,7 @@ async function TeamContent({ children, params }: LayoutProps<"/orgs/[orgSlug]/te
         </div>
         <RouteTabs label="Team details" tabs={tabs} />
       </header>
-      {children}
+      <Suspense fallback={<AdministrationLoadingState />}>{children}</Suspense>
     </div>
   )
 }

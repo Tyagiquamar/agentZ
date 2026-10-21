@@ -31,7 +31,7 @@ async function WorkspaceInheritanceContent({
       <div className="px-4 md:px-6">
         <RouteTabs label="Inherited resource types" tabs={tabs} />
       </div>
-      {children}
+      <Suspense fallback={<AdministrationLoadingState />}>{children}</Suspense>
     </div>
   )
 }

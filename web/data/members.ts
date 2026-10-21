@@ -170,6 +170,53 @@ async function superadminActor(orgSlug: string): Promise<Actor | undefined> {
   }
 }
 
+export const getMemberInvitationOptions = cache(async (orgSlug: string) => {
+  const actor = await superadminActor(orgSlug)
+  if (!actor) return
+  const db = getDB()
+  const [roleRows, teams] = await Promise.all([
+    db
+      .select({
+        id: schema.roleScopes.roleId,
+        name: schema.roleScopes.displayName,
+        workspace: schema.workspaces.name,
+      })
+      .from(schema.roleScopes)
+      .leftJoin(
+        schema.workspaces,
+        and(
+          eq(schema.workspaces.id, schema.roleScopes.workspaceId),
+          eq(schema.workspaces.organizationId, schema.roleScopes.organizationId)
+        )
+      )
+      .where(
+        and(
+          eq(schema.roleScopes.organizationId, actor.organization.id),
+          or(isNull(schema.roleScopes.workspaceId), isNull(schema.workspaces.deletedAt))
+        )
+      )
+      .orderBy(
+        sql`${schema.workspaces.name} ASC NULLS FIRST`,
+        asc(schema.roleScopes.displayName),
+        asc(schema.roleScopes.roleId)
+      )
+      .limit(500),
+    db
+      .select({ id: schema.teams.id, name: schema.teams.name })
+      .from(schema.teams)
+      .where(eq(schema.teams.organizationId, actor.organization.id))
+      .orderBy(asc(schema.teams.name), asc(schema.teams.id))
+      .limit(500),
+  ])
+  return {
+    roles: roleRows.map((role) => ({
+      ...role,
+      scope: role.workspace === null ? "Organisation" : `Workspace · ${role.workspace}`,
+    })),
+    teams,
+  }
+})
+
 export async function getMemberDirectory(
   orgSlug: string,
   page?: { tab: MemberTab; pageToken?: string }
@@ -186,7 +233,7 @@ export async function getMemberDirectory(
       : undefined
   const invitationCursor =
     page?.tab === "invited" ? decodePageToken(invitationPageCursor, page.pageToken) : undefined
-  const [members, invitations, roleRows, teamRows] = await Promise.all([
+  const [members, invitations, options] = await Promise.all([
     db
       .select({
         id: schema.members.id,
@@ -289,39 +336,10 @@ export async function getMemberDirectory(
         desc(schema.organizationInvitations.id)
       )
       .limit(page ? 51 : 500),
-    db
-      .select({
-        id: schema.roleScopes.roleId,
-        name: schema.roleScopes.displayName,
-        workspace: schema.workspaces.name,
-      })
-      .from(schema.roleScopes)
-      .leftJoin(
-        schema.workspaces,
-        and(
-          eq(schema.workspaces.id, schema.roleScopes.workspaceId),
-          eq(schema.workspaces.organizationId, schema.roleScopes.organizationId)
-        )
-      )
-      .where(
-        and(
-          eq(schema.roleScopes.organizationId, actor.organization.id),
-          or(isNull(schema.roleScopes.workspaceId), isNull(schema.workspaces.deletedAt))
-        )
-      )
-      .orderBy(
-        sql`${schema.workspaces.name} ASC NULLS FIRST`,
-        asc(schema.roleScopes.displayName),
-        asc(schema.roleScopes.roleId)
-      )
-      .limit(500),
-    db
-      .select({ id: schema.teams.id, name: schema.teams.name })
-      .from(schema.teams)
-      .where(eq(schema.teams.organizationId, actor.organization.id))
-      .orderBy(asc(schema.teams.name), asc(schema.teams.id))
-      .limit(500),
+    getMemberInvitationOptions(orgSlug),
   ])
+
+  if (!options) return
 
   const memberPage = page && members.length > 50 ? members.slice(0, 50) : members
   const invitationPage = page && invitations.length > 50 ? invitations.slice(0, 50) : invitations
@@ -495,11 +513,8 @@ export async function getMemberDirectory(
     })),
     organization: actor.organization,
     nextPageToken,
-    roles: roleRows.map((role) => ({
-      ...role,
-      scope: role.workspace === null ? "Organisation" : `Workspace · ${role.workspace}`,
-    })),
-    teams: teamRows,
+    roles: options.roles,
+    teams: options.teams,
   }
 }
 

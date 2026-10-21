@@ -23,9 +23,9 @@ export function TelemetryTabs({ basePath }: { basePath: string }) {
   }
 
   const tabs = [
-    { href: href("process"), label: "Process" },
-    { href: href("file"), label: "File" },
-    { href: href("network"), label: "Network" },
+    { href: href("process"), activePath: basePath as Route, label: "Process" },
+    { href: href("file"), activePath: `${basePath}/file` as Route, label: "File" },
+    { href: href("network"), activePath: `${basePath}/network` as Route, label: "Network" },
   ] satisfies RouteTab[]
 
   return <RouteTabs label="Runtime telemetry" tabs={tabs} />

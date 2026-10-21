@@ -288,7 +288,7 @@ export function CodingTerminal({
                     event.currentTarget.scrollIntoView({ block: "nearest", inline: "nearest" })
                   }
                 >
-                  <TerminalSquare className="size-3.5" />
+                  <TerminalSquare className="size-3.5 shrink-0" />
                   <span className="truncate">{label}</span>
                 </TabsPrimitive.Trigger>
                 <Button

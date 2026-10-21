@@ -73,7 +73,7 @@ async function RoleContent({ children, params }: LayoutProps<"/orgs/[orgSlug]/ro
         ) : null}
         <RouteTabs label="Role details" tabs={tabs} />
       </header>
-      {children}
+      <Suspense fallback={<AdministrationLoadingState />}>{children}</Suspense>
     </div>
   )
 }

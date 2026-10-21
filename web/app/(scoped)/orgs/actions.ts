@@ -323,7 +323,7 @@ export async function saveMemberAssignmentsAction(
   for (const teamId of result.teamIds) {
     updateTag(`organization:${result.organizationId}:team:${teamId}`)
   }
-  revalidatePath(`/orgs/${orgSlug}/users/${memberId}`)
+  revalidatePath(`/orgs/${orgSlug}/users/${memberId}`, "layout")
   revalidatePath(`/orgs/${orgSlug}/users/status/active`, "page")
   revalidatePath(`/orgs/${orgSlug}/teams`)
   return { saved: true }
@@ -347,6 +347,7 @@ export async function restoreMembershipAction(orgSlug: string, memberId: string)
 
   revalidatePath(`/orgs/${orgSlug}/users/status/active`, "page")
   revalidatePath(`/orgs/${orgSlug}/users/status/disabled`, "page")
+  revalidatePath(`/orgs/${orgSlug}/users/${memberId}`, "layout")
 }
 
 export async function removeMembershipAction(
@@ -397,6 +398,7 @@ export async function removeMembershipAction(
 
   revalidatePath(`/orgs/${orgSlug}/users/status/active`, "page")
   revalidatePath(`/orgs/${orgSlug}/users/status/disabled`, "page")
+  revalidatePath(`/orgs/${orgSlug}/users/${memberId}`, "layout")
   return { href: `/orgs/${orgSlug}/users/status/active` as Route }
 }
 

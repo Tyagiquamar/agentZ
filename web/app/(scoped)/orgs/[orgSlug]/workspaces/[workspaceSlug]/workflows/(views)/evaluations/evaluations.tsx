@@ -551,7 +551,7 @@ function EvaluationLabel({ evaluation }: { evaluation: WorkflowEvaluationSummary
       <span className="sr-only">
         {date} · {names.join(", ") || "No models"}
       </span>
-      <CalendarClock aria-hidden className="text-muted-foreground" />
+      <CalendarClock aria-hidden className="shrink-0 text-muted-foreground" />
       <span aria-hidden className="shrink-0 text-muted-foreground">
         {date}
       </span>
