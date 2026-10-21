@@ -1797,7 +1797,7 @@ export default function Chat({
                       type={showStop ? "button" : "submit"}
                       variant={showStop ? "destructive" : "default"}
                       size="icon"
-                      className="size-9 rounded-full shadow-xs transition-all duration-150 hover:scale-105 active:shadow-none enabled:inset-shadow-[0_1px_rgb(255_255_255_/_0.16)] disabled:hover:scale-100"
+                      className="size-9 rounded-full shadow-xs transition-all duration-150 hover:scale-105 active:shadow-none enabled:inset-shadow-[0_1px_rgb(255_255_255/0.16)] disabled:hover:scale-100"
                       aria-label={showStop ? "Stop run" : "Send message"}
                       disabled={showStop ? inputDisabled || !canStop : submitDisabled || blocked}
                       onClick={showStop ? () => void handleStop() : undefined}
@@ -1922,7 +1922,7 @@ function QuickTurnNav({
     <nav
       aria-label="Chat turns"
       className={cn(
-        "pointer-events-none absolute inset-y-0 left-0 z-40 hidden w-18 [@media(pointer:fine)]:block",
+        "pointer-events-none absolute inset-y-0 left-0 z-40 hidden w-18 pointer-fine:block",
         gutter >= 48
           ? "opacity-100"
           : "opacity-0 transition-opacity duration-150 focus-within:opacity-100 hover:opacity-100"

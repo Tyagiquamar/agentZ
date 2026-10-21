@@ -311,7 +311,7 @@ export function QuestionDock({
             </nav>
           ) : null}
           <div className="max-h-[min(26rem,40svh)] overflow-y-auto overscroll-contain px-3 pb-3">
-            <p id={`${id}-question`} className="px-0.5 pb-2 text-sm leading-relaxed break-words">
+            <p id={`${id}-question`} className="px-0.5 pb-2 text-sm leading-relaxed wrap-break-word">
               {question.question}
             </p>
             {question.multiple ? (
@@ -329,7 +329,7 @@ export function QuestionDock({
                   <div
                     key={`${tab}:${option.label}`}
                     className={cn(
-                      "rounded-lg transition-colors has-[:focus-visible]:ring-1 has-[:focus-visible]:ring-primary/30 has-[:focus-visible]:ring-inset",
+                      "rounded-lg transition-colors has-focus-visible:ring-1 has-focus-visible:ring-primary/30 has-focus-visible:ring-inset",
                       checked ? "bg-primary/5" : "hover:bg-muted/50",
                       pending && "opacity-50"
                     )}
@@ -354,7 +354,7 @@ export function QuestionDock({
                           {custom ? "Write your own answer" : option.label}
                         </span>
                         {!custom && option.description && option.description !== option.label ? (
-                          <span className="mt-0.5 block text-xs leading-relaxed break-words text-muted-foreground">
+                          <span className="mt-0.5 block text-xs leading-relaxed wrap-break-word text-muted-foreground">
                             {option.description}
                           </span>
                         ) : null}

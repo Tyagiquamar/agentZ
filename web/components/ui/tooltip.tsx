@@ -70,7 +70,7 @@ function DisabledReason({ reason, children }: DisabledReasonProps) {
       <TooltipTrigger asChild>
         <span
           aria-describedby={descriptionId}
-          className="inline-flex cursor-not-allowed rounded-md focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none [&>*]:pointer-events-none"
+          className="inline-flex cursor-not-allowed rounded-md focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none *:pointer-events-none"
           tabIndex={0}
         >
           {children}

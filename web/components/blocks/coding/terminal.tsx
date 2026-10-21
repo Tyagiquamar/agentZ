@@ -565,7 +565,7 @@ function TerminalSession({
       ) : null}
       <div
         ref={element}
-        className="min-h-0 flex-1 overflow-hidden bg-background p-2 font-mono text-foreground [font-stretch:normal]"
+        className="min-h-0 flex-1 overflow-hidden bg-background p-2 font-mono text-foreground font-stretch-normal"
       />
     </div>
   )

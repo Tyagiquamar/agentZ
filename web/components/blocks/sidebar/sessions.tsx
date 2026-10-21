@@ -1440,7 +1440,7 @@ function SessionCardSkeleton({ showAgent, coding }: { showAgent: boolean; coding
                 <Skeleton className="h-4 w-3/4 bg-sidebar-border" />
               </div>
               {!coding ? (
-                <div className="flex shrink-0 -space-x-[7px]">
+                <div className="flex shrink-0 space-x-[-7px]">
                   <Skeleton className="size-6 rounded-full bg-sidebar-border ring-2 ring-sidebar" />
                 </div>
               ) : null}

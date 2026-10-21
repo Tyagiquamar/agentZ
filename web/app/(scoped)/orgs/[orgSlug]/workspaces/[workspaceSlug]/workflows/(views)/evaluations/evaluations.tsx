@@ -85,7 +85,7 @@ export function EvaluationsSkeleton() {
     <>
       <div
         aria-hidden
-        className="flex flex-wrap items-center gap-2 px-4 pt-4 pb-1 sm:px-6 motion-reduce:[&_[data-slot=skeleton]]:animate-none"
+        className="flex flex-wrap items-center gap-2 px-4 pt-4 pb-1 sm:px-6 motion-reduce:**:data-[slot=skeleton]:animate-none"
       >
         <Skeleton className="h-11 w-full sm:h-8 sm:w-[28rem]" />
         <Skeleton className="h-5 w-20 rounded-full" />
@@ -437,7 +437,7 @@ export function Evaluations({
             <div
               role="status"
               aria-label="Loading models"
-              className="flex min-h-0 flex-1 flex-col motion-reduce:[&_[data-slot=skeleton]]:animate-none"
+              className="flex min-h-0 flex-1 flex-col motion-reduce:**:data-[slot=skeleton]:animate-none"
             >
               <div aria-hidden className="flex-1 overflow-y-auto px-4 pb-4">
                 <FieldGroup>

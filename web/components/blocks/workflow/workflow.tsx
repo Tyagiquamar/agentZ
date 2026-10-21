@@ -149,7 +149,7 @@ export default function Workflow({ run, workflow }: WorkflowProps) {
         <Controls position="bottom-left" showInteractive={false} />
         <Panel
           position="top-left"
-          className="m-4 w-[calc(100vw-2rem)] max-w-sm overflow-hidden rounded-md border border-border/70 bg-card/88 p-0 shadow-lg shadow-black/5 backdrop-blur-md supports-[backdrop-filter]:bg-card/72 sm:w-sm"
+          className="m-4 w-[calc(100vw-2rem)] max-w-sm overflow-hidden rounded-md border border-border/70 bg-card/88 p-0 shadow-lg shadow-black/5 backdrop-blur-md supports-backdrop-filter:bg-card/72 sm:w-sm"
         >
           <Collapsible defaultOpen={false} className="group/workflow-summary">
             <CollapsibleTrigger asChild>
@@ -192,7 +192,7 @@ export default function Workflow({ run, workflow }: WorkflowProps) {
         {selectedWorkflowNode ? (
           <Panel
             position="top-right"
-            className="m-4 max-h-[calc(100%-2rem)] w-[min(24rem,calc(100vw-2rem))] animate-in overflow-x-hidden overflow-y-auto rounded-lg border border-border/70 bg-card/90 p-4 shadow-xl shadow-black/10 backdrop-blur-md duration-200 fade-in slide-in-from-right-2 supports-[backdrop-filter]:bg-card/76"
+            className="m-4 max-h-[calc(100%-2rem)] w-[min(24rem,calc(100vw-2rem))] animate-in overflow-x-hidden overflow-y-auto rounded-lg border border-border/70 bg-card/90 p-4 shadow-xl shadow-black/10 backdrop-blur-md duration-200 fade-in slide-in-from-right-2 supports-backdrop-filter:bg-card/76"
           >
             <div className="flex flex-col gap-4">
               <div className="flex items-start justify-between gap-3">
