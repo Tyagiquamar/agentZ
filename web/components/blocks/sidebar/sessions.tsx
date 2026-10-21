@@ -91,7 +91,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
-import { UserAvatar } from "@/components/ui/avatar"
+import { PresenceAvatars } from "@/components/interior/presence-avatars"
 import { sessionDiffQueryOptions } from "@/components/blocks/chat/use-opencode-chat"
 import { MultiSelectDropdown } from "@/components/ui/multi-select-dropdown"
 import {
@@ -1601,24 +1601,18 @@ function SessionCard({
       </span>
     )
   const avatars =
-    !coding && session.participants.length > 0 ? (
-      <div className="flex shrink-0 -space-x-[7px]">
-        {session.participants.slice(0, 3).map((participant) => (
-          <UserAvatar
-            email={participant.email}
-            id={participant.id}
-            image={participant.image}
-            key={participant.id}
-            name={participant.name}
-            size="sm"
-          />
-        ))}
-        {session.participants.length > 3 ? (
-          <span className="grid size-6 place-items-center rounded-full bg-sidebar-control-surface text-[10px] text-sidebar-muted-foreground ring-2 ring-sidebar">
-            +{session.participants.length - 3}
-          </span>
-        ) : null}
-      </div>
+    session.participants.length > 0 ? (
+      <PresenceAvatars
+        label="Chat participants"
+        max={3}
+        size={coding ? 20 : 24}
+        overlap={7}
+        people={session.participants.map((participant) => ({
+          id: participant.id,
+          name: participant.name || participant.email || participant.id,
+          src: participant.image ?? undefined,
+        }))}
+      />
     ) : null
 
   useEffect(() => {

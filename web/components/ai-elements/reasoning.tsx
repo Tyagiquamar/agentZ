@@ -14,7 +14,7 @@ import { createContext, memo, useCallback, useContext, useEffect, useMemo, useRe
 import { Streamdown } from "streamdown"
 import { dayjs } from "@/lib/format"
 
-import { Shimmer } from "./shimmer"
+import { TypingIndicator } from "@/components/interior/typing-indicator"
 
 interface ReasoningContextValue {
   isStreaming: boolean
@@ -129,9 +129,10 @@ export type ReasoningTriggerProps = ComponentProps<typeof CollapsibleTrigger> & 
 }
 
 const defaultGetThinkingMessage = (isStreaming: boolean, duration?: number) => {
-  if (isStreaming || duration === 0) {
-    return <Shimmer duration={1}>Thinking...</Shimmer>
+  if (isStreaming) {
+    return <TypingIndicator size={16} />
   }
+  if (duration === 0) return <p>Thought for less than a second</p>
   if (duration === undefined) {
     return <p>Thought for a few seconds</p>
   }

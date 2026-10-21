@@ -613,30 +613,40 @@ export function ScheduleSheet(props: ScheduleSheetProps) {
               control={form.control}
               render={({ field, fieldState }) => (
                 <Field data-invalid={fieldState.invalid}>
-                  <FieldLabel htmlFor="successful-runs-history-limit" required>
-                    Successful run history limit
-                  </FieldLabel>
-                  <input
-                    type="hidden"
-                    name={field.name}
-                    value={field.value.toString()}
-                    ref={field.ref}
-                  />
-                  <div className="flex flex-col gap-3">
-                    <div className="text-sm text-muted-foreground">{field.value}</div>
-                    <SliderDetents
-                      id="successful-runs-history-limit"
-                      min={1}
-                      max={10}
-                      step={1}
-                      value={field.value}
-                      onValueChange={field.onChange}
-                      onBlur={field.onBlur}
-                      aria-invalid={fieldState.invalid}
-                      aria-required="true"
-                    />
+                  <div className="flex items-center justify-between gap-2">
+                    <FieldLabel
+                      id="successful-runs-history-label"
+                      htmlFor="successful-runs-history-limit"
+                      required
+                    >
+                      Successful run history limit
+                    </FieldLabel>
+                    <output
+                      htmlFor="successful-runs-history-limit"
+                      className="text-sm text-muted-foreground tabular-nums"
+                    >
+                      {field.value}
+                    </output>
                   </div>
-                  <FieldDescription>Keep this many successful runs.</FieldDescription>
+                  <SliderDetents
+                    id="successful-runs-history-limit"
+                    aria-labelledby="successful-runs-history-label"
+                    aria-describedby="successful-runs-history-description"
+                    detents={[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]}
+                    min={1}
+                    max={10}
+                    step={1}
+                    name={field.name}
+                    ref={field.ref}
+                    value={field.value}
+                    onValueChange={field.onChange}
+                    onBlur={field.onBlur}
+                    aria-invalid={fieldState.invalid}
+                    aria-required="true"
+                  />
+                  <FieldDescription id="successful-runs-history-description">
+                    Keep this many successful runs.
+                  </FieldDescription>
                   {fieldState.invalid ? <FieldError errors={[fieldState.error]} /> : null}
                 </Field>
               )}
@@ -646,30 +656,40 @@ export function ScheduleSheet(props: ScheduleSheetProps) {
               control={form.control}
               render={({ field, fieldState }) => (
                 <Field data-invalid={fieldState.invalid}>
-                  <FieldLabel htmlFor="failed-runs-history-limit" required>
-                    Failed run history limit
-                  </FieldLabel>
-                  <input
-                    type="hidden"
-                    name={field.name}
-                    value={field.value.toString()}
-                    ref={field.ref}
-                  />
-                  <div className="flex flex-col gap-3">
-                    <div className="text-sm text-muted-foreground">{field.value}</div>
-                    <SliderDetents
-                      id="failed-runs-history-limit"
-                      min={1}
-                      max={10}
-                      step={1}
-                      value={field.value}
-                      onValueChange={field.onChange}
-                      onBlur={field.onBlur}
-                      aria-invalid={fieldState.invalid}
-                      aria-required="true"
-                    />
+                  <div className="flex items-center justify-between gap-2">
+                    <FieldLabel
+                      id="failed-runs-history-label"
+                      htmlFor="failed-runs-history-limit"
+                      required
+                    >
+                      Failed run history limit
+                    </FieldLabel>
+                    <output
+                      htmlFor="failed-runs-history-limit"
+                      className="text-sm text-muted-foreground tabular-nums"
+                    >
+                      {field.value}
+                    </output>
                   </div>
-                  <FieldDescription>Keep this many failed runs.</FieldDescription>
+                  <SliderDetents
+                    id="failed-runs-history-limit"
+                    aria-labelledby="failed-runs-history-label"
+                    aria-describedby="failed-runs-history-description"
+                    detents={[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]}
+                    min={1}
+                    max={10}
+                    step={1}
+                    name={field.name}
+                    ref={field.ref}
+                    value={field.value}
+                    onValueChange={field.onChange}
+                    onBlur={field.onBlur}
+                    aria-invalid={fieldState.invalid}
+                    aria-required="true"
+                  />
+                  <FieldDescription id="failed-runs-history-description">
+                    Keep this many failed runs.
+                  </FieldDescription>
                   {fieldState.invalid ? <FieldError errors={[fieldState.error]} /> : null}
                 </Field>
               )}

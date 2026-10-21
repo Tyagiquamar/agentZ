@@ -61,6 +61,7 @@ import {
 } from "@/components/blocks/chat/docks"
 import { NewItemsPill } from "@/components/interior/new-items-pill"
 import { SkeletonSwap } from "@/components/interior/skeleton-swap"
+import { TypingIndicator } from "@/components/interior/typing-indicator"
 import { CopyButton } from "@/components/interior/copy-button"
 import {
   type RenderEntry,
@@ -2240,14 +2241,7 @@ function TimelineRowView({
     }
 
     case "thinking": {
-      return (
-        <div className="text-sm text-muted-foreground">
-          <span className="inline-flex items-center gap-2">
-            <Spinner className="size-3.5" />
-            <span className="animate-pulse">Thinking...</span>
-          </span>
-        </div>
-      )
+      return <TypingIndicator />
     }
 
     case "checkpoint": {

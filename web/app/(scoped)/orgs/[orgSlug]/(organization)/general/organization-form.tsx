@@ -37,7 +37,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Field, FieldError, FieldGroup, FieldLabel, FieldSet } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Slider } from "@/components/ui/slider"
+import { SliderDetents } from "@/components/interior/slider-detents"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
 const Cropper = dynamic(() => import("react-easy-crop"), { ssr: false })
@@ -470,15 +470,17 @@ export function OrganizationForm({ organization }: { organization: OrganizationS
               <ZoomIn aria-hidden="true" />
               Zoom
             </FieldLabel>
-            <Slider
+            <SliderDetents
               aria-label="Zoom profile picture"
+              detents={[1, 1.5, 2, 2.5, 3]}
+              aria-valuetext={`${zoom.toFixed(2)} times`}
               disabled={photoBusy}
               id="organization-logo-zoom"
               max={3}
               min={1}
-              onValueChange={(values) => setZoom(values[0] ?? 1)}
+              onValueChange={setZoom}
               step={0.01}
-              value={[zoom]}
+              value={zoom}
             />
           </Field>
           {photoError ? <FieldError errors={[{ message: photoError }]} /> : null}

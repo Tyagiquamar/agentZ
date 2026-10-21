@@ -816,6 +816,7 @@ function EvaluationForm({
                 </div>
                 <SliderDetents
                   id="evaluation-concurrency"
+                  detents={[1, 2, 3, 4, 5]}
                   aria-labelledby="evaluation-concurrency-label"
                   min={1}
                   max={5}

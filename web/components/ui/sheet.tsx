@@ -55,6 +55,7 @@ function SheetContent({
   children,
   onOpenAutoFocus,
   onCloseAutoFocus,
+  style,
   side = "right",
   size = "default",
   showCloseButton = true,
@@ -74,6 +75,8 @@ function SheetContent({
           asChild
           forceMount
           data-slot="sheet-content"
+          // Nested modal menus must dismiss against this panel, not the backdrop beneath it.
+          style={{ pointerEvents: "auto", ...style }}
           data-side={side}
           className={cn(
             "fixed z-50 flex max-w-[100vw] flex-col gap-4 overscroll-contain bg-popover bg-clip-padding text-sm text-popover-foreground shadow-lg data-[side=bottom]:inset-x-0 data-[side=bottom]:bottom-0 data-[side=bottom]:h-auto data-[side=bottom]:border-t data-[side=left]:inset-y-0 data-[side=left]:left-0 data-[side=left]:h-full data-[side=left]:border-r data-[side=right]:inset-y-0 data-[side=right]:right-0 data-[side=right]:h-full data-[side=right]:border-l data-[side=top]:inset-x-0 data-[side=top]:top-0 data-[side=top]:h-auto data-[side=top]:border-b",
