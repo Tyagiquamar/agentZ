@@ -1,7 +1,5 @@
 "use client"
 
-import { HoldToConfirm } from "@/components/interior/hold-to-confirm"
-
 import { AnimatePresence } from "motion/react"
 import { ExpandingSearch } from "@/components/interior/expanding-search"
 import { LoadMore } from "@/components/interior/load-more"
@@ -1755,10 +1753,15 @@ function SessionCard({
             </DialogClose>
             <form action={action}>
               <input name="sessionID" type="hidden" value={session.session_id} />
-              <HoldToConfirm pending={isPending} type="submit" variant="destructive">
+              <LoadingButton
+                pending={isPending}
+                pendingLabel="Deleting..."
+                type="submit"
+                variant="destructive"
+              >
                 <Trash2 />
-                Hold to delete
-              </HoldToConfirm>
+                Delete
+              </LoadingButton>
             </form>
           </DialogFooter>
         </DialogContent>
