@@ -101,7 +101,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { SidebarMenuSub, SidebarMenuSubItem, useSidebar } from "@/components/ui/sidebar"
-import { formatShortAge } from "@/lib/format"
+import { dayjs, formatShortAge } from "@/lib/format"
 import { getGatewayBaseURL } from "@/lib/gateway/browser-runtime"
 import { cn } from "@/lib/utils"
 import {
@@ -385,7 +385,7 @@ function NavSessionsContent({
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchText, setSearchText] = useState("")
   const [search, setSearch] = useState("")
-  const [timeZone] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone)
+  const [timeZone] = useState(() => dayjs.tz.guess())
   const [dateBoundary, setDateBoundary] = useState(0)
   const [groupExpansion, setGroupExpansion] = useState<Map<string, boolean>>(() => new Map())
   const expansionKey = `coding-projects:${draftScope}`
