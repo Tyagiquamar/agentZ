@@ -1,6 +1,7 @@
 "use client"
 
-import { LoadingButton } from "@/components/interior/loading-button"
+import { HoldToConfirm } from "@/components/interior/hold-to-confirm"
+
 import * as React from "react"
 import {
   experimental_streamedQuery as streamedQuery,
@@ -400,10 +401,10 @@ function DeleteProviderDialog({
               Cancel
             </Button>
           </DialogClose>
-          <LoadingButton
+          <HoldToConfirm
             pending={pending}
             variant="destructive"
-            onClick={() => {
+            onConfirm={() => {
               startTransition(async () => {
                 const result = await deleteInferenceProviderAction(scope, provider.id)
                 if (result.error) {
@@ -419,8 +420,8 @@ function DeleteProviderDialog({
             }}
           >
             <Trash2 />
-            Delete
-          </LoadingButton>
+            Hold to delete
+          </HoldToConfirm>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -1,5 +1,7 @@
 "use client"
 
+import { HoldToConfirm } from "@/components/interior/hold-to-confirm"
+
 import { LoadingButton } from "@/components/interior/loading-button"
 import { useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form"
@@ -404,10 +406,10 @@ export function AgentTools({
             <Button disabled={pending} onClick={() => setDeleting(undefined)} variant="outline">
               Cancel
             </Button>
-            <LoadingButton
+            <HoldToConfirm
               pending={pending}
               variant="destructive"
-              onClick={() => {
+              onConfirm={() => {
                 if (!deleting) return
                 startTransition(async () => {
                   try {
@@ -432,8 +434,8 @@ export function AgentTools({
                 })
               }}
             >
-              <Trash2 aria-hidden="true" data-icon="inline-start" /> Delete tool
-            </LoadingButton>
+              <Trash2 aria-hidden="true" data-icon="inline-start" /> Hold to delete tool
+            </HoldToConfirm>
           </DialogFooter>
         </DialogContent>
       </Dialog>

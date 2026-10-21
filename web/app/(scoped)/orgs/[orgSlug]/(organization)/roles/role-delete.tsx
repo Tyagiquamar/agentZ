@@ -1,6 +1,7 @@
 "use client"
 
-import { LoadingButton } from "@/components/interior/loading-button"
+import { HoldToConfirm } from "@/components/interior/hold-to-confirm"
+
 import { useActionState, useState } from "react"
 import { useRouter } from "@bprogress/next/app"
 import { Trash2, CircleAlert } from "lucide-react"
@@ -118,7 +119,7 @@ export function RoleDeleteDialog({
                 Cancel
               </Button>
             </DialogClose>
-            <LoadingButton
+            <HoldToConfirm
               pending={pending}
               pendingLabel={"Deleting..."}
               data-dialog-submit
@@ -126,8 +127,8 @@ export function RoleDeleteDialog({
               variant="destructive"
             >
               <Trash2 data-icon="inline-start" />
-              {"Delete role"}
-            </LoadingButton>
+              {"Hold to delete role"}
+            </HoldToConfirm>
           </DialogFooter>
         </form>
       </DialogContent>

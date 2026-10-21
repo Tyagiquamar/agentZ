@@ -1,5 +1,7 @@
 "use client"
 
+import { HoldToConfirm } from "@/components/interior/hold-to-confirm"
+
 import { useMemo, useState, useTransition } from "react"
 import {
   Copy,
@@ -336,6 +338,36 @@ export function Applications({
       "The old secret stops working immediately. Update the application with the new secret."
   }
 
+  function confirmChange() {
+    startTransition(async () => {
+      if (!confirmation) return
+      if (confirmation === "delegation") {
+        const result = await delegationSettingAction(organizationId, false)
+        if ("error" in result) {
+          toast.error(result.error)
+          return
+        }
+      } else {
+        const result = await changeApplicationAction(
+          organizationId,
+          confirmation.client.clientId,
+          confirmation.operation
+        )
+        if ("error" in result) {
+          toast.error(result.error)
+          return
+        }
+        if (result.secret)
+          setCredential({
+            clientId: confirmation.client.clientId,
+            secret: result.secret,
+          })
+      }
+      setConfirmation(undefined)
+      toast.success("Application settings updated")
+    })
+  }
+
   return (
     <main className="flex min-w-0 flex-1 flex-col gap-6">
       <AdministrationPageHeader title="Applications" />
@@ -493,41 +525,15 @@ export function Applications({
             <Button variant="outline" disabled={pending} onClick={() => setConfirmation(undefined)}>
               Cancel
             </Button>
-            <Button
-              variant="destructive"
-              disabled={pending}
-              onClick={() =>
-                startTransition(async () => {
-                  if (!confirmation) return
-                  if (confirmation === "delegation") {
-                    const result = await delegationSettingAction(organizationId, false)
-                    if ("error" in result) {
-                      toast.error(result.error)
-                      return
-                    }
-                  } else {
-                    const result = await changeApplicationAction(
-                      organizationId,
-                      confirmation.client.clientId,
-                      confirmation.operation
-                    )
-                    if ("error" in result) {
-                      toast.error(result.error)
-                      return
-                    }
-                    if (result.secret)
-                      setCredential({
-                        clientId: confirmation.client.clientId,
-                        secret: result.secret,
-                      })
-                  }
-                  setConfirmation(undefined)
-                  toast.success("Application settings updated")
-                })
-              }
-            >
-              {pending ? "Updating…" : "Confirm"}
-            </Button>
+            {confirmation !== "delegation" && confirmation?.operation === "delete" ? (
+              <HoldToConfirm pending={pending} variant="destructive" onConfirm={confirmChange}>
+                Hold to delete application
+              </HoldToConfirm>
+            ) : (
+              <Button variant="destructive" disabled={pending} onClick={confirmChange}>
+                {pending ? "Updating…" : "Confirm"}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

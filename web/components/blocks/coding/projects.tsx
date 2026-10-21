@@ -1,5 +1,7 @@
 "use client"
 
+import { HoldToConfirm } from "@/components/interior/hold-to-confirm"
+
 import { LoadingButton } from "@/components/interior/loading-button"
 import { Controller, useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -253,19 +255,26 @@ export function Projects({
   }
   if (pending) confirmReason = "Please wait for the current operation to finish."
 
-  let confirmLabel = detail?.project.deleting ? "Retry project deletion" : "Delete project"
-  if (dialog === "rename") confirmLabel = "Save name"
-  if (pending) confirmLabel = dialog === "rename" ? "Saving..." : "Deleting..."
-  const confirmButton = (
-    <LoadingButton
-      pending={pending}
-      type="submit"
-      disabled={Boolean(confirmReason)}
-      variant={dialog === "rename" ? "default" : "destructive"}
-    >
-      {confirmLabel}
-    </LoadingButton>
-  )
+  const confirmButton =
+    dialog === "delete" ? (
+      <HoldToConfirm
+        pending={pending}
+        type="submit"
+        disabled={Boolean(confirmReason)}
+        variant="destructive"
+      >
+        {detail?.project.deleting ? "Hold to retry project deletion" : "Hold to delete project"}
+      </HoldToConfirm>
+    ) : (
+      <LoadingButton
+        pending={pending}
+        pendingLabel="Saving..."
+        type="submit"
+        disabled={Boolean(confirmReason)}
+      >
+        Save name
+      </LoadingButton>
+    )
 
   function confirmProject(values: z.infer<typeof projectNameSchema>) {
     if (!dialog || !targetProject || confirmReason) return

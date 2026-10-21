@@ -1,5 +1,7 @@
 "use client"
 
+import { HoldToConfirm } from "@/components/interior/hold-to-confirm"
+
 import { LoadingButton } from "@/components/interior/loading-button"
 import { useId, useLayoutEffect, useRef, useState } from "react"
 import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query"
@@ -405,15 +407,15 @@ export function Evaluations({
             >
               Keep evaluation
             </Button>
-            <LoadingButton
+            <HoldToConfirm
               pending={actionPending}
               pendingLabel={"Deleting…"}
               variant="destructive"
-              onClick={remove}
+              onConfirm={remove}
             >
               <Trash2 />
-              {"Delete evaluation"}
-            </LoadingButton>
+              {"Hold to delete evaluation"}
+            </HoldToConfirm>
           </DialogFooter>
         </DialogContent>
       </Dialog>

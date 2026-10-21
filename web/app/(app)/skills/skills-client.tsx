@@ -1,5 +1,7 @@
 "use client"
 
+import { HoldToConfirm } from "@/components/interior/hold-to-confirm"
+
 import { LoadingButton } from "@/components/interior/loading-button"
 import * as React from "react"
 import { useRouter } from "@bprogress/next/app"
@@ -729,20 +731,20 @@ function DeleteDialog({
               Cancel
             </Button>
           </DialogClose>
-          <LoadingButton
+          <HoldToConfirm
             pending={pending}
             type="button"
             variant="destructive"
             disabled={pending || hasRefs}
-            onClick={() => {
+            onConfirm={() => {
               startTransition(async () => {
                 await onDelete()
               })
             }}
           >
             <Trash2 />
-            Delete
-          </LoadingButton>
+            Hold to delete
+          </HoldToConfirm>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -1,6 +1,7 @@
 "use client"
 
-import { LoadingButton } from "@/components/interior/loading-button"
+import { HoldToConfirm } from "@/components/interior/hold-to-confirm"
+
 import Link from "next/link"
 import type { Route } from "next"
 import * as React from "react"
@@ -227,15 +228,15 @@ function DeleteSandboxDialog({
             </Button>
           </DialogClose>
           <form action={action}>
-            <LoadingButton
+            <HoldToConfirm
               pending={pending}
               type="submit"
               variant="destructive"
               disabled={pending || sandbox.metadata.referenced_by_agent}
             >
               <Trash2 />
-              Delete
-            </LoadingButton>
+              Hold to delete
+            </HoldToConfirm>
           </form>
         </DialogFooter>
       </DialogContent>

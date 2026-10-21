@@ -1,6 +1,7 @@
 "use client"
 
-import { LoadingButton } from "@/components/interior/loading-button"
+import { HoldToConfirm } from "@/components/interior/hold-to-confirm"
+
 import * as React from "react"
 import { toast } from "sonner"
 import type { Route } from "next"
@@ -577,10 +578,10 @@ function DeleteRunDialog({
           </DialogClose>
           <form action={formAction}>
             <input type="hidden" name="run_name" value={item.name} />
-            <LoadingButton pending={pending} type="submit" variant="destructive">
+            <HoldToConfirm pending={pending} type="submit" variant="destructive">
               <Trash2 />
-              Delete
-            </LoadingButton>
+              Hold to delete
+            </HoldToConfirm>
           </form>
         </DialogFooter>
       </DialogContent>

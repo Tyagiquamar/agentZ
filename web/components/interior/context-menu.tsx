@@ -24,13 +24,11 @@ export function MenuSurface({
         setHighlight(null)
         return
       }
-      const box = item.getBoundingClientRect()
-      const parent = root.getBoundingClientRect()
       const next = {
-        x: box.left - parent.left + root.scrollLeft,
-        y: box.top - parent.top + root.scrollTop,
-        width: box.width,
-        height: box.height,
+        x: item.offsetLeft,
+        y: item.offsetTop,
+        width: item.offsetWidth,
+        height: item.offsetHeight,
       }
       setHighlight((current) =>
         current?.x === next.x &&
@@ -69,7 +67,7 @@ export function MenuSurface({
       {highlight ? (
         <motion.span
           aria-hidden="true"
-          className="pointer-events-none absolute -z-1 rounded-md bg-foreground/10"
+          className="pointer-events-none absolute top-0 left-0 -z-1 rounded-md bg-foreground/10"
           initial={false}
           animate={highlight}
           transition={

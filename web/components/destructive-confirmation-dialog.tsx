@@ -1,6 +1,7 @@
 "use client"
 
 import { LoadingButton } from "@/components/interior/loading-button"
+import { HoldToConfirm } from "@/components/interior/hold-to-confirm"
 import type { Route } from "next"
 import { startTransition, useActionState, useId, useState } from "react"
 import { useRouter } from "@bprogress/next/app"
@@ -152,15 +153,27 @@ export function DestructiveConfirmationDialog({
             <Button onClick={() => setOpen(false)} type="button" variant="outline">
               Cancel
             </Button>
-            <LoadingButton
-              pending={pending}
-              disabled={value !== confirmation || pending}
-              type="submit"
-              variant="destructive"
-            >
-              <Icon data-icon="inline-start" />
-              {pending ? (kind === "disable" ? "Disabling..." : "Deleting...") : submitLabel}
-            </LoadingButton>
+            {kind === "delete" ? (
+              <HoldToConfirm
+                pending={pending}
+                disabled={value !== confirmation}
+                type="submit"
+                variant="destructive"
+              >
+                <Icon data-icon="inline-start" />
+                Hold to {submitLabel.toLowerCase()}
+              </HoldToConfirm>
+            ) : (
+              <LoadingButton
+                pending={pending}
+                type="submit"
+                variant="destructive"
+                disabled={value !== confirmation}
+              >
+                <Icon data-icon="inline-start" />
+                {pending ? "Disabling..." : submitLabel}
+              </LoadingButton>
+            )}
           </DialogFooter>
         </form>
       </DialogContent>

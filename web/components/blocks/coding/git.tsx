@@ -1,5 +1,7 @@
 "use client"
 
+import { HoldToConfirm } from "@/components/interior/hold-to-confirm"
+
 import { LoadingButton } from "@/components/interior/loading-button"
 import { Controller, useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -537,6 +539,18 @@ export function GitChanges({
         </EmptyHeader>
       </Empty>
     )
+
+  function confirmStash() {
+    if (!data || !stashAction) return
+    mutation.mutate({
+      operation: stashAction,
+      comparison: stashScope,
+      revision: data.revision,
+      stash: stash?.oid,
+      message: stashMessage || undefined,
+      restore_index: restoreIndex,
+    })
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -1608,30 +1622,21 @@ export function GitChanges({
             <Button variant="outline" disabled={busy} onClick={() => setStashAction(undefined)}>
               Cancel
             </Button>
-            <LoadingButton
-              pending={busy}
-              variant={stashAction === "stash_drop" ? "destructive" : "default"}
-              onClick={() => {
-                if (stashAction)
-                  mutation.mutate({
-                    operation: stashAction,
-                    comparison: stashScope,
-                    revision: data.revision,
-                    stash: stash?.oid,
-                    message: stashMessage || undefined,
-                    restore_index: restoreIndex,
-                  })
-              }}
-            >
-              {stashAction === "stash_drop" ? <Trash2 /> : <ArchiveRestore />}
-              {stashAction === "stash_create"
-                ? "Stash changes"
-                : stashAction === "stash_drop"
-                  ? "Drop stash"
+            {stashAction === "stash_drop" ? (
+              <HoldToConfirm pending={busy} variant="destructive" onConfirm={confirmStash}>
+                <Trash2 />
+                Hold to drop stash
+              </HoldToConfirm>
+            ) : (
+              <LoadingButton pending={busy} onClick={confirmStash}>
+                <ArchiveRestore />
+                {stashAction === "stash_create"
+                  ? "Stash changes"
                   : stashAction === "stash_pop"
                     ? "Apply and remove"
                     : "Apply and keep"}
-            </LoadingButton>
+              </LoadingButton>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

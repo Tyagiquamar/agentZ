@@ -1,6 +1,7 @@
 "use client"
 
-import { LoadingButton } from "@/components/interior/loading-button"
+import { HoldToConfirm } from "@/components/interior/hold-to-confirm"
+
 import * as React from "react"
 import type { ColumnDef } from "@tanstack/react-table"
 import Link from "next/link"
@@ -276,10 +277,10 @@ function DeleteAgentDialog({
             </Button>
           </DialogClose>
           <form action={action}>
-            <LoadingButton pending={pending} type="submit" variant="destructive">
+            <HoldToConfirm pending={pending} type="submit" variant="destructive">
               <Trash2 />
-              Delete
-            </LoadingButton>
+              Hold to delete
+            </HoldToConfirm>
           </form>
         </DialogFooter>
       </DialogContent>

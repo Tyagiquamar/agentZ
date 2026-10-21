@@ -1,5 +1,7 @@
 "use client"
 
+import { HoldToConfirm } from "@/components/interior/hold-to-confirm"
+
 import { LoadingButton } from "@/components/interior/loading-button"
 import * as React from "react"
 import type { Route } from "next"
@@ -463,10 +465,10 @@ function DeleteScheduleDialog({
           <form action={action}>
             <input type="hidden" name="name" value={item.name} />
             <input type="hidden" name="workflow_name" value={item.workflow_name} />
-            <LoadingButton pending={pending} type="submit" variant="destructive">
+            <HoldToConfirm pending={pending} type="submit" variant="destructive">
               <Trash2 />
-              Delete
-            </LoadingButton>
+              Hold to delete
+            </HoldToConfirm>
           </form>
         </DialogFooter>
       </DialogContent>

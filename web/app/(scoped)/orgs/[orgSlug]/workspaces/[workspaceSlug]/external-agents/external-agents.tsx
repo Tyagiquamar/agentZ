@@ -1,5 +1,7 @@
 "use client"
 
+import { HoldToConfirm } from "@/components/interior/hold-to-confirm"
+
 import { LoadingButton } from "@/components/interior/loading-button"
 import { useMemo, useState, useTransition } from "react"
 import { Controller, useForm } from "react-hook-form"
@@ -282,6 +284,26 @@ export function ExternalAgents({
   // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table is not React Compiler compatible yet.
   const table = useReactTable({ columns, data: rows, getCoreRowModel: getCoreRowModel() })
 
+  function confirmChange() {
+    if (!confirmation) return
+    const { agent, operation } = confirmation
+    startTransition(async () => {
+      const result = await changeExternalAgentAction(
+        orgSlug,
+        workspaceSlug,
+        agent.clientId,
+        operation
+      )
+      if ("error" in result) {
+        toast.error(result.error)
+        return
+      }
+      setConfirmation(undefined)
+      if (operation === "delete") setSelectedId(undefined)
+      toast.success(operation === "delete" ? "Agent deleted" : "Agent disconnected")
+    })
+  }
+
   return (
     <main className="flex min-w-0 flex-1 flex-col gap-6">
       <AdministrationPageHeader
@@ -434,31 +456,15 @@ export function ExternalAgents({
             <Button variant="outline" disabled={pending} onClick={() => setConfirmation(undefined)}>
               Cancel
             </Button>
-            <LoadingButton
-              pending={pending}
-              variant="destructive"
-              onClick={() => {
-                if (!confirmation) return
-                const { agent, operation } = confirmation
-                startTransition(async () => {
-                  const result = await changeExternalAgentAction(
-                    orgSlug,
-                    workspaceSlug,
-                    agent.clientId,
-                    operation
-                  )
-                  if ("error" in result) {
-                    toast.error(result.error)
-                    return
-                  }
-                  setConfirmation(undefined)
-                  if (operation === "delete") setSelectedId(undefined)
-                  toast.success(operation === "delete" ? "Agent deleted" : "Agent disconnected")
-                })
-              }}
-            >
-              {confirmation?.operation === "delete" ? "Delete agent" : "Disconnect"}
-            </LoadingButton>
+            {confirmation?.operation === "delete" ? (
+              <HoldToConfirm pending={pending} variant="destructive" onConfirm={confirmChange}>
+                Hold to delete agent
+              </HoldToConfirm>
+            ) : (
+              <LoadingButton pending={pending} variant="destructive" onClick={confirmChange}>
+                Disconnect
+              </LoadingButton>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
