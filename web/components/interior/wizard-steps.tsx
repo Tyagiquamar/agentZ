@@ -4,7 +4,9 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import type { ReactNode } from "react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import type { WizardStep } from "@/components/blocks/wizard/types"
+import type { LucideIcon } from "lucide-react"
+
+export type WizardStep = { id: string; title: string; icon: LucideIcon }
 
 export function WizardPanel({
   children,

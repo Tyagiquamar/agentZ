@@ -5,18 +5,13 @@ import { ValueFlash } from "@/components/interior/value-flash"
 import { formatDurationSeconds } from "@/lib/format"
 import type { WorkflowRunDetail } from "@/lib/gateway/client"
 
-type RunElapsedProps = Pick<
-  WorkflowRunDetail,
-  "status" | "started_at" | "completed_at" | "duration_seconds"
->
-
 /** RunElapsed keeps the live clock local to each timing display. */
 export function RunElapsed({
   status,
   started_at,
   completed_at,
   duration_seconds,
-}: RunElapsedProps) {
+}: Pick<WorkflowRunDetail, "status" | "started_at" | "completed_at" | "duration_seconds">) {
   const [now, setNow] = React.useState(0)
   const running = status === "Running" && started_at !== undefined && completed_at === undefined
 

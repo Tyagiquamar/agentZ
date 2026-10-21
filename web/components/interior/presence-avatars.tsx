@@ -4,7 +4,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
 
-export type PresencePerson = { id: string; name: string; src?: string }
+type PresencePerson = { id: string; name: string; src?: string }
 
 export function PresenceAvatars({
   people,

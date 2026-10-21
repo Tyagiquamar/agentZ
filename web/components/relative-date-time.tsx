@@ -5,7 +5,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { dayjs } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
-export type RelativeDateTimeProps = {
+type RelativeDateTimeProps = {
   value: string | number | Date
   exact?: boolean
   className?: string

@@ -6,12 +6,10 @@ import { cva, type VariantProps } from "class-variance-authority"
 import type { MultipleFieldErrors } from "react-hook-form"
 
 import { cn } from "@/lib/utils"
-import { Label } from "@/components/ui/label"
+import { Label as LabelPrimitive } from "radix-ui"
 import { Separator } from "@/components/ui/separator"
 
-type RequiredIndicatorProps = React.ComponentProps<"span">
-
-function RequiredIndicator({ className, ...props }: RequiredIndicatorProps) {
+function RequiredIndicator({ className, ...props }: React.ComponentProps<"span">) {
   return (
     <span
       aria-hidden="true"
@@ -109,17 +107,17 @@ function FieldContent({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
-type FieldLabelProps = React.ComponentProps<typeof Label> & {
+type FieldLabelProps = React.ComponentProps<typeof LabelPrimitive.Root> & {
   required?: boolean
 }
 
 function FieldLabel({ className, required = false, children, ...props }: FieldLabelProps) {
   return (
-    <Label
+    <LabelPrimitive.Root
       data-slot="field-label"
       data-required={required}
       className={cn(
-        "group/field-label peer/field-label flex w-fit gap-2 leading-snug group-data-[disabled=true]/field:opacity-50 has-data-checked:border-primary/30 has-data-checked:bg-primary/5 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10",
+        "group/field-label peer/field-label flex w-fit items-center gap-2 text-sm leading-snug font-medium select-none group-data-[disabled=true]:pointer-events-none group-data-[disabled=true]:opacity-50 group-data-[disabled=true]/field:opacity-50 peer-disabled:cursor-not-allowed peer-disabled:opacity-50 has-data-checked:border-primary/30 has-data-checked:bg-primary/5 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 [&>svg]:shrink-0",
         "has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col",
         className
       )}
@@ -127,7 +125,7 @@ function FieldLabel({ className, required = false, children, ...props }: FieldLa
     >
       {children}
       {required ? <RequiredIndicator /> : null}
-    </Label>
+    </LabelPrimitive.Root>
   )
 }
 

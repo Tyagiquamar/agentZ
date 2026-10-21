@@ -9,7 +9,7 @@ import { Handle, Position } from "@xyflow/react"
 import { EffectiveAccessFrame } from "@/components/administration"
 import { Canvas } from "@/components/ai-elements/canvas"
 import { Controls } from "@/components/ai-elements/controls"
-import { Edge as AccessEdge } from "@/components/ai-elements/edge"
+import { GraphEdge } from "@/components/ai-elements/edge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   Select,
@@ -34,7 +34,7 @@ type AccessSource = { id: string; workspaceId: string | null }
 type Workspace = { id: string; name: string }
 type AccessNode = Node<EffectiveAccessNodeData>
 
-const edgeTypes = { static: AccessEdge.Static } satisfies EdgeTypes
+const edgeTypes = { static: GraphEdge } satisfies EdgeTypes
 const nodeWidth = 220
 const nodeHeight = 94
 

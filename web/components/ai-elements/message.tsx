@@ -55,7 +55,7 @@ export function ChatMessage({
   )
 }
 
-export type MessageResponseProps = ComponentProps<typeof Streamdown> & {
+type MessageResponseProps = ComponentProps<typeof Streamdown> & {
   onAgentFileOpen?: (path: string, name: string) => void
   plainCodeBlocks?: boolean
 }

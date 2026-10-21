@@ -14,6 +14,9 @@ import {
   XIcon,
 } from "lucide-react"
 import {
+  Handle,
+  Panel,
+  Position,
   type EdgeTypes,
   type NodeTypes,
   useNodesInitialized,
@@ -28,9 +31,9 @@ import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Canvas } from "@/components/ai-elements/canvas"
 import { Controls } from "@/components/ai-elements/controls"
-import { Edge } from "@/components/ai-elements/edge"
-import { Node, NodeContent } from "@/components/ai-elements/node"
-import { Panel } from "@/components/ai-elements/panel"
+import { GraphEdge } from "@/components/ai-elements/edge"
+import { Card, CardContent } from "@/components/ui/card"
+import { cn } from "@/lib/utils"
 import { Spinner } from "@/components/ui/spinner"
 import { RunElapsed } from "@/components/blocks/workflow/run-elapsed"
 import { dayjs, formatDurationSeconds } from "@/lib/format"
@@ -64,7 +67,7 @@ type WorkflowCanvasEdge = FlowEdge<
     branchLabel: string
     conditionSummary: string
   },
-  "animated" | "static" | "temporary"
+  "animated" | "static"
 >
 
 type DagrePositionedNode = DagreNodeLabel & { x: number; y: number }
@@ -78,9 +81,8 @@ const nodeSep = 88
 const fitViewPadding = 0.05
 
 const workflowEdgeTypes = {
-  animated: Edge.Animated,
-  static: Edge.Static,
-  temporary: Edge.Temporary,
+  animated: GraphEdge,
+  static: GraphEdge,
 } satisfies EdgeTypes
 
 const workflowNodeTypes = {
@@ -147,7 +149,7 @@ export default function Workflow({ run, workflow }: WorkflowProps) {
         <Controls position="bottom-left" showInteractive={false} />
         <Panel
           position="top-left"
-          className="w-[calc(100vw-2rem)] max-w-sm overflow-hidden border border-border/70 bg-card/88 p-0 shadow-lg shadow-black/5 backdrop-blur-md supports-[backdrop-filter]:bg-card/72 sm:w-sm"
+          className="m-4 w-[calc(100vw-2rem)] max-w-sm overflow-hidden rounded-md border border-border/70 bg-card/88 p-0 shadow-lg shadow-black/5 backdrop-blur-md supports-[backdrop-filter]:bg-card/72 sm:w-sm"
         >
           <Collapsible defaultOpen={false} className="group/workflow-summary">
             <CollapsibleTrigger asChild>
@@ -190,7 +192,7 @@ export default function Workflow({ run, workflow }: WorkflowProps) {
         {selectedWorkflowNode ? (
           <Panel
             position="top-right"
-            className="max-h-[calc(100%-2rem)] w-[min(24rem,calc(100vw-2rem))] animate-in overflow-y-auto rounded-lg border border-border/70 bg-card/90 p-4 shadow-xl shadow-black/10 backdrop-blur-md duration-200 fade-in slide-in-from-right-2 supports-[backdrop-filter]:bg-card/76"
+            className="m-4 max-h-[calc(100%-2rem)] w-[min(24rem,calc(100vw-2rem))] animate-in overflow-x-hidden overflow-y-auto rounded-lg border border-border/70 bg-card/90 p-4 shadow-xl shadow-black/10 backdrop-blur-md duration-200 fade-in slide-in-from-right-2 supports-[backdrop-filter]:bg-card/76"
           >
             <div className="flex flex-col gap-4">
               <div className="flex items-start justify-between gap-3">
@@ -296,8 +298,15 @@ function WorkflowCanvasNodeCard({ data, selected }: FlowNodeProps<WorkflowCanvas
   const selectedClassName = `${phaseClassName} border-primary/65 border-2 shadow-none`
 
   return (
-    <Node handles={data.handles} className={selected ? selectedClassName : phaseClassName}>
-      <NodeContent className="flex flex-col gap-2.5 px-4 py-3.5">
+    <Card
+      className={cn(
+        "node-container relative size-full h-auto w-sm gap-0 rounded-md p-0",
+        selected ? selectedClassName : phaseClassName
+      )}
+    >
+      {data.handles.target ? <Handle position={Position.Left} type="target" /> : null}
+      {data.handles.source ? <Handle position={Position.Right} type="source" /> : null}
+      <CardContent className="flex flex-col gap-2.5 px-4 py-3.5">
         <div className="flex min-w-0 items-center justify-between gap-3">
           <p className="truncate text-sm font-semibold tracking-normal">{data.node.name}</p>
           {data.status ? <NodeStatusBadge status={data.status} /> : null}
@@ -318,8 +327,8 @@ function WorkflowCanvasNodeCard({ data, selected }: FlowNodeProps<WorkflowCanvas
             <span className="font-mono text-foreground/90">x{toolCount}</span>
           </span>
         </div>
-      </NodeContent>
-    </Node>
+      </CardContent>
+    </Card>
   )
 }
 

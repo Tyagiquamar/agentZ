@@ -181,7 +181,7 @@ export function DestructiveConfirmationDialog({
   )
 }
 
-export type DestructiveConfirmationState = {
+type DestructiveConfirmationState = {
   error?: string
   fingerprint?: string
   href?: Route

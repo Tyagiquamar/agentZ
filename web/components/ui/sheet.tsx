@@ -14,10 +14,6 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { XIcon } from "lucide-react"
 
-function Sheet({ ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
-  return <Modal {...props} />
-}
-
 function SheetPortal({ ...props }: React.ComponentProps<typeof SheetPrimitive.Portal>) {
   return <SheetPrimitive.Portal data-slot="sheet-portal" {...props} />
 }
@@ -145,4 +141,4 @@ function SheetDescription({
   )
 }
 
-export { Sheet, SheetContent, SheetHeader, SheetFooter, SheetTitle, SheetDescription }
+export { Modal as Sheet, SheetContent, SheetHeader, SheetFooter, SheetTitle, SheetDescription }

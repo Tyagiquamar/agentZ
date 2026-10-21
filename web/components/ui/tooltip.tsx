@@ -23,10 +23,6 @@ function TooltipProvider({
   )
 }
 
-function Tooltip({ ...props }: React.ComponentProps<typeof TooltipPrimitive.Root>) {
-  return <InteriorTooltip {...props} />
-}
-
 function TooltipTrigger({ ...props }: React.ComponentProps<typeof TooltipPrimitive.Trigger>) {
   return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />
 }
@@ -70,7 +66,7 @@ function DisabledReason({ reason, children }: DisabledReasonProps) {
   const descriptionId = React.useId()
 
   return (
-    <Tooltip>
+    <InteriorTooltip>
       <TooltipTrigger asChild>
         <span
           aria-describedby={descriptionId}
@@ -84,7 +80,7 @@ function DisabledReason({ reason, children }: DisabledReasonProps) {
       <span className="sr-only" id={descriptionId}>
         {reason}
       </span>
-    </Tooltip>
+    </InteriorTooltip>
   )
 }
 
@@ -103,15 +99,22 @@ function TruncatedText({ className, value }: { className?: string; value: string
   }, [value])
 
   return (
-    <Tooltip>
+    <InteriorTooltip>
       <TooltipTrigger asChild>
         <span className={cn("truncate", className)} ref={ref} tabIndex={truncated ? 0 : undefined}>
           {value}
         </span>
       </TooltipTrigger>
       {truncated ? <TooltipContent>{value}</TooltipContent> : null}
-    </Tooltip>
+    </InteriorTooltip>
   )
 }
 
-export { DisabledReason, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, TruncatedText }
+export {
+  DisabledReason,
+  InteriorTooltip as Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+  TruncatedText,
+}

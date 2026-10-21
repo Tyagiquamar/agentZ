@@ -14,10 +14,6 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { XIcon } from "lucide-react"
 
-function Dialog({ ...props }: React.ComponentProps<typeof DialogPrimitive.Root>) {
-  return <Modal {...props} />
-}
-
 function DialogTrigger({ ...props }: React.ComponentProps<typeof DialogPrimitive.Trigger>) {
   return <DialogPrimitive.Trigger data-slot="dialog-trigger" {...props} />
 }
@@ -177,7 +173,7 @@ function DialogDescription({
 }
 
 export {
-  Dialog,
+  Modal as Dialog,
   DialogClose,
   DialogContent,
   DialogDescription,

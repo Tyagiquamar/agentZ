@@ -7,7 +7,7 @@ import { memo, useMemo } from "react"
 
 const MotionP = motion.p
 
-export interface TextShimmerProps {
+interface TextShimmerProps {
   children: string
   className?: string
   duration?: number

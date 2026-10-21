@@ -18,7 +18,7 @@ import {
 } from "@xyflow/react"
 import { Canvas } from "@/components/ai-elements/canvas"
 import { Controls } from "@/components/ai-elements/controls"
-import { Edge } from "@/components/ai-elements/edge"
+import { GraphEdge } from "@/components/ai-elements/edge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { mcpConnectionFallbackIcon, renderMcpServerIcon } from "@/app/(app)/mcps/catalog"
@@ -63,7 +63,7 @@ const nodeSep = 52
 const rankSep = 120
 
 const mcpEdgeTypes = {
-  animated: Edge.Animated,
+  animated: GraphEdge,
 } satisfies EdgeTypes
 
 const mcpNodeTypes = {

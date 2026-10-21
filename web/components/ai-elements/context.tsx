@@ -1,7 +1,7 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
+import { HoverCard as HoverCardPrimitive } from "radix-ui"
 import { Progress } from "@/components/interior/progress-bar"
 import { cn } from "@/lib/utils"
 import type { LanguageModelUsage } from "ai"
@@ -38,7 +38,7 @@ const useContextValue = () => {
   return context
 }
 
-export type ContextProps = ComponentProps<typeof HoverCard> & ContextSchema
+type ContextProps = ComponentProps<typeof HoverCardPrimitive.Root> & ContextSchema
 
 export const Context = ({ usedTokens, maxTokens, usage, ...props }: ContextProps) => {
   const contextValue = useMemo(
@@ -48,7 +48,7 @@ export const Context = ({ usedTokens, maxTokens, usage, ...props }: ContextProps
 
   return (
     <ContextContext.Provider value={contextValue}>
-      <HoverCard closeDelay={0} openDelay={0} {...props} />
+      <HoverCardPrimitive.Root closeDelay={0} openDelay={0} {...props} />
     </ContextContext.Provider>
   )
 }
@@ -94,37 +94,43 @@ const ContextIcon = () => {
   )
 }
 
-export type ContextTriggerProps = ComponentProps<typeof Button>
-
-export const ContextTrigger = ({ children, ...props }: ContextTriggerProps) => {
+export const ContextTrigger = ({ children, ...props }: ComponentProps<typeof Button>) => {
   const { usedTokens, maxTokens } = useContextValue()
   const renderedPercent = percentFormatter.format(usedTokens / maxTokens)
 
   return (
-    <HoverCardTrigger asChild>
+    <HoverCardPrimitive.Trigger asChild data-slot="hover-card-trigger">
       {children ?? (
         <Button type="button" variant="ghost" {...props}>
           <span className="font-medium text-muted-foreground">{renderedPercent}</span>
           <ContextIcon />
         </Button>
       )}
-    </HoverCardTrigger>
+    </HoverCardPrimitive.Trigger>
   )
 }
 
-export type ContextContentProps = ComponentProps<typeof HoverCardContent>
-
-export const ContextContent = ({ className, ...props }: ContextContentProps) => (
-  <HoverCardContent className={cn("min-w-60 divide-y overflow-hidden p-0", className)} {...props} />
+export const ContextContent = ({
+  className,
+  align = "center",
+  sideOffset = 4,
+  ...props
+}: ComponentProps<typeof HoverCardPrimitive.Content>) => (
+  <HoverCardPrimitive.Portal>
+    <HoverCardPrimitive.Content
+      data-slot="hover-card-content"
+      align={align}
+      sideOffset={sideOffset}
+      className={cn(
+        "z-50 w-64 min-w-60 origin-(--radix-hover-card-content-transform-origin) divide-y overflow-hidden rounded-lg bg-popover p-0 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10 outline-hidden duration-100 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+        className
+      )}
+      {...props}
+    />
+  </HoverCardPrimitive.Portal>
 )
 
-export type ContextContentHeaderProps = ComponentProps<"div">
-
-export const ContextContentHeader = ({
-  children,
-  className,
-  ...props
-}: ContextContentHeaderProps) => {
+export const ContextContentHeader = ({ children, className, ...props }: ComponentProps<"div">) => {
   const { usedTokens, maxTokens } = useContextValue()
   const usedPercent = usedTokens / maxTokens
   const displayPct = percentFormatter.format(usedPercent)
@@ -150,106 +156,25 @@ export const ContextContentHeader = ({
   )
 }
 
-export type ContextContentBodyProps = ComponentProps<"div">
-
-export const ContextContentBody = ({ children, className, ...props }: ContextContentBodyProps) => (
-  <div className={cn("w-full p-3", className)} {...props}>
-    {children}
-  </div>
-)
-
-const Tokens = ({ tokens }: { tokens?: number }) => (
-  <span>{tokens === undefined ? "-" : compactFormatter.format(tokens)}</span>
-)
-
-export type ContextInputUsageProps = ComponentProps<"div">
-
-export const ContextInputUsage = ({ className, children, ...props }: ContextInputUsageProps) => {
+export function ContextUsage({ className }: { className?: string }) {
   const { usage } = useContextValue()
-  const inputTokens = usage?.inputTokens ?? 0
-
-  if (children) {
-    return children
-  }
-
-  if (!inputTokens) {
-    return null
-  }
+  const rows = [
+    ["Input", usage?.inputTokens],
+    ["Output", usage?.outputTokens],
+    ["Reasoning", usage?.reasoningTokens],
+    ["Cache", usage?.cachedInputTokens],
+  ] as const
 
   return (
-    <div className={cn("flex items-center justify-between text-xs", className)} {...props}>
-      <span className="text-muted-foreground">Input</span>
-      <Tokens tokens={inputTokens} />
-    </div>
-  )
-}
-
-export type ContextOutputUsageProps = ComponentProps<"div">
-
-export const ContextOutputUsage = ({ className, children, ...props }: ContextOutputUsageProps) => {
-  const { usage } = useContextValue()
-  const outputTokens = usage?.outputTokens ?? 0
-
-  if (children) {
-    return children
-  }
-
-  if (!outputTokens) {
-    return null
-  }
-
-  return (
-    <div className={cn("flex items-center justify-between text-xs", className)} {...props}>
-      <span className="text-muted-foreground">Output</span>
-      <Tokens tokens={outputTokens} />
-    </div>
-  )
-}
-
-export type ContextReasoningUsageProps = ComponentProps<"div">
-
-export const ContextReasoningUsage = ({
-  className,
-  children,
-  ...props
-}: ContextReasoningUsageProps) => {
-  const { usage } = useContextValue()
-  const reasoningTokens = usage?.reasoningTokens ?? 0
-
-  if (children) {
-    return children
-  }
-
-  if (!reasoningTokens) {
-    return null
-  }
-
-  return (
-    <div className={cn("flex items-center justify-between text-xs", className)} {...props}>
-      <span className="text-muted-foreground">Reasoning</span>
-      <Tokens tokens={reasoningTokens} />
-    </div>
-  )
-}
-
-export type ContextCacheUsageProps = ComponentProps<"div">
-
-export const ContextCacheUsage = ({ className, children, ...props }: ContextCacheUsageProps) => {
-  const { usage } = useContextValue()
-  const cacheTokens = usage?.cachedInputTokens ?? 0
-
-  if (children) {
-    return children
-  }
-
-  if (!cacheTokens) {
-    return null
-  }
-
-  return (
-    <div className={cn("flex items-center justify-between text-xs", className)} {...props}>
-      <span className="text-muted-foreground">Cache</span>
-      <Tokens tokens={cacheTokens} />
+    <div className={cn("flex w-full flex-col gap-2 p-3", className)}>
+      {rows.map(([label, tokens]) =>
+        tokens ? (
+          <div key={label} className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">{label}</span>
+            <span>{compactFormatter.format(tokens)}</span>
+          </div>
+        ) : null
+      )}
     </div>
   )
 }

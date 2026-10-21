@@ -13,7 +13,7 @@ import {
 } from "@/components/ai-elements/attachments"
 import { ChatMessage, MessageResponse } from "@/components/ai-elements/message"
 import { AgentGettingReady, useAgentReadiness } from "@/components/agent-readiness"
-import { Checkpoint, CheckpointIcon } from "@/components/ai-elements/checkpoint"
+import { Separator } from "@/components/ui/separator"
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "@/components/ai-elements/reasoning"
 import type {
   PromptInputController,
@@ -93,6 +93,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog"
 import type { Message as OpencodeMessage, Part, QuestionAnswer, Session } from "@opencode-ai/sdk/v2"
 import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
@@ -112,6 +113,7 @@ import {
   Settings2Icon,
   Undo2Icon,
   CircleAlert,
+  BookmarkIcon,
 } from "lucide-react"
 import { motion } from "motion/react"
 import {
@@ -126,27 +128,19 @@ import {
 import { toast } from "sonner"
 import { z } from "zod"
 import {
-  ModelSelector,
-  ModelSelectorContent,
-  ModelSelectorEmpty,
-  ModelSelectorGroup,
-  ModelSelectorInput,
-  ModelSelectorItem,
-  ModelSelectorList,
-  ModelSelectorLogoGroup,
-  ModelSelectorName,
-  ModelSelectorTrigger,
-} from "@/components/ai-elements/model-selector"
+  Command,
+  CommandInput,
+  CommandList,
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
+} from "@/components/ui/command"
 import {
   Context,
-  ContextCacheUsage,
   ContextContent,
-  ContextContentBody,
   ContextContentHeader,
-  ContextInputUsage,
-  ContextOutputUsage,
-  ContextReasoningUsage,
   ContextTrigger,
+  ContextUsage,
 } from "@/components/ai-elements/context"
 import {
   Select,
@@ -508,7 +502,7 @@ function groupEntries(entries: RenderEntry[]): EntryGroup[] {
   return result
 }
 
-function ChatInner({
+export default function Chat({
   revertDisabled = false,
   createSession,
   composerContext,
@@ -1589,7 +1583,7 @@ function ChatInner({
                     layout="position"
                     transition={promptShiftTransition}
                   >
-                    <ModelSelector
+                    <Dialog
                       onOpenChange={setModelSelectorOpen}
                       open={agentReadiness.isGettingReady ? false : modelSelectorOpen}
                     >
@@ -1599,7 +1593,7 @@ function ChatInner({
                           !promptMobile && "@xl/chat:flex"
                         )}
                       >
-                        <ModelSelectorTrigger asChild>
+                        <DialogTrigger asChild>
                           <PromptInputButton
                             className="h-8 max-w-72 justify-start px-2"
                             disabled={inputDisabled}
@@ -1610,15 +1604,17 @@ function ChatInner({
                               <BrainIcon className="size-4 text-muted-foreground" />
                             )}
                             {agentReadiness.isGettingReady ? null : selectedModel?.name ? (
-                              <ModelSelectorName>{selectedModel.name}</ModelSelectorName>
+                              <span className="flex-1 truncate text-left">
+                                {selectedModel.name}
+                              </span>
                             ) : (
-                              <ModelSelectorName>Model</ModelSelectorName>
+                              <span className="flex-1 truncate text-left">Model</span>
                             )}
                             {agentReadiness.isGettingReady ? null : (
                               <ChevronDownIcon data-icon="inline-end" />
                             )}
                           </PromptInputButton>
-                        </ModelSelectorTrigger>
+                        </DialogTrigger>
                         {!agentReadiness.isGettingReady &&
                         contextUsage?.maxTokens &&
                         contextUsage.maxTokens > 0 ? (
@@ -1630,12 +1626,7 @@ function ChatInner({
                             <ContextTrigger className="gap-1 rounded-full px-2 hover:bg-foreground/6 aria-expanded:bg-foreground/8 data-[state=open]:bg-foreground/8 dark:hover:bg-foreground/10 dark:aria-expanded:bg-foreground/12 dark:data-[state=open]:bg-foreground/12" />
                             <ContextContent>
                               <ContextContentHeader />
-                              <ContextContentBody className="flex flex-col gap-2">
-                                <ContextInputUsage />
-                                <ContextOutputUsage />
-                                <ContextReasoningUsage />
-                                <ContextCacheUsage />
-                              </ContextContentBody>
+                              <ContextUsage />
                             </ContextContent>
                           </Context>
                         ) : null}
@@ -1751,12 +1742,7 @@ function ChatInner({
                                       usedTokens={contextUsage.usedTokens}
                                     >
                                       <ContextContentHeader className="p-0" />
-                                      <ContextContentBody className="flex flex-col gap-2 px-0 pt-2 pb-0">
-                                        <ContextInputUsage />
-                                        <ContextOutputUsage />
-                                        <ContextReasoningUsage />
-                                        <ContextCacheUsage />
-                                      </ContextContentBody>
+                                      <ContextUsage className="px-0 pt-2 pb-0" />
                                     </Context>
                                   </div>
                                 </DropdownMenuGroup>
@@ -1765,37 +1751,41 @@ function ChatInner({
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>
-                      <ModelSelectorContent>
-                        <ModelSelectorInput placeholder="Search models..." />
-                        <ModelSelectorList>
-                          <ModelSelectorEmpty>No models found.</ModelSelectorEmpty>
-                          {chefs.map((chef) => (
-                            <ModelSelectorGroup heading={chef} key={chef}>
-                              {models
-                                .filter((item) => item.chef === chef)
-                                .map((item) => (
-                                  <ModelSelectorItem
-                                    key={item.id}
-                                    onSelect={handleModelSelect}
-                                    value={item.id}
-                                  >
-                                    <BrainIcon />
-                                    <ModelSelectorName>{item.name}</ModelSelectorName>
-                                    <ModelSelectorLogoGroup>
-                                      <CpuIcon key={item.providerID} />
-                                    </ModelSelectorLogoGroup>
-                                    {selectedModelID === item.id ? (
-                                      <CheckIcon className="ml-auto" />
-                                    ) : (
-                                      <div className="ml-auto size-4" />
-                                    )}
-                                  </ModelSelectorItem>
-                                ))}
-                            </ModelSelectorGroup>
-                          ))}
-                        </ModelSelectorList>
-                      </ModelSelectorContent>
-                    </ModelSelector>
+                      <DialogContent
+                        aria-describedby={undefined}
+                        className="border-none! p-0 outline! outline-border! outline-solid!"
+                      >
+                        <DialogTitle className="sr-only">Model Selector</DialogTitle>
+                        <Command className="**:data-[slot=command-input-wrapper]:h-auto">
+                          <CommandInput className="h-auto py-3.5" placeholder="Search models..." />
+                          <CommandList>
+                            <CommandEmpty>No models found.</CommandEmpty>
+                            {chefs.map((chef) => (
+                              <CommandGroup heading={chef} key={chef}>
+                                {models
+                                  .filter((item) => item.chef === chef)
+                                  .map((item) => (
+                                    <CommandItem
+                                      key={item.id}
+                                      onSelect={handleModelSelect}
+                                      value={item.id}
+                                    >
+                                      <BrainIcon />
+                                      <span className="flex-1 truncate text-left">{item.name}</span>
+                                      <CpuIcon />
+                                      {selectedModelID === item.id ? (
+                                        <CheckIcon className="ml-auto" />
+                                      ) : (
+                                        <div className="ml-auto size-4" />
+                                      )}
+                                    </CommandItem>
+                                  ))}
+                              </CommandGroup>
+                            ))}
+                          </CommandList>
+                        </Command>
+                      </DialogContent>
+                    </Dialog>
                   </motion.div>
                   <motion.div
                     className="col-start-3 row-start-2"
@@ -2246,12 +2236,13 @@ function TimelineRowView({
 
     case "checkpoint": {
       return (
-        <Checkpoint>
-          <CheckpointIcon />
+        <div className="flex items-center gap-0.5 overflow-hidden text-muted-foreground">
+          <BookmarkIcon className="size-4 shrink-0" />
           <span className="shrink-0 text-xs">
             {row.variant === "compaction" ? "Context compacted" : "Interrupted"}
           </span>
-        </Checkpoint>
+          <Separator />
+        </div>
       )
     }
 
@@ -2266,8 +2257,4 @@ function TimelineRowView({
       )
     }
   }
-}
-
-export default function Chat(props: ChatProps) {
-  return <ChatInner {...props} />
 }
