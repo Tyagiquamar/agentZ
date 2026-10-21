@@ -1411,7 +1411,7 @@ export default function Chat({
                     "mx-auto w-[calc(100%-2rem)] max-w-3xl",
                     item.type === "assistant" && item.isStreaming
                       ? "pb-2"
-                      : item.type === "thinking" || item.type === "checkpoint"
+                      : item.type === "checkpoint"
                         ? "pb-1.5"
                         : "pb-4"
                   )}
@@ -1482,6 +1482,7 @@ export default function Chat({
             onUpdate={updateInput}
             onRestore={restoreInput}
           />
+          {isBusy ? <TypingIndicator className="mb-2 self-start" /> : null}
           <div className={cn(styles.shell, "relative w-full pb-9")}>
             <PromptInput
               initialMessage={draftMessage}
@@ -2228,10 +2229,6 @@ function TimelineRowView({
           })}
         </ChatMessage>
       )
-    }
-
-    case "thinking": {
-      return <TypingIndicator />
     }
 
     case "checkpoint": {

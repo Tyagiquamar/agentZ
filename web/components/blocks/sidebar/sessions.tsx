@@ -346,7 +346,7 @@ export function NavSessionsSkeleton({
   coding: boolean
 }) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col" data-tour="loading-chats">
+    <div className="flex flex-col" data-tour="loading-chats">
       <div
         aria-hidden="true"
         className="flex h-9 items-center gap-1 px-(--sidebar-content-inset) pb-1"
@@ -362,7 +362,7 @@ export function NavSessionsSkeleton({
           <Skeleton className="size-4 rounded-sm bg-sidebar-border" />
         </div>
       </div>
-      <div className="min-h-0 flex-1 overflow-hidden px-(--sidebar-content-inset) pb-2">
+      <div className="px-(--sidebar-content-inset) pb-2">
         <SessionListSkeleton groupBy={groupBy} coding={coding} />
       </div>
     </div>
@@ -734,7 +734,7 @@ function NavSessionsContent({
     </FieldGroup>
   )
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex flex-col">
       <div className="flex items-center gap-1 px-(--sidebar-content-inset) pb-1">
         <Button
           className="h-8 min-w-0 flex-1 justify-start gap-2 rounded-md px-2 text-sm font-medium text-sidebar-muted-foreground shadow-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground"
@@ -928,7 +928,7 @@ function NavSessionsContent({
         aria-busy={
           !searchInvalid && (sessions.isPending || searchSettling || sessions.isFetchingNextPage)
         }
-        className="min-h-0 flex-1 overflow-y-auto px-(--sidebar-content-inset) pb-2"
+        className="px-(--sidebar-content-inset) pb-2"
         id="chat-session-results"
       >
         {searchTooShort ? (

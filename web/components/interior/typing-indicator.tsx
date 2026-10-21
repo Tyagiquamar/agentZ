@@ -29,15 +29,7 @@ function Dot({ index, wave, size }: { index: number; wave: MotionValue<number>; 
   )
 }
 
-export function TypingIndicator({
-  label = "Thinking...",
-  size = 20,
-  className,
-}: {
-  label?: string
-  size?: number
-  className?: string
-}) {
+export function TypingIndicator({ size = 20, className }: { size?: number; className?: string }) {
   const reduced = useReducedMotion()
   const wave = useMotionValue(0)
   useEffect(() => {
@@ -57,15 +49,12 @@ export function TypingIndicator({
   return (
     <span
       role="status"
-      aria-label={label}
-      className={cn(
-        "inline-flex min-w-0 items-center gap-2 text-sm text-muted-foreground",
-        className
-      )}
+      aria-label="Agent is working"
+      className={cn("inline-flex items-center", className)}
     >
       <motion.span
         aria-hidden="true"
-        className="flex shrink-0 items-center justify-center rounded-full bg-muted"
+        className="flex items-center justify-center"
         style={{ width: size * 2, height: size, gap: Math.round(size * 0.15) }}
         initial={reduced ? false : { opacity: 0, scale: 0.74 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -85,9 +74,6 @@ export function TypingIndicator({
           )
         )}
       </motion.span>
-      <span aria-hidden="true" className="truncate">
-        {label}
-      </span>
     </span>
   )
 }

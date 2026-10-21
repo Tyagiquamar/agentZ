@@ -37,8 +37,6 @@ export type TimelineRow =
       key: string
       type: "assistant"
     }
-  // "Thinking..." placeholder rendered while the active turn has no content yet.
-  | { key: string; type: "thinking" }
   | { key: string; type: "checkpoint"; variant: "compaction" | "interrupted" }
   | { body: string; key: string; label: string; type: "assistant-error" }
 
@@ -182,7 +180,6 @@ function projectTurn(input: {
   let entries: RenderEntry[] = []
   let createdAt = 0
   let segment = 0
-  let hasContent = false
   let error: ReturnType<typeof describeMessageError> | undefined
 
   for (const assistant of assistants) {
@@ -198,7 +195,6 @@ function projectTurn(input: {
           key: `${turnKey}:${segment}`,
           type: "assistant",
         })
-        hasContent = true
         entries = []
         segment += 1
       }
@@ -223,11 +219,6 @@ function projectTurn(input: {
       key: interruption ? `${turnKey}:${segment}` : turnKey,
       type: "assistant",
     })
-    hasContent = true
-  }
-
-  if (!hasContent && isActive) {
-    out.push({ key: `thinking:${turnKey}`, type: "thinking" })
   }
 
   if (error) {
