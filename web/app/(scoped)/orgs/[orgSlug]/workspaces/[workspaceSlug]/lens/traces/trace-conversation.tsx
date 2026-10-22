@@ -5,7 +5,7 @@ import { infiniteQueryOptions, useInfiniteQuery } from "@tanstack/react-query"
 import { ArrowUpRight, Bot, ChevronDown, ChevronRight, MessageSquare, Wrench } from "lucide-react"
 import { getTraceRecordingAction } from "@/data/lens.actions"
 import type { TraceListItem } from "@/data/types"
-import type { AppSpan } from "@/lib/gateway/client"
+import type { AppSpan, Span } from "@/lib/gateway/client"
 import { dayjs, formatDurationMs } from "@/lib/format"
 import { ChatMessage, MessageResponse } from "@/components/ai-elements/message"
 import { ToolCard, ToolCode } from "@/components/blocks/chat/tool-parts"
@@ -29,20 +29,19 @@ export function TraceConversation({
 }: {
   trace: TraceListItem
   workspaceId: string
-  onInspect: (span: AppSpan) => void
+  onInspect: (span: AppSpan | Span) => void
 }) {
   const transcript = useRef<HTMLDivElement>(null)
   const [pageIndex, setPageIndex] = useState(0)
   const [selectedKey, setSelectedKey] = useState<string>()
-  const clientID = trace.subject.kind === "agent" ? "" : trace.subject.clientID
   const promptLabel = trace.subject.kind === "app" ? "Request" : "User"
   const recording = useInfiniteQuery(
     infiniteQueryOptions({
-      queryKey: ["trace-recording", workspaceId, clientID, trace.traceId],
+      queryKey: ["trace-recording", workspaceId, trace.subject, trace.traceId],
       initialPageParam: "",
       queryFn: async ({ pageParam }) => {
         const result = await getTraceRecordingAction(
-          clientID,
+          trace.subject,
           trace.traceId,
           workspaceId,
           pageParam || undefined
@@ -54,7 +53,6 @@ export function TraceConversation({
       staleTime: 30_000,
       refetchOnWindowFocus: false,
       retry: false,
-      enabled: clientID !== "",
     })
   )
   const pages = recording.data?.pages ?? []

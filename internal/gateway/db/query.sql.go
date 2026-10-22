@@ -5633,57 +5633,83 @@ func (q *Queries) GatewayListProvisioningWorkspaces(ctx context.Context) ([]Work
 
 const gatewayListSpans = `-- name: GatewayListSpans :many
 SELECT
-  id,
-  agent_name,
-  session_id,
-  trace_id,
-  span_id,
-  parent_span_id,
-  start_time,
-  end_time,
-  duration_ns,
-  name,
-  span_class,
-  operation_name,
-  kind,
-  status_code,
-  error_type,
-  error_message,
-  model,
-  tool_name,
-  input_tokens,
-  output_tokens,
-  cached_input_tokens,
-  cached_write_tokens,
-  cost_usd,
-  llm_finish_reason,
-  ingested_at
-FROM observer_trace_spans
-WHERE tenant_namespace = $1
-  AND agent_name = $2
-  AND session_id = $3
-  AND trace_id = $4
+  sp.id,
+  sp.agent_name,
+  sp.session_id,
+  sp.trace_id,
+  sp.span_id,
+  sp.parent_span_id,
+  sp.start_time,
+  sp.end_time,
+  sp.duration_ns,
+  sp.name,
+  sp.span_class,
+  sp.operation_name,
+  sp.kind,
+  sp.status_code,
+  sp.error_type,
+  sp.error_message,
+  sp.model,
+  sp.tool_name,
+  sp.input_tokens,
+  sp.output_tokens,
+  sp.cached_input_tokens,
+  sp.cached_write_tokens,
+  sp.cost_usd,
+  sp.llm_finish_reason,
+  sp.ingested_at,
+  CASE WHEN $1::bool AND sp.id = (
+    SELECT first.id FROM observer_trace_spans first
+    WHERE first.tenant_namespace = $2
+      AND first.agent_name = $3
+      AND first.session_id = $4
+      AND first.trace_id = $5
+      AND first.span_class = 'llm'
+    ORDER BY first.start_time, first.id
+    LIMIT 1
+  ) THEN COALESCE(p.input_messages, 'null'::jsonb)::text
+    ELSE 'null' END::text AS input_messages,
+  CASE WHEN $1::bool
+    THEN COALESCE(p.output_messages, 'null'::jsonb)::text
+    ELSE 'null' END::text AS output_messages,
+  CASE WHEN $1::bool
+    THEN COALESCE(p.tool_arguments, 'null'::jsonb)::text
+    ELSE 'null' END::text AS tool_arguments,
+  CASE WHEN $1::bool
+    THEN COALESCE(p.tool_result, 'null'::jsonb)::text
+    ELSE 'null' END::text AS tool_result
+FROM observer_trace_spans sp
+LEFT JOIN observer_trace_span_payloads p
+  ON $1::bool
+  AND p.trace_id = sp.trace_id
+  AND p.span_id = sp.span_id
+  AND p.start_time = sp.start_time
+WHERE tenant_namespace = $2
+  AND agent_name = $3
+  AND session_id = $4
+  AND sp.trace_id = $5
   AND (
-    NOT $5::bool
-    OR start_time > $6
+    NOT $6::bool
+    OR sp.start_time > $7
     OR (
-      start_time = $6
-      AND id > $7
+      sp.start_time = $7
+      AND sp.id > $8
     )
   )
-ORDER BY start_time ASC, id ASC
-LIMIT $8
+ORDER BY sp.start_time ASC, sp.id ASC
+LIMIT $9
 `
 
 type GatewayListSpansParams struct {
-	TenantNamespace string    `json:"tenant_namespace"`
-	AgentName       string    `json:"agent_name"`
-	SessionID       string    `json:"session_id"`
-	TraceID         []byte    `json:"trace_id"`
-	CursorSet       bool      `json:"cursor_set"`
-	CursorStartTime time.Time `json:"cursor_start_time"`
-	CursorID        int64     `json:"cursor_id"`
-	PageSize        int32     `json:"page_size"`
+	IncludeRecording bool      `json:"include_recording"`
+	TenantNamespace  string    `json:"tenant_namespace"`
+	AgentName        string    `json:"agent_name"`
+	SessionID        string    `json:"session_id"`
+	TraceID          []byte    `json:"trace_id"`
+	CursorSet        bool      `json:"cursor_set"`
+	CursorStartTime  time.Time `json:"cursor_start_time"`
+	CursorID         int64     `json:"cursor_id"`
+	PageSize         int32     `json:"page_size"`
 }
 
 type GatewayListSpansRow struct {
@@ -5712,10 +5738,15 @@ type GatewayListSpansRow struct {
 	CostUsd           float64   `json:"cost_usd"`
 	LlmFinishReason   string    `json:"llm_finish_reason"`
 	IngestedAt        time.Time `json:"ingested_at"`
+	InputMessages     string    `json:"input_messages"`
+	OutputMessages    string    `json:"output_messages"`
+	ToolArguments     string    `json:"tool_arguments"`
+	ToolResult        string    `json:"tool_result"`
 }
 
 func (q *Queries) GatewayListSpans(ctx context.Context, arg GatewayListSpansParams) ([]GatewayListSpansRow, error) {
 	rows, err := q.db.Query(ctx, gatewayListSpans,
+		arg.IncludeRecording,
 		arg.TenantNamespace,
 		arg.AgentName,
 		arg.SessionID,
@@ -5758,6 +5789,10 @@ func (q *Queries) GatewayListSpans(ctx context.Context, arg GatewayListSpansPara
 			&i.CostUsd,
 			&i.LlmFinishReason,
 			&i.IngestedAt,
+			&i.InputMessages,
+			&i.OutputMessages,
+			&i.ToolArguments,
+			&i.ToolResult,
 		); err != nil {
 			return nil, err
 		}

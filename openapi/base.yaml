@@ -2499,6 +2499,12 @@ paths:
           $ref: '#/components/schemas/TraceID'
       - $ref: '#/components/parameters/LimitQuery'
       - $ref: '#/components/parameters/PageTokenQuery'
+      - name: include_recording
+        in: query
+        description: Include captured conversation content for this span page.
+        schema:
+          type: boolean
+          default: false
       responses:
         '200':
           description: Paginated spans for a trace.
@@ -8573,7 +8579,12 @@ components:
             $ref: '#/components/schemas/Span'
         next_page_token:
           type: string
-      required: [spans, next_page_token]
+        recording:
+          type: array
+          description: Conversation content in page order when include_recording is true; otherwise empty. Only the first model request includes input history.
+          items:
+            $ref: '#/components/schemas/SpanRecording'
+      required: [spans, next_page_token, recording]
 
     Span:
       type: object
@@ -8680,6 +8691,19 @@ components:
 
     SpanDetail:
       $ref: '#/components/schemas/Span'
+
+    SpanRecording:
+      type: object
+      additionalProperties: false
+      description: Captured native activity with serialized JSON payloads for display without numeric precision loss.
+      properties:
+        span:
+          $ref: '#/components/schemas/Span'
+        payload:
+          $ref: '#/components/schemas/AppPayload'
+        tool_error:
+          type: string
+      required: [span, payload, tool_error]
 
     SpanPayload:
       type: object

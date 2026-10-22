@@ -1,5 +1,5 @@
 import { z } from "zod"
-import type { AppOperationResponse, AppSpan } from "@/lib/gateway/client"
+import type { AppOperationResponse, AppSpan, Span, SpanRecording } from "@/lib/gateway/client"
 
 // These are the text-bearing fields of Messages, Chat Completions, and
 // Responses requests. Provider extensions stay in the original span payload.
@@ -15,12 +15,21 @@ const messageContent = z.union([
     ),
 ])
 const message = z.object({ role: z.string().optional(), content: messageContent.nullish() })
+const messages = z.array(message)
 const request = z.union([
-  z.object({ messages: z.array(message) }).transform((input) => input.messages),
-  z.object({ input: z.array(message) }).transform((input) => input.input),
+  messages,
+  z.object({ messages }).transform((input) => input.messages),
+  z.object({ input: messages }).transform((input) => input.input),
   z.object({ input: z.string() }).transform((input) => [{ role: "user", content: [input.input] }]),
 ])
-const response = z.object({ completion: z.array(z.string()) })
+const response = z.union([
+  z.object({ completion: z.array(z.string()) }).transform((output) => output.completion),
+  messages.transform((output) =>
+    output
+      .filter((message) => message.role === "assistant")
+      .flatMap((message) => message.content ?? [])
+  ),
+])
 const toolContent = z.union([
   z.string(),
   z
@@ -35,7 +44,7 @@ type RecordedContent = { format: "json" | "text"; text: string }
 
 export type RecordedStep = {
   key: string
-  span: AppSpan
+  span: AppSpan | Span
 } & (
   | { kind: "prompt"; text: string; context: string[] }
   | { kind: "response"; text: string }
@@ -52,17 +61,14 @@ export type RecordedStep = {
  * history is context, never another execution or another assistant reply.
  */
 export function readTraceRecording(
-  operations: AppOperationResponse[],
-  includePrompt: boolean
+  operations: (AppOperationResponse | SpanRecording)[]
 ): RecordedStep[] {
   const steps: RecordedStep[] = []
-  let promptRead = !includePrompt
 
   for (const operation of operations) {
     const { span, payload } = operation
-    if (span.resource_kind === "turn") continue
 
-    if (span.resource_kind === "tool" || span.resource_kind === "mcp") {
+    if (span.span_class === "tool") {
       const args = readToolContent(payload.tool_arguments, "arguments")
       steps.push({
         key: `tool:${span.id}`,
@@ -75,9 +81,8 @@ export function readTraceRecording(
       continue
     }
 
-    if (span.resource_kind !== "inference") continue
-    if (!promptRead) {
-      promptRead = true
+    if (span.span_class !== "llm") continue
+    if (payload.input_messages !== "null") {
       const input = request.safeParse(JSON.parse(payload.input_messages))
       if (input.success) {
         const texts = input.data.findLast((message) => message.role === "user")?.content ?? []
@@ -105,7 +110,7 @@ export function readTraceRecording(
       key: `response:${span.id}`,
       kind: "response",
       span,
-      text: output.success ? output.data.completion.filter(Boolean).join("\n\n") : "",
+      text: output.success ? output.data.filter(Boolean).join("\n\n") : "",
     })
   }
   return steps

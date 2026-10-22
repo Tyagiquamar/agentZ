@@ -1237,6 +1237,7 @@ export type {
   SpanId,
   SpanIdQuery,
   SpanPayload,
+  SpanRecording,
   StartCodingOperationData,
   StartCodingOperationError,
   StartCodingOperationErrors,

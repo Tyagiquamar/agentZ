@@ -254,17 +254,19 @@ func (s *Service) ListSpans(w http.ResponseWriter, r *http.Request, agentName ga
 		return
 	}
 
+	recording := params.IncludeRecording != nil && *params.IncludeRecording
 	rows, err := s.queries.GatewayListSpans(
 		r.Context(),
 		gatewaydb.GatewayListSpansParams{
-			TenantNamespace: ns,
-			AgentName:       agentName,
-			SessionID:       sessionID,
-			TraceID:         traceIDBytes,
-			CursorSet:       cursorSet,
-			CursorStartTime: cursor.StartTime,
-			CursorID:        cursor.ID,
-			PageSize:        int32(limit + 1),
+			IncludeRecording: recording,
+			TenantNamespace:  ns,
+			AgentName:        agentName,
+			SessionID:        sessionID,
+			TraceID:          traceIDBytes,
+			CursorSet:        cursorSet,
+			CursorStartTime:  cursor.StartTime,
+			CursorID:         cursor.ID,
+			PageSize:         int32(limit + 1),
 		},
 	)
 	if err != nil {
@@ -273,6 +275,7 @@ func (s *Service) ListSpans(w http.ResponseWriter, r *http.Request, agentName ga
 	}
 
 	items := make([]gatewayapi.Span, 0, limit)
+	content := make([]gatewayapi.SpanRecording, 0, limit)
 	var next string
 	for i, row := range rows {
 		if i == limit {
@@ -283,7 +286,48 @@ func (s *Service) ListSpans(w http.ResponseWriter, r *http.Request, agentName ga
 			})
 			break
 		}
-		items = append(items, spanFromListRow(row))
+		span := gatewayapi.Span{
+			Id:                row.ID,
+			AgentName:         row.AgentName,
+			SessionId:         row.SessionID,
+			TraceId:           hex.EncodeToString(row.TraceID),
+			SpanId:            hex.EncodeToString(row.SpanID),
+			ParentSpanId:      hex.EncodeToString(row.ParentSpanID),
+			StartTime:         row.StartTime,
+			EndTime:           row.EndTime,
+			DurationNs:        row.DurationNs,
+			DurationMs:        float64(row.DurationNs) / float64(time.Millisecond),
+			Name:              row.Name,
+			SpanClass:         row.SpanClass,
+			OperationName:     row.OperationName,
+			Kind:              row.Kind,
+			StatusCode:        row.StatusCode,
+			ErrorType:         row.ErrorType,
+			ErrorMessage:      row.ErrorMessage,
+			Model:             row.Model,
+			ToolName:          row.ToolName,
+			InputTokens:       row.InputTokens,
+			OutputTokens:      row.OutputTokens,
+			CachedInputTokens: row.CachedInputTokens,
+			CachedWriteTokens: row.CachedWriteTokens,
+			CostUsd:           row.CostUsd,
+			LlmFinishReason:   row.LlmFinishReason,
+			IngestedAt:        row.IngestedAt,
+		}
+		items = append(items, span)
+		if !recording {
+			continue
+		}
+		content = append(content, gatewayapi.SpanRecording{
+			Span: span,
+			Payload: gatewayapi.AppPayload{
+				InputMessages:  row.InputMessages,
+				OutputMessages: row.OutputMessages,
+				ToolArguments:  row.ToolArguments,
+				ToolResult:     row.ToolResult,
+			},
+			ToolError: "null",
+		})
 	}
 
 	apiutil.WriteJSON(
@@ -291,6 +335,7 @@ func (s *Service) ListSpans(w http.ResponseWriter, r *http.Request, agentName ga
 		http.StatusOK,
 		gatewayapi.ListSpansResponse{
 			Spans:         items,
+			Recording:     content,
 			NextPageToken: next,
 		},
 	)
@@ -892,37 +937,6 @@ func (s *Service) ListNetworkObservabilitySummary(w http.ResponseWriter, r *http
 			NextPageToken: next,
 		},
 	)
-}
-
-func spanFromListRow(row gatewaydb.GatewayListSpansRow) gatewayapi.Span {
-	return gatewayapi.Span{
-		Id:                row.ID,
-		AgentName:         row.AgentName,
-		SessionId:         row.SessionID,
-		TraceId:           hex.EncodeToString(row.TraceID),
-		SpanId:            hex.EncodeToString(row.SpanID),
-		ParentSpanId:      hex.EncodeToString(row.ParentSpanID),
-		StartTime:         row.StartTime,
-		EndTime:           row.EndTime,
-		DurationNs:        row.DurationNs,
-		DurationMs:        float64(row.DurationNs) / float64(time.Millisecond),
-		Name:              row.Name,
-		SpanClass:         row.SpanClass,
-		OperationName:     row.OperationName,
-		Kind:              row.Kind,
-		StatusCode:        row.StatusCode,
-		ErrorType:         row.ErrorType,
-		ErrorMessage:      row.ErrorMessage,
-		Model:             row.Model,
-		ToolName:          row.ToolName,
-		InputTokens:       row.InputTokens,
-		OutputTokens:      row.OutputTokens,
-		CachedInputTokens: row.CachedInputTokens,
-		CachedWriteTokens: row.CachedWriteTokens,
-		CostUsd:           row.CostUsd,
-		LlmFinishReason:   row.LlmFinishReason,
-		IngestedAt:        row.IngestedAt,
-	}
 }
 
 func spanDetailFromRow(row gatewaydb.GatewayGetSpanDetailRow) gatewayapi.SpanDetail {

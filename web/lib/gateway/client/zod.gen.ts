@@ -1365,12 +1365,22 @@ export const zSpan = z.object({
   ingested_at: z.iso.datetime({ offset: true }),
 })
 
+export const zSpanDetail = zSpan
+
+/**
+ * Captured native activity with serialized JSON payloads for display without numeric precision loss.
+ */
+export const zSpanRecording = z.object({
+  span: zSpan,
+  payload: zAppPayload,
+  tool_error: z.string(),
+})
+
 export const zListSpansResponse = z.object({
   spans: z.array(zSpan),
   next_page_token: z.string(),
+  recording: z.array(zSpanRecording),
 })
-
-export const zSpanDetail = zSpan
 
 export const zMcpGraphAgent = z.object({
   name: zAgentName,

@@ -303,20 +303,25 @@ export async function getSpanDetailAction(
 
 /** getTraceRecordingAction fetches one bounded page of captured activity. */
 export async function getTraceRecordingAction(
-  clientID: string,
+  subject: TraceSubject,
   traceID: string,
   workspaceId: string,
   pageToken?: string
 ) {
-  const page = await listAppSpans({
-    path: { clientID, traceID },
-    query: { limit: 50, page_token: pageToken, include_recording: true },
-    client: getGatewayServerClient(workspaceId),
-  })
+  const client = getGatewayServerClient(workspaceId)
+  const query = { limit: 50, page_token: pageToken, include_recording: true }
+  const page =
+    subject.kind === "agent"
+      ? await listSpans({
+          path: { agentName: subject.name, sessionID: subject.sessionId, traceID },
+          query,
+          client,
+        })
+      : await listAppSpans({ path: { clientID: subject.clientID, traceID }, query, client })
   if (page.error) return { data: undefined, error: page.error }
   return {
     data: {
-      steps: readTraceRecording(page.data.recording, !pageToken),
+      steps: readTraceRecording(page.data.recording),
       nextPageToken: page.data.next_page_token,
     },
     error: undefined,

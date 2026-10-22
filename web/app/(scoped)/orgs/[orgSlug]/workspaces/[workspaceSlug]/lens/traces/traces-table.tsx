@@ -21,6 +21,7 @@ import {
 } from "@/data/lens.actions"
 import type {
   AppSpan,
+  Span,
   Error,
   ProcessObservabilityEvent,
   FileObservabilityEvent,
@@ -335,7 +336,7 @@ export function TracesTable({
         />
       </div>
       <TraceInspector
-        key={selectedTrace?.traceId}
+        key={JSON.stringify([workspaceId, selectedTrace?.subject, selectedTrace?.traceId])}
         workspaceId={workspaceId}
         trace={selectedTrace}
         spans={spans}
@@ -420,7 +421,7 @@ function TraceInspector({
   const [focusError, setFocusError] = React.useState<Error>()
   const [, startInspectTransition] = React.useTransition()
 
-  function inspect(span: AppSpan) {
+  function inspect(span: AppSpan | Span) {
     if (!trace) return
     startInspectTransition(async () => {
       const result = await getSpanDetailAction(
@@ -455,7 +456,7 @@ function TraceInspector({
         }
         tabs={
           <TabsList className="gap-2">
-            {trace && trace.subject.kind !== "agent" ? (
+            {trace ? (
               <TabsTrigger value="conversation" className="gap-2">
                 <MessageSquare /> Conversation
               </TabsTrigger>
@@ -476,7 +477,7 @@ function TraceInspector({
             <AlertDescription>{focusError.message}</AlertDescription>
           </Alert>
         ) : null}
-        {trace && trace.subject.kind !== "agent" ? (
+        {trace ? (
           <TabsContent value="conversation" className="m-0 h-full min-h-0">
             <TraceConversation trace={trace} workspaceId={workspaceId} onInspect={inspect} />
           </TabsContent>

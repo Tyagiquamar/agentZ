@@ -1325,6 +1325,10 @@ export type TraceSession = {
 export type ListSpansResponse = {
   spans: Array<Span>
   next_page_token: string
+  /**
+   * Conversation content in page order when include_recording is true; otherwise empty. Only the first model request includes input history.
+   */
+  recording: Array<SpanRecording>
 }
 
 export type Span = {
@@ -1357,6 +1361,15 @@ export type Span = {
 }
 
 export type SpanDetail = Span
+
+/**
+ * Captured native activity with serialized JSON payloads for display without numeric precision loss.
+ */
+export type SpanRecording = {
+  span: Span
+  payload: AppPayload
+  tool_error: string
+}
 
 export type SpanPayload = {
   input_messages: JsonValue
@@ -7714,6 +7727,10 @@ export type ListSpansData = {
      * Opaque pagination token from a previous response.
      */
     page_token?: string
+    /**
+     * Include captured conversation content for this span page.
+     */
+    include_recording?: boolean
   }
   url: "/api/lens/{agentName}/{sessionID}/trace/{traceID}/span"
 }

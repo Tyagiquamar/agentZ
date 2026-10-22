@@ -5224,6 +5224,11 @@ components:
       properties:
         next_page_token:
           type: string
+        recording:
+          description: Conversation content in page order when include_recording is true; otherwise empty. Only the first model request includes input history.
+          items:
+            $ref: '#/components/schemas/SpanRecording'
+          type: array
         spans:
           items:
             $ref: '#/components/schemas/Span'
@@ -5231,6 +5236,7 @@ components:
       required:
       - spans
       - next_page_token
+      - recording
       type: object
     ListTraceSessionsResponse:
       additionalProperties: false
@@ -25440,6 +25446,21 @@ components:
       - tool_arguments
       - tool_result
       type: object
+    SpanRecording:
+      additionalProperties: false
+      description: Captured native activity with serialized JSON payloads for display without numeric precision loss.
+      properties:
+        payload:
+          $ref: '#/components/schemas/AppPayload'
+        span:
+          $ref: '#/components/schemas/Span'
+        tool_error:
+          type: string
+      required:
+      - span
+      - payload
+      - tool_error
+      type: object
     Tenant:
       properties:
         conditions:
@@ -29595,6 +29616,12 @@ paths:
           $ref: '#/components/schemas/TraceID'
       - $ref: '#/components/parameters/LimitQuery'
       - $ref: '#/components/parameters/PageTokenQuery'
+      - description: Include captured conversation content for this span page.
+        in: query
+        name: include_recording
+        schema:
+          default: false
+          type: boolean
       responses:
         "200":
           content:

@@ -697,45 +697,70 @@ ORDER BY
 
 -- name: GatewayListSpans :many
 SELECT
-  id,
-  agent_name,
-  session_id,
-  trace_id,
-  span_id,
-  parent_span_id,
-  start_time,
-  end_time,
-  duration_ns,
-  name,
-  span_class,
-  operation_name,
-  kind,
-  status_code,
-  error_type,
-  error_message,
-  model,
-  tool_name,
-  input_tokens,
-  output_tokens,
-  cached_input_tokens,
-  cached_write_tokens,
-  cost_usd,
-  llm_finish_reason,
-  ingested_at
-FROM observer_trace_spans
+  sp.id,
+  sp.agent_name,
+  sp.session_id,
+  sp.trace_id,
+  sp.span_id,
+  sp.parent_span_id,
+  sp.start_time,
+  sp.end_time,
+  sp.duration_ns,
+  sp.name,
+  sp.span_class,
+  sp.operation_name,
+  sp.kind,
+  sp.status_code,
+  sp.error_type,
+  sp.error_message,
+  sp.model,
+  sp.tool_name,
+  sp.input_tokens,
+  sp.output_tokens,
+  sp.cached_input_tokens,
+  sp.cached_write_tokens,
+  sp.cost_usd,
+  sp.llm_finish_reason,
+  sp.ingested_at,
+  CASE WHEN sqlc.arg(include_recording)::bool AND sp.id = (
+    SELECT first.id FROM observer_trace_spans first
+    WHERE first.tenant_namespace = sqlc.arg(tenant_namespace)
+      AND first.agent_name = sqlc.arg(agent_name)
+      AND first.session_id = sqlc.arg(session_id)
+      AND first.trace_id = sqlc.arg(trace_id)
+      AND first.span_class = 'llm'
+    ORDER BY first.start_time, first.id
+    LIMIT 1
+  ) THEN COALESCE(p.input_messages, 'null'::jsonb)::text
+    ELSE 'null' END::text AS input_messages,
+  CASE WHEN sqlc.arg(include_recording)::bool
+    THEN COALESCE(p.output_messages, 'null'::jsonb)::text
+    ELSE 'null' END::text AS output_messages,
+  CASE WHEN sqlc.arg(include_recording)::bool
+    THEN COALESCE(p.tool_arguments, 'null'::jsonb)::text
+    ELSE 'null' END::text AS tool_arguments,
+  CASE WHEN sqlc.arg(include_recording)::bool
+    THEN COALESCE(p.tool_result, 'null'::jsonb)::text
+    ELSE 'null' END::text AS tool_result
+FROM observer_trace_spans sp
+LEFT JOIN observer_trace_span_payloads p
+  ON sqlc.arg(include_recording)::bool
+  AND p.trace_id = sp.trace_id
+  AND p.span_id = sp.span_id
+  AND p.start_time = sp.start_time
 WHERE tenant_namespace = sqlc.arg(tenant_namespace)
   AND agent_name = sqlc.arg(agent_name)
   AND session_id = sqlc.arg(session_id)
-  AND trace_id = sqlc.arg(trace_id)
+  AND sp.trace_id = sqlc.arg(trace_id)
   AND (
     NOT sqlc.arg(cursor_set)::bool
-    OR start_time > sqlc.arg(cursor_start_time)
+    OR sp.start_time > sqlc.arg(cursor_start_time)
     OR (
-      start_time = sqlc.arg(cursor_start_time)
-      AND id > sqlc.arg(cursor_id)
+      sp.start_time = sqlc.arg(cursor_start_time)
+      AND sp.id > sqlc.arg(cursor_id)
     )
   )
-ORDER BY start_time ASC, id ASC
+ORDER BY sp.start_time ASC, sp.id ASC
 LIMIT sqlc.arg(page_size);
 
 -- name: GatewayGetSpanDetail :one
