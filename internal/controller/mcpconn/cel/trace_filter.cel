@@ -1,0 +1,6 @@
+
+		metadata.agentz_observability.resource_kind == "inference" || (
+			metadata.agentz_observability.resource_kind == "mcp" &&
+			default(mcp.methodName, json(request.body).method) == "tools/call"
+		)
+	

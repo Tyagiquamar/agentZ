@@ -4,6 +4,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   Activity,
+  AppWindow,
   ArrowLeft,
   Bot,
   BotMessageSquare,
@@ -63,7 +64,23 @@ export function WorkspaceNavigation({
   const { organization, workspace } = scope
   const root: WorkspacePath = `/orgs/${organization.slug}/workspaces/${workspace.slug}`
   const canAdminister = organization.superadmin || workspace.capabilities.administer
+  const canReadGuardrails =
+    workspace.capabilities.guardrail_policies.read ||
+    workspace.capabilities.guardrail_connections.read ||
+    workspace.capabilities.guardrail_events.read
+  const guardrailsView = workspace.capabilities.guardrail_policies.read
+    ? "policies"
+    : workspace.capabilities.guardrail_connections.read
+      ? "connections"
+      : "events"
   const resources = [
+    {
+      href: `${root}/guardrails/${guardrailsView}`,
+      label: "Guardrails",
+      icon: ShieldCheck,
+      visible: canReadGuardrails,
+      tour: "guardrails",
+    },
     {
       href: `${root}/sandboxes`,
       label: "Sandboxes",
@@ -88,6 +105,13 @@ export function WorkspaceNavigation({
   ] as const
   const administration = [
     {
+      href: `${root}/applications/access`,
+      label: "Application access",
+      icon: AppWindow,
+      visible: canAdminister,
+      tour: "application-access",
+    },
+    {
       href: `${root}/external-agents`,
       label: "External agents",
       icon: BotMessageSquare,
@@ -111,6 +135,7 @@ export function WorkspaceNavigation({
   ] as const
   const destinations = [
     ...resources,
+    { href: `${root}/guardrails`, visible: canReadGuardrails },
     {
       href: `${root}/inference/providers`,
       visible: workspace.capabilities.inference_providers.read,

@@ -2,6 +2,7 @@ import { RememberRoute, missingRoute } from "@/data/route-memory"
 import { Suspense } from "react"
 import { InheritedResourceForm } from "@/app/(scoped)/orgs/[orgSlug]/workspaces/[workspaceSlug]/settings/inherited/inherited-resource-form"
 import { AdministrationLoadingState, AdministrationState } from "@/components/administration"
+import { listGuardrailConnectionsQuery, listGuardrailPoliciesQuery } from "@/data/guardrail.queries"
 import { listInferenceProvidersCachedQuery } from "@/data/inference-provider.queries"
 import { listMcpConnectionsCachedQuery } from "@/data/mcp.queries"
 import { getWorkspaceInheritedResources } from "@/data/workspaces"
@@ -36,6 +37,8 @@ async function InheritedResourceContent({
   ])
   const sorting = searchSchema.parse(search)
   const resources: Record<string, { label: string; type: InheritedResourceType }> = {
+    "guardrail-connections": { label: "Guardrail connections", type: "guardrail_connection" },
+    "guardrail-policies": { label: "Optional guardrail policies", type: "guardrail_policy" },
     skills: { label: "Skills", type: "skill" },
     sandboxes: { label: "Sandboxes", type: "sandbox" },
     "mcp-connections": { label: "MCP Connections", type: "mcp_connection" },
@@ -54,7 +57,16 @@ async function InheritedResourceContent({
 
   let displayNames: Record<string, string> | undefined
   let iconSources: Record<string, string> = {}
-  if (resource.type === "inference_provider") {
+  if (resource.type === "guardrail_policy" || resource.type === "guardrail_connection") {
+    const result =
+      resource.type === "guardrail_policy"
+        ? await listGuardrailPoliciesQuery()
+        : await listGuardrailConnectionsQuery()
+    if (result.error) throw new Error(result.error.message)
+    displayNames = Object.fromEntries(
+      (result.data?.items ?? []).map((item) => [item.name, item.displayName])
+    )
+  } else if (resource.type === "inference_provider") {
     const providers = await listInferenceProvidersCachedQuery()
     if (providers.error) throw new Error(providers.error.message)
     displayNames = {}

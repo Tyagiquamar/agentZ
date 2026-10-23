@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"strconv"
 	"time"
 
@@ -24,6 +25,7 @@ import (
 	"github.com/accuknox/agentz/internal/authorization"
 	gatewaydb "github.com/accuknox/agentz/internal/gateway/db"
 	gatewayapi "github.com/accuknox/agentz/internal/gateway/openapi"
+	"github.com/accuknox/agentz/internal/guardrails"
 	"github.com/accuknox/agentz/internal/inference"
 	"github.com/accuknox/agentz/internal/mcp"
 	"github.com/accuknox/agentz/internal/networkpolicy"
@@ -79,6 +81,33 @@ func (s *Service) delegationReady(ctx context.Context, grant gatewaydb.Delegatio
 	}
 	if !conditionsReady(backend.Status.Conditions, backend.Generation, "Accepted") {
 		return errors.New("backend is not accepted")
+	}
+
+	if gateway == inference.GatewayName {
+		workspaceID := route.Annotations["agentz.accuknox.com/guardrail-workspace-id"]
+		if workspaceID == "" {
+			return errors.New("guardrail workspace context is missing")
+		}
+		assignment, err := s.resolveGuardrailAssignment(ctx, grant.OrganizationID.String, workspaceID, grant.ClientID)
+		if err != nil {
+			return err
+		}
+		bundle, err := guardrails.Resolve(ctx, s.k8sClient, agentzv1alpha1.ScopeNamespace(agentzv1alpha1.ResourceScopeWorkspace, workspaceID), "client/"+grant.ClientID, assignment)
+		if err != nil {
+			return err
+		}
+		guardrailPolicy := &agw.AgentgatewayPolicy{}
+		if bundle.Guard != nil {
+			if err := s.k8sClient.Get(ctx, ctrlclient.ObjectKey{Namespace: namespace, Name: name + "-guardrails"}, guardrailPolicy); err != nil {
+				return err
+			}
+		}
+		if bundle.Guard != nil && guardrailPolicy.Annotations["agentz.accuknox.com/guardrail-revision"] != bundle.Revision {
+			return errors.New("guardrail rollout is pending")
+		}
+		if bundle.Guard != nil {
+			policyNames = append(policyNames, name+"-guardrails")
+		}
 	}
 	tracingPolicy := gateway + "-delegation-tracing"
 	if len(policyNames) > 0 {
@@ -200,6 +229,22 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 	for index, selected := range selection.Models {
 		key := ctrlclient.ObjectKey{Namespace: selected.Namespace, Name: selected.Provider}
 		provider := resources.providers[key]
+
+		assignment, err := s.resolveGuardrailAssignment(ctx, grant.OrganizationID.String, selected.WorkspaceId, grant.ClientID)
+		if err != nil {
+			return err
+		}
+		contextNamespace := agentzv1alpha1.ScopeNamespace(agentzv1alpha1.ResourceScopeWorkspace, selected.WorkspaceId)
+		bundle, err := guardrails.Resolve(ctx, s.k8sClient, contextNamespace, "client/"+grant.ClientID, assignment)
+		if err != nil {
+			return err
+		}
+		bundle.Rebind(selected.Namespace)
+		guardrailTargets, err := bundle.ProjectConnections(ctx, s.k8sClient, selected.Namespace, "agentz-inference")
+		if err != nil {
+			return err
+		}
+		ownerEgress[selected.Namespace] = append(ownerEgress[selected.Namespace], guardrailTargets...)
 		target, err := inference.RenderProviderTarget(provider, selected.Model)
 		if err != nil {
 			return err
@@ -248,10 +293,35 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 			fmt.Sprintf("/delegations/%s/models/%d", grant.ID, index),
 			gwv1.PathMatchPathPrefix,
 		)
-		objects = append(objects, backend, route, delegationTelemetry(
+		guardrailPolicy := &agw.AgentgatewayPolicy{
+			TypeMeta:   metav1.TypeMeta{APIVersion: agw.GroupVersion.String(), Kind: "AgentgatewayPolicy"},
+			ObjectMeta: metav1.ObjectMeta{Name: name + "-guardrails", Namespace: selected.Namespace},
+			Spec: agw.AgentgatewayPolicySpec{
+				TargetRefs: []agw.LocalPolicyTargetReferenceWithSectionName{{
+					LocalPolicyTargetReference: agw.LocalPolicyTargetReference{Group: "gateway.networking.k8s.io", Kind: "HTTPRoute", Name: gwv1.ObjectName(name)},
+				}},
+			},
+		}
+		if err := bundle.Apply(guardrailPolicy); err != nil {
+			return err
+		}
+		telemetry := delegationTelemetry(
 			grant, appName, agentKind, route, selected.WorkspaceId,
 			"inference", selected.Provider, selected.Uid, selected.Id,
-		))
+		)
+		route.Annotations = map[string]string{"agentz.accuknox.com/guardrail-workspace-id": selected.WorkspaceId}
+		if bundle.Guard != nil {
+			// AgentGateway selects one request transformation at a given route.
+			// Keep guard provenance and audit attribution in that same transformation.
+			maps.Copy(telemetry.Spec.Traffic.Transformation.Request.Metadata, guardrailPolicy.Spec.Traffic.Transformation.Request.Metadata)
+			guardrailPolicy.Spec.Traffic = nil
+			objects = append(objects, guardrailPolicy)
+		} else {
+			if err := s.k8sClient.Delete(ctx, guardrailPolicy); ctrlclient.IgnoreNotFound(err) != nil {
+				return err
+			}
+		}
+		objects = append(objects, backend, route, telemetry)
 		// Keep the owner route intact through the shared private ingress. Only the
 		// owner gateway rewrites it to the provider's API and injects credentials.
 		forward := &agw.AgentgatewayBackend{
@@ -477,7 +547,12 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 	selectionHash := fmt.Sprintf("%x", sha256.Sum256(grant.Selection))
 	for _, object := range objects {
 		object.SetLabels(map[string]string{authorization.DelegationLabel: grant.ID})
-		object.SetAnnotations(map[string]string{"agentz.accuknox.com/selection": selectionHash})
+		annotations := maps.Clone(object.GetAnnotations())
+		if annotations == nil {
+			annotations = map[string]string{}
+		}
+		annotations["agentz.accuknox.com/selection"] = selectionHash
+		object.SetAnnotations(annotations)
 		data, err := json.Marshal(object)
 		if err != nil {
 			return err

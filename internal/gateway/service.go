@@ -82,6 +82,8 @@ const cleanupMaxAttempts = 8
 
 // Config describes how to start the gateway.
 type Config struct {
+	GuardrailCallbackURL           string
+	GuardrailGatewayURL            string
 	CodingGitHubClientID           string
 	CodingGitHubClientSecret       string
 	CodingGitHubEncryptionKey      string
@@ -435,6 +437,7 @@ func Serve(ctx context.Context, cfg Config) error {
 		workers.Go(func() { svc.runDelegationRuntime(runCtx) })
 	}
 
+	workers.Go(func() { svc.runGuardrailPlaygroundCleanup(runCtx) })
 	srv := &http.Server{
 		Addr:              cfg.Addr,
 		Handler:           svc.routes(),
@@ -817,6 +820,7 @@ func (s *Service) routes() http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	})
+	r.Post("/internal/guardrails/model", s.handleGuardrailPlaygroundModel)
 	managementCORS := cors.Handler(cors.Options{
 		AllowedOrigins:   s.cfg.AllowedWebOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},

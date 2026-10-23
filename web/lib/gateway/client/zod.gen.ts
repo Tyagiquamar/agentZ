@@ -2,6 +2,101 @@
 
 import * as z from "zod"
 
+export const zGuardrailOutcome = z.object({
+  code: z.enum(["guardrail_denied", "guardrail_unavailable"]),
+  phase: z.enum(["input", "output"]),
+  safeLabel: z.string(),
+  explanation: z.string(),
+  referenceId: z.string(),
+  partialOutput: z.boolean(),
+})
+
+export const zGuardrailCredentials = z.object({
+  apiKey: z.string().optional(),
+  accessKeyId: z.string().optional(),
+  secretAccessKey: z.string().optional(),
+  sessionToken: z.string().optional(),
+  token: z.string().optional(),
+  googleCredentialsJson: z.string().optional(),
+})
+
+export const zGuardrailCaptureMode = z.enum(["off", "findings", "all"])
+
+export const zGuardrailSettings = z.object({
+  mandatoryPolicies: z.array(z.string()),
+  allowContentCapture: z.boolean(),
+  retentionDays: z.int().gte(1).lte(3650),
+})
+
+export const zGuardrailRegex = z.object({
+  patterns: z.array(z.string()).min(1),
+  replacement: z.string().optional(),
+})
+
+export const zGuardrailStatus = z.object({
+  state: z.enum(["Pending", "Ready", "Error"]),
+  revision: z.string(),
+  message: z.string(),
+  observedGeneration: z.coerce
+    .bigint()
+    .min(BigInt("-9223372036854775808"), {
+      error: "Invalid value: Expected int64 to be >= -9223372036854775808",
+    })
+    .max(BigInt("9223372036854775807"), {
+      error: "Invalid value: Expected int64 to be <= 9223372036854775807",
+    }),
+})
+
+export const zGuardrailConnectionInput = z.object({
+  name: z
+    .string()
+    .max(63)
+    .regex(/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/),
+  displayName: z.string().min(1).max(128),
+  description: z.string().max(2048).optional(),
+  provider: z.enum(["OpenAI", "Bedrock", "ModelArmor", "Webhook"]),
+  endpoint: z.string().optional(),
+  region: z.string().optional(),
+})
+
+export const zGuardrailDiscoveredResource = z.object({
+  id: z.string(),
+  label: z.string(),
+  description: z.string().optional(),
+})
+
+export const zGuardrailResourceDiscovery = z.object({
+  provider: z.enum(["OpenAI", "Bedrock", "ModelArmor", "Webhook"]),
+  kind: z.enum(["guardrails", "versions", "projects", "locations", "templates"]),
+  items: z.array(zGuardrailDiscoveredResource),
+  nextPageToken: z.string().optional(),
+  unreachable: z.array(z.string()).optional(),
+})
+
+export const zGuardrailTestCheckResult = z.object({
+  checkId: z.string(),
+  action: z.string(),
+  explanation: z.string(),
+})
+
+export const zGuardrailErrorEnvelope = z.object({
+  error: z.object({
+    type: z.string(),
+    code: z.string(),
+    message: z.string(),
+    guardrail: zGuardrailOutcome,
+  }),
+})
+
+export const zGuardrailTestResult = z.object({
+  outcome: zGuardrailOutcome.optional(),
+  action: z.enum(["allow", "deny", "mask", "error"]),
+  content: z.string(),
+  referenceId: z.string(),
+  explanation: z.string(),
+  checks: z.array(zGuardrailTestCheckResult),
+})
+
 export const zAppSession = z.object({
   session_id: z.string(),
   last_seen: z.iso.datetime({ offset: true }),
@@ -130,6 +225,10 @@ export const zEventTrailTargetType = z.enum([
   "inference_provider",
   "inference_pool",
   "agent",
+  "guardrail_connection",
+  "guardrail_policy",
+  "guardrail_settings",
+  "external_access_guardrails",
 ])
 
 export const zEventTrailField = z.object({
@@ -449,6 +548,9 @@ export const zChatInputs = z.object({
 })
 
 export const zTenant = z.object({
+  guardrail_connection_capabilities: zResourceCapabilities,
+  guardrail_policy_capabilities: zResourceCapabilities,
+  guardrail_event_capabilities: zResourceCapabilities,
   organization_id: z.string(),
   namespace: z.string(),
   ready: z.boolean(),
@@ -470,6 +572,9 @@ export const zAgentWorkspaceCapabilities = z.object({
 })
 
 export const zWorkspaceCapabilities = z.object({
+  guardrail_connections: zResourceCapabilities,
+  guardrail_policies: zResourceCapabilities,
+  guardrail_events: zResourceCapabilities,
   administer: z.boolean(),
   agents: zAgentWorkspaceCapabilities,
   skills: zResourceCapabilities,
@@ -513,9 +618,13 @@ export const zInheritedResourceType = z.enum([
   "sandbox",
   "mcp_connection",
   "inference_provider",
+  "guardrail_connection",
+  "guardrail_policy",
 ])
 
 export const zSelectedOrganizationResources = z.object({
+  guardrail_connections: z.array(z.string()),
+  guardrail_policies: z.array(z.string()),
   skills: z.array(z.string().min(1)),
   sandboxes: z.array(z.string().min(1)),
   mcp_connections: z.array(z.string().min(1)),
@@ -608,6 +717,28 @@ export const zChatSessionPreference = z.object({
 
 export const zResourceScope = z.enum(["Organisation", "Workspace"])
 
+export const zGuardrailConnection = z.object({
+  name: z.string(),
+  displayName: z.string(),
+  description: z.string(),
+  provider: z.enum(["OpenAI", "Bedrock", "ModelArmor", "Webhook"]),
+  endpoint: z.string(),
+  region: z.string(),
+  scope: zResourceScope,
+  credentialsConfigured: z.boolean(),
+  canModify: z.boolean(),
+  canDelete: z.boolean(),
+  status: zGuardrailStatus,
+})
+
+export const zGuardrailResourceDiscoveryInput = z.object({
+  scope: zResourceScope,
+  kind: z.enum(["guardrails", "versions", "projects", "locations", "templates"]),
+  parent: z.string().max(2048).optional(),
+  pageToken: z.string().max(8192).optional(),
+  pageSize: z.int().gte(1).lte(100).optional().default(50),
+})
+
 export const zResourceReference = z.object({
   scope: zResourceScope,
   name: z
@@ -615,6 +746,81 @@ export const zResourceReference = z.object({
     .min(1)
     .max(63)
     .regex(/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/),
+})
+
+export const zGuardrailAssignment = z.object({
+  policies: z.array(zResourceReference).optional(),
+  captureMode: zGuardrailCaptureMode.optional(),
+})
+
+export const zGuardrailCheck = z.object({
+  id: z.string().min(1).max(128),
+  name: z.string().min(1).max(128),
+  phase: z.enum(["input", "output"]),
+  scopes: z.array(z.enum(["instructions", "conversation", "toolResults", "toolArguments"])).min(1),
+  mode: z.enum(["enforce", "audit"]),
+  failureMode: z.enum(["closed", "open"]),
+  action: z.enum(["deny", "mask"]),
+  connection: zResourceReference.optional(),
+  regex: zGuardrailRegex.optional(),
+  guardrailId: z.string().optional(),
+  guardrailVersion: z.string().optional(),
+  template: z.string().optional(),
+  safeExplanation: z.string().max(1024).optional(),
+})
+
+export const zGuardrailPolicyInput = z.object({
+  name: z
+    .string()
+    .max(63)
+    .regex(/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/),
+  displayName: z.string().min(1).max(128),
+  description: z.string().max(2048).optional(),
+  checks: z.array(zGuardrailCheck).min(1).max(16),
+})
+
+export const zGuardrailPolicy = z.object({
+  name: z.string(),
+  displayName: z.string(),
+  description: z.string(),
+  checks: z.array(zGuardrailCheck),
+  scope: zResourceScope,
+  mandatory: z.boolean(),
+  canModify: z.boolean(),
+  canDelete: z.boolean(),
+  status: zGuardrailStatus,
+})
+
+export const zGuardrailEffectiveInput = z.object({
+  sandbox: z.string().optional(),
+  sandboxScope: zResourceScope.optional(),
+  clientId: z.string().optional(),
+  assignment: zGuardrailAssignment,
+})
+
+export const zGuardrailEffectiveCheck = z.object({
+  policyId: z.string(),
+  policyName: z.string(),
+  mandatory: z.boolean(),
+  check: zGuardrailCheck,
+})
+
+export const zGuardrailEffective = z.object({
+  revision: z.string(),
+  delivery: z.enum(["checkedStreaming", "wholeOutput"]),
+  captureMode: zGuardrailCaptureMode,
+  checks: z.array(zGuardrailEffectiveCheck),
+})
+
+export const zGuardrailTestInput = z.object({
+  policy: zResourceReference.optional(),
+  assignment: zGuardrailAssignment.optional(),
+  sandbox: z.string().optional(),
+  sandboxScope: zResourceScope.optional(),
+  clientId: z.string().optional(),
+  inlinePolicy: zGuardrailPolicyInput.optional(),
+  phase: z.enum(["input", "output"]),
+  content: z.string().min(1).max(65536),
 })
 
 export const zAgentMemoryConfig = z.object({
@@ -1069,6 +1275,7 @@ export const zEvaluationJudgment = z.object({
 export const zWorkflowRunTriggerType = z.enum(["Schedule", "Webhook"])
 
 export const zWorkflowRunSummary = z.object({
+  guardrailOutcome: zGuardrailOutcome.optional(),
   name: zWorkflowRunName,
   workflow_name: zWorkflowName,
   trigger_type: zWorkflowRunTriggerType,
@@ -1621,6 +1828,7 @@ export const zWorkflowEvaluationRequest = z.object({
 export const zWorkflowRunInputs = zJsonValue
 
 export const zWorkflowRunDetail = z.object({
+  guardrailOutcome: zGuardrailOutcome.optional(),
   name: zWorkflowRunName,
   agent_name: zAgentName,
   workflow_name: zWorkflowName,
@@ -2331,6 +2539,7 @@ export const zMcpConnectionRef = z.object({
 })
 
 export const zSandbox = z.object({
+  guardrails: zGuardrailAssignment.optional(),
   name: zSandboxName,
   scope: zResourceScope,
   created_by: zResourceActor,
@@ -2366,6 +2575,7 @@ export const zListSandboxesResponse = z.object({
 })
 
 export const zCreateSandboxRequest = z.object({
+  guardrails: zGuardrailAssignment.optional(),
   name: zSandboxName,
   packages: z.array(z.string().min(1)).optional(),
   allowed_hosts: z.array(z.string().min(1)).optional(),
@@ -2375,6 +2585,7 @@ export const zCreateSandboxRequest = z.object({
 })
 
 export const zUpdateSandboxRequest = z.object({
+  guardrails: zGuardrailAssignment.optional(),
   packages: z.array(z.string().min(1)),
   allowed_hosts: z.array(z.string().min(1)),
   mcp_connection_refs: z.array(zMcpConnectionRef),
@@ -3118,6 +3329,67 @@ export const zCodingRepositoryPage = z.object({
   next_page: z.int().optional(),
 })
 
+export const zGuardrailEvaluationContext = z.object({
+  version: z.literal(1),
+  eventId: z.string(),
+  referenceId: z.string(),
+  policyId: z.string(),
+  checkId: z.string(),
+  revision: z.string(),
+  connectionId: z.string(),
+  attachment: z.string(),
+  mandatory: z.boolean(),
+  safeLabel: z.string(),
+  explanation: z.string(),
+  durationMs: z.number(),
+  sequence: z.int(),
+  scopes: z.array(z.string()),
+  startedAt: z.coerce
+    .bigint()
+    .min(BigInt("-9223372036854775808"), {
+      error: "Invalid value: Expected int64 to be >= -9223372036854775808",
+    })
+    .max(BigInt("9223372036854775807"), {
+      error: "Invalid value: Expected int64 to be <= 9223372036854775807",
+    }),
+  validationPass: z.enum(["mandatoryFinal"]).optional(),
+  retentionDays: z.int().gte(1).lte(3650),
+  errorCode: z.string().optional(),
+  inspected: z.array(z.string()).optional(),
+  replacement: z.array(z.string()).optional(),
+})
+
+export const zGuardrailRuntimeEvaluation = z.object({
+  phase: z.enum(["request", "response"]),
+  guard: z.string(),
+  action: z.enum(["allow", "failOpen", "audit", "mask", "reject"]),
+  guardrailId: z.string().optional(),
+  guardrailVersion: z.string().optional(),
+  actionReason: z.string().optional(),
+  assessments: z.array(z.record(z.string(), z.unknown())).optional(),
+  agentz: zGuardrailEvaluationContext.optional(),
+})
+
+export const zGuardrailEvent = z.object({
+  id: z.string(),
+  organization_id: z.string(),
+  workspace_id: z.string(),
+  occurred_at: z.iso.datetime({ offset: true }),
+  expires_at: z.iso.datetime({ offset: true }),
+  sandbox_name: z.string(),
+  agent_name: z.string(),
+  client_id: z.string(),
+  session_id: z.string(),
+  model: z.string(),
+  trace_id: z.string(),
+  evaluation: zGuardrailRuntimeEvaluation,
+})
+
+export const zListGuardrailEventsResponse = z.object({
+  events: z.array(zGuardrailEvent),
+  next_cursor: z.string().optional(),
+})
+
 export const zApiError = z.object({
   name: z.enum(["APIError"]),
   data: z.object({
@@ -3651,6 +3923,19 @@ export const zWorkflowEvaluationSummary = z.object({
   executions: z.array(zEvaluationExecution),
   state: zWorkflowEvaluationState,
   created_at: z.iso.datetime({ offset: true }),
+})
+
+export const zGuardrailConnectionInputWritable = z.object({
+  name: z
+    .string()
+    .max(63)
+    .regex(/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/),
+  displayName: z.string().min(1).max(128),
+  description: z.string().max(2048).optional(),
+  provider: z.enum(["OpenAI", "Bedrock", "ModelArmor", "Webhook"]),
+  endpoint: z.string().optional(),
+  region: z.string().optional(),
+  credentials: zGuardrailCredentials.optional(),
 })
 
 export const zJsonValueWritable = z
@@ -4857,3 +5142,92 @@ export const zQueryDashboardResponse2 = zQueryDashboardResponse
  * One 25-row table page.
  */
 export const zListDashboardTableRowsResponse = zDashboardTablePage
+
+/**
+ * Scoped resources, including explicitly inherited organization resources.
+ */
+export const zListGuardrailConnectionsResponse = z.object({
+  items: z.array(zGuardrailConnection),
+})
+
+/**
+ * Created resource, pending projection.
+ */
+export const zCreateGuardrailConnectionResponse = zGuardrailConnection
+
+/**
+ * Unreferenced resource deleted.
+ */
+export const zDeleteGuardrailConnectionResponse = z.void()
+
+/**
+ * Resource detail.
+ */
+export const zGetGuardrailConnectionResponse = zGuardrailConnection
+
+/**
+ * Updated resource, pending projection.
+ */
+export const zUpdateGuardrailConnectionResponse = zGuardrailConnection
+
+/**
+ * One page of non-secret provider resources.
+ */
+export const zDiscoverGuardrailConnectionResourcesResponse = zGuardrailResourceDiscovery
+
+/**
+ * Scoped resources, including explicitly inherited organization resources.
+ */
+export const zListGuardrailPoliciesResponse = z.object({
+  items: z.array(zGuardrailPolicy),
+})
+
+/**
+ * Created resource, pending projection.
+ */
+export const zCreateGuardrailPolicyResponse = zGuardrailPolicy
+
+/**
+ * Unreferenced resource deleted.
+ */
+export const zDeleteGuardrailPolicyResponse = z.void()
+
+/**
+ * Resource detail.
+ */
+export const zGetGuardrailPolicyResponse = zGuardrailPolicy
+
+/**
+ * Updated resource, pending projection.
+ */
+export const zUpdateGuardrailPolicyResponse = zGuardrailPolicy
+
+/**
+ * Organization baseline and audit settings, inherited read-only by workspaces.
+ */
+export const zGetGuardrailSettingsResponse = zGuardrailSettings
+
+/**
+ * Organization settings saved.
+ */
+export const zUpdateGuardrailSettingsResponse = zGuardrailSettings
+
+/**
+ * Resolved mandatory and optional checks.
+ */
+export const zGetEffectiveGuardrailsResponse = zGuardrailEffective
+
+/**
+ * Test verdicts for the selected policy through the configured detector.
+ */
+export const zTestGuardrailsResponse = zGuardrailTestResult
+
+/**
+ * Retained evaluations, newest first.
+ */
+export const zListGuardrailEventsResponse2 = zListGuardrailEventsResponse
+
+/**
+ * Authorized event detail.
+ */
+export const zGetGuardrailEventResponse = zGuardrailEvent

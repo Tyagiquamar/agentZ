@@ -5,6 +5,7 @@ import {
   queryOptions,
   useQuery,
 } from "@tanstack/react-query"
+import { GuardrailOutcome } from "@/components/guardrails/guardrail-outcome"
 import Workflow from "@/components/blocks/workflow/workflow"
 import {
   watchWorkflowRuns,
@@ -73,5 +74,15 @@ export function WorkflowRunGraph({
     })
   )
 
-  return <Workflow key={workflowRun.name} workflow={workflow} run={query.data ?? workflowRun} />
+  const run = query.data ?? workflowRun
+  return (
+    <>
+      {run.guardrailOutcome ? (
+        <div className="px-4 pb-4 md:px-6">
+          <GuardrailOutcome outcome={run.guardrailOutcome} />
+        </div>
+      ) : null}
+      <Workflow key={workflowRun.name} workflow={workflow} run={run} />
+    </>
+  )
 }

@@ -790,13 +790,14 @@ func createRun(ctx context.Context, k8sClient ctrlclient.Client, run *agentzv1al
 
 func runSummaryFromCRD(run *agentzv1alpha1.WorkflowRun) gatewayapi.WorkflowRunSummary {
 	summary := gatewayapi.WorkflowRunSummary{
-		Name:           run.Name,
-		WorkflowName:   run.Spec.WorkflowName,
-		TriggerType:    workflowRunTriggerType(run),
-		TimeoutSeconds: run.Spec.TimeoutSeconds,
-		Status:         workflowRunStatus(run.Status.Phase),
-		Reason:         workflowRunReason(run),
-		CreatedAt:      run.CreationTimestamp.Time,
+		GuardrailOutcome: run.Status.GuardrailOutcome,
+		Name:             run.Name,
+		WorkflowName:     run.Spec.WorkflowName,
+		TriggerType:      workflowRunTriggerType(run),
+		TimeoutSeconds:   run.Spec.TimeoutSeconds,
+		Status:           workflowRunStatus(run.Status.Phase),
+		Reason:           workflowRunReason(run),
+		CreatedAt:        run.CreationTimestamp.Time,
 	}
 	if run.Spec.ScheduleRef != nil {
 		summary.ScheduleName = &run.Spec.ScheduleRef.Name
@@ -823,16 +824,17 @@ func runDetailFromCRD(run *agentzv1alpha1.WorkflowRun) gatewayapi.WorkflowRunDet
 	_ = inputs.UnmarshalJSON(raw)
 
 	detail := gatewayapi.WorkflowRunDetail{
-		Name:           run.Name,
-		AgentName:      run.Spec.AgentName,
-		WorkflowName:   run.Spec.WorkflowName,
-		TriggerType:    workflowRunTriggerType(run),
-		Inputs:         &inputs,
-		TimeoutSeconds: run.Spec.TimeoutSeconds,
-		Status:         workflowRunStatus(run.Status.Phase),
-		Reason:         workflowRunReason(run),
-		Message:        run.Status.Message,
-		CreatedAt:      run.CreationTimestamp.Time,
+		GuardrailOutcome: run.Status.GuardrailOutcome,
+		Name:             run.Name,
+		AgentName:        run.Spec.AgentName,
+		WorkflowName:     run.Spec.WorkflowName,
+		TriggerType:      workflowRunTriggerType(run),
+		Inputs:           &inputs,
+		TimeoutSeconds:   run.Spec.TimeoutSeconds,
+		Status:           workflowRunStatus(run.Status.Phase),
+		Reason:           workflowRunReason(run),
+		Message:          run.Status.Message,
+		CreatedAt:        run.CreationTimestamp.Time,
 	}
 	if run.Spec.ScheduleRef != nil {
 		detail.ScheduleName = &run.Spec.ScheduleRef.Name

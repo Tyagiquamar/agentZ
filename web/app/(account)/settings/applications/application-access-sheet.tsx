@@ -141,6 +141,13 @@ export function ApplicationAccessDetails({
           <p className="text-muted-foreground">No permissions granted.</p>
         )}
       </section>
+      {application.scopes.includes("inference:use") ? (
+        <p className="px-4 text-sm text-muted-foreground">
+          Model requests follow required organization guardrails and any policies assigned to this
+          application&apos;s authorized workspace access. Workspace administrators manage these
+          policies and any explicitly enabled audit content capture.
+        </p>
+      ) : null}
       <Separator />
       <section className="flex min-w-0 flex-col gap-4" aria-labelledby="application-resources">
         <h3 id="application-resources" className="px-4 font-medium">

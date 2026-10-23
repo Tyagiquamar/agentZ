@@ -75,6 +75,10 @@ const (
 	WorkflowRunReasonFailed = "Failed"
 	// WorkflowRunReasonTimedOut indicates the run exceeded its timeout.
 	WorkflowRunReasonTimedOut = "TimedOut"
+	// WorkflowRunReasonGuardrailDenied indicates a content policy stopped the run.
+	WorkflowRunReasonGuardrailDenied = "GuardrailDenied"
+	// WorkflowRunReasonGuardrailUnavailable indicates a required checker could not complete.
+	WorkflowRunReasonGuardrailUnavailable = "GuardrailUnavailable"
 	// WorkflowRunReasonGatewayError indicates the gateway call failed.
 	WorkflowRunReasonGatewayError = "GatewayError"
 )
@@ -149,6 +153,10 @@ type WorkflowRunSpec struct {
 
 // WorkflowRunStatus defines the observed state of WorkflowRun.
 type WorkflowRunStatus struct {
+	// GuardrailOutcome preserves the safe explanation and support reference for a blocked run.
+	// +optional
+	GuardrailOutcome *GuardrailOutcome `json:"guardrailOutcome,omitempty"`
+
 	// Phase is the lifecycle state tracked by controllers and the agent.
 	// +kubebuilder:validation:Enum=Pending;Running;Unacked;Succeeded;Failed
 	// +optional

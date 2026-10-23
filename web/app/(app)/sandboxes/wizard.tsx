@@ -23,6 +23,7 @@ import {
   Globe2,
   Layers3,
   ScrollText,
+  ShieldCheck,
   PackageSearch as PackageSearchIcon,
   Plus,
   RefreshCw,
@@ -99,6 +100,10 @@ import {
   listSkills,
   type ImmutableSkillSortByQuery,
   type McpConnectionSummary,
+  type GuardrailAssignment,
+  type GuardrailPolicy,
+  type GuardrailConnection,
+  type GuardrailSettings,
   type InferenceProvider,
   type InferencePool,
   type SandboxInference,
@@ -115,6 +120,8 @@ import {
 } from "@/lib/gateway/client/zod.gen"
 import { renderMcpServerIcon } from "@/app/(app)/mcps/catalog"
 import { ProviderIcon, providerKindLabels } from "@/app/(app)/inference/providers/provider-shared"
+import { PolicyEditor } from "@/app/(app)/guardrails/policy-editor"
+import { SubjectGuardrails } from "@/components/guardrails/subject-guardrails"
 import { PackageSearch } from "./package-search"
 import { useServerSorting } from "@/lib/use-token-pagination"
 
@@ -170,6 +177,7 @@ type SkillsStepValues = z.infer<typeof skillsStepSchema>
 type AllowedHostsStepValues = z.infer<typeof allowedHostsStepSchema>
 
 type SandboxWizardData = {
+  guardrails?: GuardrailAssignment
   identity?: SandboxIdentity
   packages?: string[]
   mcps?: SelectedMcpConnectionRef[]
@@ -183,6 +191,12 @@ type AllowedHostsDraft = AllowedHostsStepValues & {
 }
 
 type SandboxWizardProps = {
+  canCreateGuardrailPolicy: boolean
+  canCreateGuardrailConnection: boolean
+  initialGuardrails?: GuardrailAssignment
+  guardrailConnections: GuardrailConnection[]
+  guardrailPolicies: GuardrailPolicy[]
+  guardrailSettings: GuardrailSettings
   initialName?: string
   initialAllowedHosts?: string[]
   initialMcpConnectionRefs?: SelectedMcpConnectionRef[]
@@ -210,6 +224,7 @@ type PackageStepProps = {
 }
 
 type AllowedHostsStepProps = {
+  guardrails: GuardrailAssignment
   identity: SandboxIdentity
   initialAllowedHosts: string[]
   initialDraft: string
@@ -262,6 +277,7 @@ const formIdByStep = {
   mcps: "sandbox-form-mcps",
   skills: "sandbox-form-skills",
   models: "sandbox-form-models",
+  guardrails: "sandbox-form-guardrails",
   allowedHosts: "sandbox-form-allowed-hosts",
 } as const
 
@@ -387,6 +403,11 @@ const steps = [
     id: "models",
     title: "Models",
     icon: Brain,
+  },
+  {
+    id: "guardrails",
+    title: "Guardrails",
+    icon: ShieldCheck,
   },
   {
     id: "allowedHosts",
@@ -1817,6 +1838,7 @@ function ModelsStep({
 }
 
 function AllowedHostsStep({
+  guardrails,
   identity,
   initialAllowedHosts,
   initialDraft,
@@ -1938,6 +1960,7 @@ function AllowedHostsStep({
       noValidate
     >
       <input type="hidden" name="name" value={identity.name} />
+      <input type="hidden" name="guardrails" value={JSON.stringify(guardrails)} />
       {packages.map((pkg) => (
         <input key={pkg} type="hidden" name="packages" value={pkg} />
       ))}
@@ -2169,6 +2192,12 @@ function StepActions({ children }: { children: React.ReactNode }) {
 }
 
 export function SandboxWizard({
+  canCreateGuardrailPolicy,
+  canCreateGuardrailConnection,
+  initialGuardrails = { policies: [], captureMode: "off" },
+  guardrailConnections,
+  guardrailPolicies,
+  guardrailSettings,
   initialAllowedHosts = [],
   initialMcpConnectionRefs = [],
   initialName = "",
@@ -2187,6 +2216,8 @@ export function SandboxWizard({
   secretHostSuggestions,
 }: SandboxWizardProps) {
   const [direction, setDirection] = useState(1)
+  const [creatingPolicy, setCreatingPolicy] = useState(false)
+  const [createdPolicies, setCreatedPolicies] = useState<GuardrailPolicy[]>([])
   const pendingNavigationRef = useRef<NavigationRequest | undefined>(undefined)
   const initialIdentity = { name: initialName }
 
@@ -2199,6 +2230,7 @@ export function SandboxWizard({
         mcps: initialMcpConnectionRefs,
         skills: initialSkills,
         models: initialInference ?? null,
+        guardrails: initialGuardrails,
         allowedHosts: {
           allowedHosts: initialAllowedHosts,
           draft: "",
@@ -2208,6 +2240,7 @@ export function SandboxWizard({
     >
       {({ stepper }) => {
         const data: SandboxWizardData = {
+          guardrails: stepper.metadata.get<GuardrailAssignment>("guardrails") ?? initialGuardrails,
           identity: stepper.metadata.get<SandboxIdentity>("identity") ?? undefined,
           packages: stepper.metadata.get<string[]>("packages") ?? undefined,
           mcps: stepper.metadata.get<SelectedMcpConnectionRef[]>("mcps") ?? undefined,
@@ -2368,9 +2401,55 @@ export function SandboxWizard({
                   }}
                 />
               ),
+              guardrails: () => (
+                <form
+                  id={formIdByStep.guardrails}
+                  className="flex min-h-full flex-col gap-5"
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    completeNavigation(pendingNavigationRef.current)
+                    pendingNavigationRef.current = undefined
+                  }}
+                >
+                  <SubjectGuardrails
+                    assignment={data.guardrails ?? initialGuardrails}
+                    policies={[
+                      ...guardrailPolicies,
+                      ...createdPolicies.filter(
+                        (created) =>
+                          !guardrailPolicies.some(
+                            (policy) =>
+                              policy.scope === created.scope && policy.name === created.name
+                          )
+                      ),
+                    ]}
+                    settings={guardrailSettings}
+                    scope={scope}
+                    onCreatePolicy={
+                      canCreateGuardrailPolicy ? () => setCreatingPolicy(true) : undefined
+                    }
+                    onChange={(assignment) => stepper.metadata.set("guardrails", assignment)}
+                  />
+                  <StepActions>
+                    <Button
+                      onClick={() => requestNavigation({ kind: "prev" })}
+                      type="button"
+                      variant="outline"
+                    >
+                      <ArrowLeft data-icon="inline-start" />
+                      Previous
+                    </Button>
+                    <Button type="submit">
+                      Next
+                      <ArrowRight data-icon="inline-end" />
+                    </Button>
+                  </StepActions>
+                </form>
+              ),
               allowedHosts: () =>
                 data.identity && data.inference ? (
                   <AllowedHostsStep
+                    guardrails={data.guardrails ?? initialGuardrails}
                     identity={data.identity}
                     initialAllowedHosts={data.allowedHosts?.allowedHosts ?? initialAllowedHosts}
                     initialDraft={data.allowedHosts?.draft ?? ""}
@@ -2388,6 +2467,27 @@ export function SandboxWizard({
                   />
                 ) : null,
             })}
+            {creatingPolicy ? (
+              <PolicyEditor
+                canCreateConnection={canCreateGuardrailConnection}
+                connections={guardrailConnections}
+                scope={scope}
+                onCancel={() => setCreatingPolicy(false)}
+                onSaved={(policy) => {
+                  setCreatedPolicies((items) => [...items, policy])
+                  const assignment =
+                    stepper.metadata.get<GuardrailAssignment>("guardrails") ?? initialGuardrails
+                  stepper.metadata.set("guardrails", {
+                    ...assignment,
+                    policies: [
+                      ...(assignment.policies ?? []),
+                      { scope: policy.scope, name: policy.name },
+                    ],
+                  })
+                  setCreatingPolicy(false)
+                }}
+              />
+            ) : null}
           </WizardShell>
         )
       }}

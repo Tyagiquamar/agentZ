@@ -6,6 +6,70 @@ SELECT EXISTS(
     AND agent_name = $2
 );
 
+-- name: GatewayListGuardrailEvents :many
+SELECT * FROM observer_guardrail_events
+WHERE organization_id = sqlc.arg(organization_id)
+  AND (sqlc.arg(workspace_id)::text = '' OR workspace_id = sqlc.arg(workspace_id))
+  AND expires_at > now()
+  AND (sqlc.arg(action)::text = '' OR action = sqlc.arg(action))
+  AND (sqlc.arg(phase)::text = '' OR phase = sqlc.arg(phase))
+  AND (sqlc.arg(policy_id)::text = '' OR policy_id = sqlc.arg(policy_id))
+  AND (sqlc.arg(reference_id)::text = '' OR reference_id = sqlc.arg(reference_id))
+  AND (sqlc.arg(session_id)::text = '' OR session_id = sqlc.arg(session_id))
+  AND (sqlc.arg(cursor_id)::text = '' OR (occurred_at, id) < (sqlc.arg(cursor_at), sqlc.arg(cursor_id)))
+ORDER BY occurred_at DESC, id DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: GatewayGetGuardrailEvent :one
+SELECT * FROM observer_guardrail_events
+WHERE id = sqlc.arg(id)
+  AND organization_id = sqlc.arg(organization_id)
+  AND (sqlc.arg(workspace_id)::text = '' OR workspace_id = sqlc.arg(workspace_id))
+  AND expires_at > now();
+
+-- name: GatewayUpdateGuardrailRetention :execrows
+UPDATE observer_guardrail_events
+SET expires_at = occurred_at + make_interval(days => sqlc.arg(retention_days)::integer)
+WHERE organization_id = sqlc.arg(organization_id)
+  AND expires_at > now();
+
+-- name: GatewayGetGuardrailClientAccess :one
+SELECT * FROM guardrail_client_access
+WHERE organization_id = sqlc.arg(organization_id)
+  AND workspace_id = sqlc.arg(workspace_id)
+  AND client_id = sqlc.arg(client_id);
+
+-- name: GatewayListGuardrailClientAccess :many
+SELECT * FROM guardrail_client_access
+WHERE organization_id = sqlc.arg(organization_id)
+  AND workspace_id = sqlc.arg(workspace_id)
+ORDER BY client_id;
+
+-- name: GatewayListOrganizationGuardrailClientAccess :many
+SELECT * FROM guardrail_client_access
+WHERE organization_id = sqlc.arg(organization_id)
+ORDER BY workspace_id, client_id;
+
+-- name: GatewayUpsertGuardrailClientAccess :one
+INSERT INTO guardrail_client_access (
+  organization_id, workspace_id, client_id, policies, capture_mode, updated_by
+) VALUES (
+  sqlc.arg(organization_id), sqlc.arg(workspace_id), sqlc.arg(client_id),
+  sqlc.arg(policies), sqlc.arg(capture_mode), sqlc.narg(updated_by)
+)
+ON CONFLICT (organization_id, workspace_id, client_id) DO UPDATE
+SET policies = EXCLUDED.policies,
+    capture_mode = EXCLUDED.capture_mode,
+    updated_at = now(),
+    updated_by = EXCLUDED.updated_by
+RETURNING *;
+
+-- name: GatewayDeleteGuardrailClientAccess :execrows
+DELETE FROM guardrail_client_access
+WHERE organization_id = sqlc.arg(organization_id)
+  AND workspace_id = sqlc.arg(workspace_id)
+  AND client_id = sqlc.arg(client_id);
+
 -- name: GatewayGetAPIKeyByHash :one
 SELECT id, reference_id, name
 FROM apikeys

@@ -1,0 +1,2567 @@
+diff --git a/crates/agentgateway/src/cel/mod.rs b/crates/agentgateway/src/cel/mod.rs
+index a0a64c54..138e3362 100644
+--- a/crates/agentgateway/src/cel/mod.rs
++++ b/crates/agentgateway/src/cel/mod.rs
+@@ -220,7 +220,11 @@ impl ContextBuilder {
+ 		res: &mut crate::http::Request,
+ 		clear: bool,
+ 	) -> Option<RequestSnapshot> {
+-		if self.any_has(Attributes::Source)
++		if res
++			.extensions()
++			.get::<crate::http::transformation_cel::TransformationMetadata>()
++			.is_some_and(|m| m.0.contains_key("agentz_guardrails"))
++			|| self.any_has(Attributes::Source)
+ 			|| self.any_has(Attributes::Destination)
+ 			|| self.any_has(Attributes::Request)
+ 			|| self.any_has(Attributes::Llm)
+diff --git a/crates/agentgateway/src/cel/tests.rs b/crates/agentgateway/src/cel/tests.rs
+index 6d2d0d09..b4dd47f9 100644
+--- a/crates/agentgateway/src/cel/tests.rs
++++ b/crates/agentgateway/src/cel/tests.rs
+@@ -679,6 +679,7 @@ fn log_guardrails_binding() {
+ 		guard: "bedrockGuardrails".into(),
+ 		action: "reject".into(),
+ 		detail: crate::cel::GuardDetail {
++			agentz: None,
+ 			guardrail_id: Some("gr-1".into()),
+ 			guardrail_version: Some("3".into()),
+ 			action_reason: Some("Guardrail blocked.".into()),
+diff --git a/crates/agentgateway/src/cel/types.rs b/crates/agentgateway/src/cel/types.rs
+index 6d5f31f4..7aebb86c 100644
+--- a/crates/agentgateway/src/cel/types.rs
++++ b/crates/agentgateway/src/cel/types.rs
+@@ -607,6 +607,7 @@ impl<'a> Executor<'a> {
+ 	}
+ 	fn set_response(&mut self, resp: &'a crate::http::Response) {
+ 		self.response = Some(resp.into());
++		self.guardrails = resp.extensions().get::<Vec<GuardrailInfo>>();
+ 		self.proxy = ExtensionOrDirect::Extension(resp.extensions());
+ 		if let Some(llm) = resp.extensions().get::<LLMContext>() {
+ 			self.llm = ExtensionOrDirect::Direct(Some(llm));
+@@ -1441,6 +1442,9 @@ pub struct GuardrailInfo {
+ #[derive(Default, cel::DynamicType)]
+ #[dynamic(rename_all = "camelCase")]
+ pub struct GuardDetail {
++	/// AgentZ check identity and evaluation evidence, when enabled by trusted route metadata.
++	#[serde(default, skip_serializing_if = "Option::is_none")]
++	pub agentz: Option<serde_json::Value>,
+ 	/// The configured guardrail identifier.
+ 	#[serde(default, skip_serializing_if = "Option::is_none")]
+ 	pub guardrail_id: Option<Strng>,
+@@ -2530,6 +2534,7 @@ pub fn full_example_executor() -> ExecutorSerde {
+ 			guard: "bedrockGuardrails".into(),
+ 			action: "reject".into(),
+ 			detail: GuardDetail {
++				agentz: None,
+ 				guardrail_id: Some("gr-abc123".into()),
+ 				guardrail_version: Some("1".into()),
+ 				action_reason: Some("Guardrail blocked.".into()),
+diff --git a/crates/agentgateway/src/http/transformation_cel.rs b/crates/agentgateway/src/http/transformation_cel.rs
+index a21e0428..8bbec804 100644
+--- a/crates/agentgateway/src/http/transformation_cel.rs
++++ b/crates/agentgateway/src/http/transformation_cel.rs
+@@ -349,6 +349,11 @@ impl store::ResponsePolicyTrait for Transformation {
+ 		log: &mut RequestLog,
+ 		resp: &mut Response,
+ 	) -> Result<PolicyResponse, ProxyResponse> {
++		if self.response.is_some()
++			&& let Some(guardrails) = log.guardrails.load_clone()
++		{
++			resp.extensions_mut().insert(guardrails);
++		}
+ 		self
+ 			.apply_response(resp, log.request_snapshot.as_deref())
+ 			.map_err(crate::proxy::ProxyError::Processing)?;
+diff --git a/crates/agentgateway/src/http/transformation_cel_tests.rs b/crates/agentgateway/src/http/transformation_cel_tests.rs
+index 46a9c513..786e3e4d 100644
+--- a/crates/agentgateway/src/http/transformation_cel_tests.rs
++++ b/crates/agentgateway/src/http/transformation_cel_tests.rs
+@@ -1,5 +1,27 @@
+ use super::*;
+ 
++#[test]
++fn response_transform_can_read_completed_guardrail_context() {
++	let transformation: Transformation = serde_json::from_value(serde_json::json!({
++		"response":{"set":{"x-guardrail-action":"guardrails[0].action"}}
++	}))
++	.unwrap();
++	let mut response = Response::new(crate::http::Body::empty());
++	response
++		.extensions_mut()
++		.insert(vec![crate::cel::GuardrailInfo {
++			phase: "request".into(),
++			guard: "regex".into(),
++			action: "audit".into(),
++			detail: Default::default(),
++		}]);
++	transformation.apply_response(&mut response, None).unwrap();
++	assert_eq!(
++		response.headers().get("x-guardrail-action").unwrap(),
++		"audit"
++	);
++}
++
+ fn build<const N: usize>(items: [(&str, &str); N]) -> Transformation {
+ 	serde_json::from_value(serde_json::json!({
+ 		"request": {
+diff --git a/crates/agentgateway/src/llm/mod.rs b/crates/agentgateway/src/llm/mod.rs
+index d0478894..8740ba71 100644
+--- a/crates/agentgateway/src/llm/mod.rs
++++ b/crates/agentgateway/src/llm/mod.rs
+@@ -2187,6 +2187,46 @@ impl AIProvider {
+ 		log: &mut Option<&mut RequestLog>,
+ 	) -> Result<PreparedRequest, AIError> {
+ 		let mut guardrail_rejection = None;
++		let agentz_config = policy::agentz::Config::from_snapshot(
++			log.as_ref().and_then(|l| l.request_snapshot.as_deref()),
++		)
++		.map_err(|_| AIError::PromptWebhookError)?;
++		if let Some(config) = &agentz_config {
++			let value = req.to_value().map_err(AIError::RequestMarshal)?;
++			if (!config.request.is_empty() || !config.response.is_empty())
++				&& policy::agentz::validate_text_content(&value).is_err()
++			{
++				let response = config
++					.reject_content(
++						crate::telemetry::metrics::GuardrailPhase::Request,
++						log.as_ref().map(|l| &l.guardrails),
++					)
++					.map_err(|_| AIError::PromptWebhookError)?;
++				return Ok(PreparedRequest::GuardrailRejected {
++					response,
++					guardrail: "capability",
++				});
++			}
++
++			if !original_format.supports_prompt_guard() {
++				return Err(AIError::PromptWebhookError);
++			}
++			let guards = policies.and_then(|p| p.prompt_guard.as_ref());
++			config
++				.validate_counts(
++					guards.map_or(0, |g| g.request.len()),
++					guards.map_or(0, |g| g.response.len()),
++				)
++				.map_err(|_| AIError::PromptWebhookError)?;
++			let streaming = req.to_llm_request(self.provider(), false)?.streaming;
++			if streaming
++				&& !config.response.is_empty()
++				&& !guards.is_some_and(|g| g.streaming.is_enabled())
++			{
++				return Err(AIError::PromptWebhookError);
++			}
++		}
++
+ 		if let Some(p) = policies {
+ 			p.apply_prompt_enrichment(req);
+ 
+@@ -2430,7 +2470,13 @@ impl AIProvider {
+ 		// Only enter the streaming path for successful responses; errors
+ 		// fall through to the buffered path where process_error translates them.
+ 		if req.streaming && resp.status().is_success() {
+-			return self.process_streaming(
++			let config = policy::agentz::Config::from_snapshot(req_snapshot.as_deref())
++				.map_err(|_| AIError::PromptWebhookError)?;
++			let whole_output = config.as_ref().is_some_and(|c| {
++				c.delivery == policy::agentz::Delivery::WholeOutput && !c.response.is_empty()
++			});
++			let guardrail_log = logging.guardrails.clone();
++			let response = self.process_streaming(
+ 				client,
+ 				req,
+ 				rate_limit,
+@@ -2438,8 +2484,25 @@ impl AIProvider {
+ 				logging,
+ 				model_catalog.cloned(),
+ 				resp,
+-			);
++			)?;
++			if !whole_output {
++				return Ok(response);
++			}
++			// Validate the complete bounded stream before sending response headers, including on stream-only providers.
++			let limit = http::response_buffer_limit(&response);
++			let (parts, body) = response.into_parts();
++			let bytes = Box::pin(http::read_body_with_limit(body, limit))
++				.await
++				.map_err(|_| AIError::PromptWebhookError)?;
++			if let Some(response) = config
++				.as_ref()
++				.and_then(|c| c.promote_stream_error(&bytes, &guardrail_log))
++			{
++				return Ok(response);
++			}
++			return Ok(Response::from_parts(parts, Body::from(bytes)));
+ 		}
++
+ 		let model_catalog = model_catalog.map(Arc::as_ref);
+ 
+ 		let buffered = Self::buffer_response(resp).await?;
+@@ -2458,17 +2521,16 @@ impl AIProvider {
+ 				self.process_rerank_buffered_response(req, buffered, model_catalog, &logging.response)
+ 			},
+ 			_ => {
+-				self
+-					.process_chat_or_detect_buffered_response(
+-						client,
+-						req,
+-						rate_limit,
+-						req_snapshot,
+-						logging,
+-						model_catalog,
+-						buffered,
+-					)
+-					.await
++				Box::pin(self.process_chat_or_detect_buffered_response(
++					client,
++					req,
++					rate_limit,
++					req_snapshot,
++					logging,
++					model_catalog,
++					buffered,
++				))
++				.await
+ 			},
+ 		}
+ 	}
+@@ -2495,6 +2557,21 @@ impl AIProvider {
+ 			mut managed_body,
+ 		} = buffered;
+ 
++		if parts.status.is_success()
++			&& let Some(config) = policy::agentz::Config::from_snapshot(req_snapshot.as_deref())
++				.map_err(|_| AIError::PromptWebhookError)?
++			&& !config.response.is_empty()
++			&& let Ok(value) = serde_json::from_slice::<serde_json::Value>(&bytes)
++			&& policy::agentz::validate_text_content(&value).is_err()
++		{
++			return config
++				.reject_content(
++					crate::telemetry::metrics::GuardrailPhase::Response,
++					Some(&guardrail_log),
++				)
++				.map_err(|_| AIError::PromptWebhookError);
++		}
++
+ 		let (llm_resp, body) = if !parts.status.is_success() {
+ 			let body = self.process_error(
+ 				&req,
+@@ -2512,6 +2589,8 @@ impl AIProvider {
+ 			let prompt_guard_headers =
+ 				response_prompt_guard_headers(&parts.headers, rate_limit.request_traceparent.as_ref());
+ 
++			// A blocked completion still consumed provider tokens. Retain usage without its content.
++			let guardrail_usage = resp.to_llm_response(LogContentFields::default());
+ 			// Apply response prompt guard
+ 			if req.input_format.supports_prompt_guard()
+ 				&& let Some(dr) = Policy::apply_response_prompt_guard(
+@@ -2527,6 +2606,7 @@ impl AIProvider {
+ 					warn!("failed to apply response prompt guard: {e}");
+ 					AIError::PromptWebhookError
+ 				})? {
++				log.store(Some(LLMInfo::new(req.clone(), guardrail_usage)));
+ 				return Ok(dr.map(|replacement| {
+ 					managed_body.replace_content(replacement.into_boxed().into());
+ 					managed_body
+@@ -2994,6 +3074,9 @@ impl AIProvider {
+ 			vec![]
+ 		};
+ 
++		let agentz_delivery = policy::agentz::Config::from_snapshot(req_snapshot.as_deref())
++			.map_err(|_| AIError::PromptWebhookError)?
++			.map(|config| config.delivery);
+ 		let logger = AmendOnDrop::new(log, response_policies, req_snapshot, model_catalog).into_llm();
+ 		let stream_format = match self {
+ 			AIProvider::Bedrock(_) => "awsEventStream",
+@@ -3042,10 +3125,18 @@ impl AIProvider {
+ 
+ 		if !evaluators.is_empty() {
+ 			// `logger` is owned by the translated body; pass None to avoid double-logging.
+-			return Ok(
+-				translated
+-					.map(|b| b.transform_stream(|b| GuardedSseBody::new(b, evaluators, buffer, None))),
+-			);
++			return Ok(translated.map(|b| {
++				b.transform_stream(|b| match agentz_delivery {
++					Some(delivery) => GuardedSseBody::with_delivery(
++						b,
++						evaluators,
++						buffer,
++						delivery == policy::agentz::Delivery::WholeOutput,
++						input_format,
++					),
++					None => GuardedSseBody::new(b, evaluators, buffer, None),
++				})
++			}));
+ 		}
+ 		Ok(translated)
+ 	}
+@@ -3081,10 +3172,22 @@ impl AIProvider {
+ 	async fn read_body_resolving_model<T: RequestType + DeserializeOwned>(
+ 		&self,
+ 		policies: Option<&Policy>,
+-		hreq: Request,
++		mut hreq: Request,
+ 		log: &mut Option<&mut RequestLog>,
+ 		path_model_wins: bool,
+ 	) -> Result<(Parts, Body, T), AIError> {
++		if hreq
++			.extensions()
++			.get::<crate::http::transformation_cel::TransformationMetadata>()
++			.is_some_and(|m| m.0.contains_key("agentz_guardrails"))
++		{
++			let snapshot = Arc::new(crate::cel::snapshot_request(&mut hreq, false));
++			if let Some(log) = log.as_mut()
++				&& log.request_snapshot.is_none()
++			{
++				log.request_snapshot = Some(snapshot);
++			}
++		}
+ 		let buffer = http::buffer_limit(&hreq);
+ 		let (mut parts, mut managed_body) = hreq.into_parts();
+ 		let cached = managed_body.remove_extension::<json::ParsedJson>();
+diff --git a/crates/agentgateway/src/llm/policy/agentz.rs b/crates/agentgateway/src/llm/policy/agentz.rs
+new file mode 100644
+index 00000000..10596a64
+--- /dev/null
++++ b/crates/agentgateway/src/llm/policy/agentz.rs
+@@ -0,0 +1,495 @@
++//! AgentZ's versioned extension carried by trusted transformation metadata.
++use std::time::{Instant, SystemTime, UNIX_EPOCH};
++
++use serde::{Deserialize, Serialize};
++
++use crate::cel::{GuardDetail, RequestSnapshot};
++use crate::http::{Body, Response};
++use crate::telemetry::metrics::{GuardrailAction, GuardrailPhase};
++
++const UNSUPPORTED_CONTENT_EXPLANATION: &str =
++	"These guardrails support text only. Remove attachments or request text output, then try again.";
++
++#[derive(Clone, Deserialize)]
++#[serde(rename_all = "camelCase", deny_unknown_fields)]
++pub struct Config {
++	pub version: u32,
++	pub retention_days: u32,
++	pub request: Vec<Check>,
++	pub response: Vec<Check>,
++	pub capture: Capture,
++	pub delivery: Delivery,
++}
++
++#[derive(Clone, Deserialize, Serialize)]
++#[serde(rename_all = "camelCase", deny_unknown_fields)]
++pub struct Check {
++	pub policy_id: String,
++	pub check_id: String,
++	pub scopes: Vec<String>,
++	pub revision: String,
++	pub connection_id: String,
++	pub attachment: String,
++	pub mandatory: bool,
++	pub safe_label: String,
++	pub safe_explanation: String,
++}
++
++#[derive(Clone, Copy, Deserialize, PartialEq, Eq)]
++#[serde(rename_all = "camelCase")]
++pub enum Capture {
++	Off,
++	Findings,
++	All,
++}
++
++#[derive(Clone, Copy, Deserialize, PartialEq, Eq)]
++#[serde(rename_all = "camelCase")]
++pub enum Delivery {
++	CheckedStreaming,
++	WholeOutput,
++}
++
++impl Config {
++	pub fn from_snapshot(snapshot: Option<&RequestSnapshot>) -> anyhow::Result<Option<Self>> {
++		let Some(value) = snapshot
++			.and_then(|s| s.metadata.as_ref())
++			.and_then(|m| m.0.get("agentz_guardrails"))
++		else {
++			return Ok(None);
++		};
++		let config: Self = serde_json::from_value(value.clone())?;
++		anyhow::ensure!(
++			config.version == 1,
++			"unsupported AgentZ guardrail metadata version"
++		);
++		anyhow::ensure!(
++			(1..=3650).contains(&config.retention_days),
++			"invalid AgentZ guardrail retention"
++		);
++		for check in config.request.iter().chain(&config.response) {
++			anyhow::ensure!(
++				!check.scopes.is_empty()
++					&& check.scopes.iter().all(|s| matches!(
++						s.as_str(),
++						"instructions" | "conversation" | "toolResults" | "toolArguments"
++					)),
++				"invalid AgentZ content scope"
++			);
++			anyhow::ensure!(
++				!check.policy_id.is_empty() && !check.check_id.is_empty() && !check.revision.is_empty(),
++				"AgentZ guardrail identity is incomplete"
++			);
++		}
++		Ok(Some(config))
++	}
++
++	pub fn validate_counts(&self, request: usize, response: usize) -> anyhow::Result<()> {
++		anyhow::ensure!(
++			self.request.len() == request && self.response.len() == response,
++			"AgentZ guardrail metadata does not match the effective check chain"
++		);
++		Ok(())
++	}
++}
++
++/// Validate known protocol content containers before their text-only projections are created.
++/// Tool argument objects are deliberately not traversed as message/media descriptors.
++pub fn validate_text_content(value: &serde_json::Value) -> anyhow::Result<()> {
++	let mut pending = vec![value];
++	while let Some(value) = pending.pop() {
++		if let Some(items) = value.as_array() {
++			pending.extend(items);
++			continue;
++		}
++		let Some(object) = value.as_object() else {
++			continue;
++		};
++		let kind = object
++			.get("type")
++			.and_then(serde_json::Value::as_str)
++			.unwrap_or_default();
++		anyhow::ensure!(
++			!matches!(
++				kind,
++				"image"
++					| "image_url"
++					| "input_image"
++					| "input_audio"
++					| "audio"
++					| "file"
++					| "input_file"
++					| "document"
++					| "video"
++					| "image_generation_call"
++					| "response.audio.delta"
++					| "response.output_audio.delta"
++			),
++			"guardrail policy does not support this content modality"
++		);
++		anyhow::ensure!(
++			![
++				"audio",
++				"image_url",
++				"input_audio",
++				"inlineData",
++				"inline_data",
++				"fileData",
++				"file_data"
++			]
++			.iter()
++			.any(|key| object.contains_key(*key)),
++			"guardrail policy does not support embedded media"
++		);
++		if let Some(modalities) = object
++			.get("modalities")
++			.and_then(serde_json::Value::as_array)
++		{
++			anyhow::ensure!(
++				modalities.iter().all(|v| v.as_str() == Some("text")),
++				"guardrail policy requires text-only output"
++			);
++		}
++		for key in [
++			"messages",
++			"input",
++			"output",
++			"content",
++			"contents",
++			"candidates",
++			"parts",
++			"systemInstruction",
++			"system_instruction",
++			"choices",
++			"message",
++			"delta",
++			"response",
++			"item",
++			"content_block",
++		] {
++			if key == "input" && matches!(kind, "tool_use" | "function_call" | "custom_tool_call") {
++				continue;
++			}
++			if let Some(child) = object.get(key) {
++				pending.push(child);
++			}
++		}
++	}
++	Ok(())
++}
++
++impl Config {
++	/// Promote only a locally recorded terminal verdict, never provider-authored error JSON.
++	pub fn promote_stream_error(
++		&self,
++		bytes: &[u8],
++		log: &crate::telemetry::log::GuardrailLog,
++	) -> Option<Response> {
++		let data = std::str::from_utf8(bytes)
++			.ok()?
++			.lines()
++			.find_map(|line| line.strip_prefix("data: "))?;
++		let envelope: serde_json::Value = serde_json::from_str(data).ok()?;
++		let reference = envelope
++			.get("error")?
++			.get("guardrail")?
++			.get("referenceId")?
++			.as_str()?;
++		let mut recorded = None;
++		log.non_atomic_mutate(|entries| {
++			for entry in entries.iter().rev() {
++				let Some(event) = entry.detail.agentz.as_ref() else {
++					continue;
++				};
++				if entry.action != "reject"
++					|| event.get("referenceId").and_then(serde_json::Value::as_str) != Some(reference)
++				{
++					continue;
++				}
++				if let (Some(policy_id), Some(check_id)) = (
++					event.get("policyId").and_then(serde_json::Value::as_str),
++					event.get("checkId").and_then(serde_json::Value::as_str),
++				) {
++					recorded = Some((
++						policy_id.to_owned(),
++						check_id.to_owned(),
++						event.get("errorCode").is_some(),
++						event.get("errorCode").and_then(serde_json::Value::as_str)
++							== Some("unsupported_content"),
++					));
++				}
++				break;
++			}
++		});
++		let (policy_id, check_id, unavailable, unsupported_content) = recorded?;
++		let check = self
++			.response
++			.iter()
++			.find(|c| c.policy_id == policy_id && c.check_id == check_id)?;
++		let mut evaluation =
++			Evaluation::new(check, Capture::Off, self.retention_days, Vec::new()).ok()?;
++		evaluation.reference_id = reference.to_string();
++		evaluation.unsupported_content = unsupported_content;
++		Some(evaluation.response(GuardrailPhase::Response, unavailable, false))
++	}
++
++	pub fn reject_content(
++		&self,
++		phase: GuardrailPhase,
++		log: Option<&crate::telemetry::log::GuardrailLog>,
++	) -> anyhow::Result<Response> {
++		let check = if phase == GuardrailPhase::Request {
++			self.request.first().or_else(|| self.response.first())
++		} else {
++			self.response.first().or_else(|| self.request.first())
++		};
++		let check = check.ok_or_else(|| anyhow::anyhow!("no AgentZ checks configured"))?;
++		let mut evaluation = Evaluation::new(check, Capture::Off, self.retention_days, Vec::new())?;
++		evaluation.unsupported_content = true;
++		let response = evaluation.response(phase, true, false);
++		let mut detail = GuardDetail::default();
++		evaluation.finish(&mut detail, GuardrailAction::Reject, true, Vec::new());
++		if let Some(event) = detail.agentz.as_mut() {
++			event["errorCode"] = "unsupported_content".into();
++		}
++		super::record_guardrail(
++			log,
++			phase,
++			"capability",
++			GuardrailAction::Reject,
++			Some(detail),
++		);
++		Ok(response)
++	}
++}
++
++pub struct Evaluation {
++	check: Check,
++	capture: Capture,
++	started: Instant,
++	started_at: u64,
++	retention_days: u32,
++	pub reference_id: String,
++	pub capture_limited: bool,
++	pub unsupported_content: bool,
++	inspected: Option<Vec<String>>,
++}
++
++impl Evaluation {
++	pub fn new(
++		check: &Check,
++		capture: Capture,
++		retention_days: u32,
++		inspected: Vec<String>,
++	) -> anyhow::Result<Self> {
++		// Do not call the checker with content we cannot retain under full capture.
++		let capture_limited =
++			capture != Capture::Off && inspected.iter().map(String::len).sum::<usize>() > 1024 * 1024;
++		let capture = if capture_limited {
++			Capture::Off
++		} else {
++			capture
++		};
++
++		Ok(Self {
++			check: check.clone(),
++			capture_limited,
++			unsupported_content: false,
++			capture,
++			retention_days,
++			started: Instant::now(),
++			started_at: SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis() as u64,
++			reference_id: uuid::Uuid::new_v4().to_string(),
++			inspected: (capture != Capture::Off).then_some(inspected),
++		})
++	}
++
++	pub fn response(&self, phase: GuardrailPhase, unavailable: bool, partial: bool) -> Response {
++		let code = if unavailable {
++			"guardrail_unavailable"
++		} else {
++			"guardrail_denied"
++		};
++		let explanation = if unavailable {
++			if self.unsupported_content {
++				UNSUPPORTED_CONTENT_EXPLANATION
++			} else {
++				"A required guardrail could not complete. Try again later."
++			}
++			.to_string()
++		} else {
++			self.check.safe_explanation.clone()
++		};
++		let body = serde_json::json!({
++			"error": {
++				"type": code,
++				"code": code,
++				"message": explanation,
++				"guardrail": {
++					"code": code,
++					"phase": if phase == GuardrailPhase::Request { "input" } else { "output" },
++					"safeLabel": self.check.safe_label,
++					"explanation": explanation,
++					"referenceId": self.reference_id,
++					"partialOutput": partial,
++				}
++			}
++		});
++		::http::Response::builder()
++			.extension(crate::proxy::GuardrailOutcome)
++			.status(if unavailable { 503 } else { 422 })
++			.header(::http::header::CONTENT_TYPE, "application/json")
++			.header("x-agentz-guardrail-outcome", "1")
++			.body(Body::from(body.to_string()))
++			.expect("static AgentZ guardrail response")
++	}
++
++	pub fn finish(
++		self,
++		detail: &mut GuardDetail,
++		action: GuardrailAction,
++		error: bool,
++		replacement: Vec<String>,
++	) {
++		// Provider reasons are untrusted free text. Only configured safe feedback leaves the checker boundary.
++		detail.action_reason = None;
++		let capture = self.capture == Capture::All || action != GuardrailAction::Allow || error;
++		let mut event = serde_json::json!({
++			"version": 1,
++			"eventId": self.reference_id,
++			"referenceId": self.reference_id,
++			"policyId": self.check.policy_id,
++			"checkId": self.check.check_id,
++			"scopes": self.check.scopes,
++			"revision": self.check.revision,
++			"connectionId": self.check.connection_id,
++			"attachment": self.check.attachment,
++			"mandatory": self.check.mandatory,
++			"safeLabel": self.check.safe_label,
++			"explanation": if self.unsupported_content { UNSUPPORTED_CONTENT_EXPLANATION } else { self.check.safe_explanation.as_str() },
++			"startedAt": self.started_at,
++			"retentionDays": self.retention_days,
++			"durationMs": self.started.elapsed().as_secs_f64() * 1000.0,
++		});
++		if error {
++			event["errorCode"] = if self.unsupported_content {
++				"unsupported_content".into()
++			} else if self.capture_limited {
++				"capture_limit".into()
++			} else {
++				"checker_error".into()
++			};
++		}
++		if capture && let Some(inspected) = self.inspected {
++			event["inspected"] = serde_json::json!(inspected);
++			if action == GuardrailAction::Mask {
++				event["replacement"] = serde_json::json!(replacement);
++			}
++		}
++		detail.agentz = Some(event);
++	}
++}
++
++#[cfg(test)]
++mod tests {
++	use super::*;
++
++	#[test]
++	fn metadata_rejects_unknown_fields_and_incomplete_identity() {
++		assert!(serde_json::from_value::<Config>(serde_json::json!({
++			"version":1,"retentionDays":30,"request":[],"response":[],"capture":"off","delivery":"wholeOutput","typo":true
++		})).is_err());
++		let config: Config = serde_json::from_value(serde_json::json!({
++			"version":1,"retentionDays":30,"request":[],"response":[],"capture":"off","delivery":"wholeOutput"
++		})).unwrap();
++		assert!(config.validate_counts(1, 0).is_err());
++	}
++	#[tokio::test]
++	async fn mandatory_validation_blocks_later_mask_and_exports_safe_identity() {
++		use super::super::{Policy, TextRequest};
++		use crate::http::transformation_cel::TransformationMetadata;
++		use crate::telemetry::log::GuardrailLog;
++		use http_body_util::BodyExt as _;
++
++		let policy: Policy = serde_json::from_value(serde_json::json!({
++			"promptGuard":{"request":[
++				{"regex":{"action":"reject","rules":[{"pattern":"<masked>"}]}},
++				{"regex":{"action":"mask","rules":[{"pattern":"safe"}]}}
++			]}
++		}))
++		.unwrap();
++		let mut request = crate::http::Request::new(Body::from(""));
++		request.extensions_mut().insert(TransformationMetadata(serde_json::json!({
++			"agentz_guardrails": {
++				"version":1,"retentionDays":30,"capture":"off","delivery":"wholeOutput","response":[],
++				"request":[
++					{"policyId":"org-policy","checkId":"mandatory","scopes":["instructions","conversation"],"revision":"r1","connectionId":"","attachment":"organization","mandatory":true,"safeLabel":"Organization policy","safeExplanation":"Remove restricted content."},
++					{"policyId":"sandbox-policy","checkId":"mask","scopes":["instructions","conversation"],"revision":"r1","connectionId":"","attachment":"sandbox","mandatory":false,"safeLabel":"Redaction","safeExplanation":"Remove restricted content."}
++				]
++			}
++		}).as_object().unwrap().clone()));
++		let original = crate::cel::snapshot_request(&mut request, false);
++		let mut text = TextRequest {
++			content: "safe".to_string(),
++		};
++		let log = GuardrailLog::default();
++		let result = policy
++			.apply_prompt_guard(
++				&crate::test_helpers::policy_client(),
++				&mut text,
++				&::http::HeaderMap::new(),
++				None,
++				Some(&original),
++				Some(&log),
++			)
++			.await
++			.unwrap();
++		let (response, _) = result.expect("final mandatory check must block reintroduced content");
++		assert_eq!(response.status(), 422);
++		let body = response.into_body().collect().await.unwrap().to_bytes();
++		let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
++		assert_eq!(body["error"]["guardrail"]["phase"], "input");
++		assert_eq!(body["error"]["code"], "guardrail_denied");
++		let entries = log.take().unwrap();
++		assert_eq!(entries.len(), 3);
++		let event = entries.last().unwrap().detail.agentz.as_ref().unwrap();
++		assert_eq!(event["policyId"], "org-policy");
++		assert_eq!(event["validationPass"], "mandatoryFinal");
++		assert_eq!(
++			event["referenceId"],
++			body["error"]["guardrail"]["referenceId"]
++		);
++		assert!(event.get("inspected").is_none());
++	}
++
++	#[test]
++	fn capture_is_opt_in_and_provider_reasons_are_removed() {
++		let check = Check {
++			policy_id: "policy".into(),
++			check_id: "check".into(),
++			scopes: vec!["conversation".into()],
++			revision: "r1".into(),
++			connection_id: String::new(),
++			attachment: "sandbox".into(),
++			mandatory: false,
++			safe_label: "Safe label".into(),
++			safe_explanation: "Edit the request.".into(),
++		};
++		for (capture, action, expected) in [
++			(Capture::Off, GuardrailAction::Reject, false),
++			(Capture::Findings, GuardrailAction::Allow, false),
++			(Capture::Findings, GuardrailAction::Reject, true),
++			(Capture::All, GuardrailAction::Allow, true),
++		] {
++			let evaluation =
++				Evaluation::new(&check, capture, 30, vec!["sensitive content".into()]).unwrap();
++			let mut detail = GuardDetail {
++				action_reason: Some("provider echoed sensitive content".into()),
++				..Default::default()
++			};
++			evaluation.finish(&mut detail, action, false, Vec::new());
++			assert!(detail.action_reason.is_none());
++			assert_eq!(detail.agentz.unwrap().get("inspected").is_some(), expected);
++		}
++	}
++}
+diff --git a/crates/agentgateway/src/llm/policy/bedrock_guardrails.rs b/crates/agentgateway/src/llm/policy/bedrock_guardrails.rs
+index fdd936bb..9782284d 100644
+--- a/crates/agentgateway/src/llm/policy/bedrock_guardrails.rs
++++ b/crates/agentgateway/src/llm/policy/bedrock_guardrails.rs
+@@ -192,6 +192,7 @@ impl ApplyGuardrailResponse {
+ 			})
+ 			.collect();
+ 		GuardDetail {
++			agentz: None,
+ 			guardrail_id: Some(config.guardrail_identifier.clone()),
+ 			guardrail_version: Some(config.guardrail_version.clone()),
+ 			action_reason: self.action_reason.take(),
+@@ -229,6 +230,7 @@ pub async fn send(
+ 	client: &PolicyClient,
+ 	guardrails: &BedrockGuardrails,
+ ) -> anyhow::Result<ApplyGuardrailResponse> {
++	let sent_count = content.len();
+ 	let content = content
+ 		.into_iter()
+ 		.map(|text| GuardrailContentBlock {
+@@ -285,22 +287,15 @@ pub async fn send(
+ 	let bytes = crate::http::read_body_with_limit(body, lim).await?;
+ 
+ 	if !status.is_success() {
+-		let error_body = String::from_utf8_lossy(&bytes);
+-		tracing::warn!(
+-			status = %status,
+-			error_body = %error_body,
+-			guardrail_id = %guardrails.guardrail_identifier,
+-			"Bedrock guardrail API returned error"
+-		);
+-		anyhow::bail!(
+-			"Bedrock guardrail API error: status={}, body={}",
+-			status,
+-			error_body
+-		);
++		anyhow::bail!("Bedrock guardrail API returned status {status}");
+ 	}
+ 
+ 	let resp: ApplyGuardrailResponse = serde_json::from_slice(&bytes)
+ 		.map_err(|e| anyhow::anyhow!("Failed to parse Bedrock guardrail response: {e}"))?;
++	anyhow::ensure!(
++		!resp.is_anonymized() || resp.outputs.len() == sent_count,
++		"Bedrock guardrail returned an invalid anonymized output count"
++	);
+ 
+ 	if resp.is_intervened() {
+ 		tracing::debug!(
+diff --git a/crates/agentgateway/src/llm/policy/google_model_armor.rs b/crates/agentgateway/src/llm/policy/google_model_armor.rs
+index 448d93b8..42f3afbb 100644
+--- a/crates/agentgateway/src/llm/policy/google_model_armor.rs
++++ b/crates/agentgateway/src/llm/policy/google_model_armor.rs
+@@ -251,6 +251,7 @@ pub async fn send_request(
+ 	let content = req
+ 		.get_messages()
+ 		.into_iter()
++		.filter(|m| !matches!(m.role.as_str(), "tool" | "function"))
+ 		.map(|m| m.content.to_string())
+ 		.collect_vec()
+ 		.join("\n");
+@@ -271,7 +272,6 @@ pub async fn send_request(
+ 	debug!(
+ 		template_id = %model_armor.template_id,
+ 		is_blocked = response.is_blocked(),
+-		response = ?response,
+ 		"[Model Armor] <<< Received REQUEST response from Model Armor"
+ 	);
+ 
+@@ -317,7 +317,6 @@ pub async fn send_response(
+ 	debug!(
+ 		template_id = %model_armor.template_id,
+ 		is_blocked = response.is_blocked(),
+-		response = ?response,
+ 		"[Model Armor] <<< Received RESPONSE response from Model Armor"
+ 	);
+ 
+@@ -396,6 +395,67 @@ async fn send_model_armor_request<T: Serialize>(
+ 		.call_with_explicit_policies_list(with_default_timeout(req), mock_be, pols)
+ 		.await?;
+ 
++	anyhow::ensure!(
++		resp.status().is_success(),
++		"Model Armor returned a non-success status"
++	);
+ 	let resp: SanitizeResponse = json::from_response_body(resp).await?;
++	let result = resp
++		.sanitization_result
++		.as_ref()
++		.ok_or_else(|| anyhow::anyhow!("Model Armor omitted its sanitization result"))?;
++	let entries = result.filter_results.entries();
++	anyhow::ensure!(
++		!entries.is_empty(),
++		"Model Armor returned no filter verdicts"
++	);
++	for entry in entries {
++		if let Some(sdp) = &entry.sdp_filter_result {
++			anyhow::ensure!(
++				sdp.inspect_result.is_some() || sdp.deidentify_result.is_some(),
++				"Model Armor omitted its sensitive-data verdict"
++			);
++		}
++		let states = [
++			entry
++				.rai_filter_result
++				.as_ref()
++				.map(|v| v.match_state.as_ref()),
++			entry
++				.pi_and_jailbreak_filter_result
++				.as_ref()
++				.map(|v| v.match_state.as_ref()),
++			entry
++				.malicious_uri_filter_result
++				.as_ref()
++				.map(|v| v.match_state.as_ref()),
++			entry
++				.csam_filter_result
++				.as_ref()
++				.map(|v| v.match_state.as_ref()),
++			entry
++				.virus_scan_filter_result
++				.as_ref()
++				.map(|v| v.match_state.as_ref()),
++			entry
++				.sdp_filter_result
++				.as_ref()
++				.and_then(|v| v.inspect_result.as_ref())
++				.map(|v| v.match_state.as_ref()),
++			entry
++				.sdp_filter_result
++				.as_ref()
++				.and_then(|v| v.deidentify_result.as_ref())
++				.map(|v| v.match_state.as_ref()),
++		];
++		anyhow::ensure!(
++			states.iter().any(Option::is_some)
++				&& states
++					.iter()
++					.flatten()
++					.all(|state| state.is_some_and(|s| *s != MatchState::Unknown)),
++			"Model Armor returned an unknown filter verdict"
++		);
++	}
+ 	Ok(resp)
+ }
+diff --git a/crates/agentgateway/src/llm/policy/mod.rs b/crates/agentgateway/src/llm/policy/mod.rs
+index 34f4f970..92b2a90c 100644
+--- a/crates/agentgateway/src/llm/policy/mod.rs
++++ b/crates/agentgateway/src/llm/policy/mod.rs
+@@ -47,11 +47,15 @@ fn record_guardrail(
+ 	};
+ 	let Some(log) = log else { return };
+ 	log.mutate_or_default(|entries| {
++		let mut detail = detail.unwrap_or_default();
++		if let Some(event) = detail.agentz.as_mut() {
++			event["sequence"] = serde_json::json!(entries.len());
++		}
+ 		entries.push(cel::GuardrailInfo {
+ 			phase: guardrail_phase(phase),
+ 			guard: strng::new(guard),
+ 			action,
+-			detail: detail.unwrap_or_default(),
++			detail,
+ 		});
+ 	});
+ }
+@@ -66,6 +70,7 @@ fn reject_or_audit<M>(audit: bool, rejection: &RequestRejection) -> GuardrailOut
+ 
+ pub mod webhook;
+ 
++pub mod agentz;
+ mod azure_content_safety;
+ mod bedrock_guardrails;
+ mod google_model_armor;
+@@ -435,6 +440,11 @@ pub trait StreamingEvaluator: Send {
+ 	/// Evaluate a text window. Returns `Some(Blocked)` if the content should be blocked.
+ 	async fn evaluate(&mut self, window: &str) -> anyhow::Result<Option<StreamingGuardrailOutcome>>;
+ 
++	/// Record a stream delivery failure without treating incomplete content as allowed.
++	fn delivery_error(&mut self, _partial: bool, _unsupported_content: bool) -> Bytes {
++		Bytes::from_static(b"Guardrail stream could not be inspected")
++	}
++
+ 	/// Returns the failure mode to apply when `evaluate` returns an error.
+ 	/// Guard types without an explicit `failure_mode` field default to `FailClosed`.
+ 	fn failure_mode(&self) -> FailureMode {
+@@ -566,7 +576,7 @@ impl PromptGuard {
+ 		let mut req = TextRequest {
+ 			content: text.to_string(),
+ 		};
+-		for g in &self.request {
++		for (index, g) in self.request.iter().enumerate() {
+ 			match Policy::apply_single_request_guard(
+ 				g,
+ 				&mut req,
+@@ -575,6 +585,8 @@ impl PromptGuard {
+ 				claims.clone(),
+ 				original,
+ 				guardrail_log,
++				index,
++				false,
+ 			)
+ 			.await
+ 			{
+@@ -629,13 +641,15 @@ impl PromptGuard {
+ 		self
+ 			.response
+ 			.iter()
+-			.map(|g| {
++			.enumerate()
++			.map(|(index, g)| {
+ 				streaming_guardrails::make_evaluator(
+ 					g,
+ 					client.clone(),
+ 					http_headers.clone(),
+ 					original.clone(),
+ 					guardrail_log.clone(),
++					index,
+ 				)
+ 			})
+ 			.collect()
+@@ -650,8 +664,9 @@ impl PromptGuard {
+ 		original: Option<&cel::RequestSnapshot>,
+ 		guardrail_log: Option<&GuardrailLog>,
+ 		allow_recorded: &mut bool,
++		check_index: usize,
+ 	) -> anyhow::Result<(Option<StreamingGuardrailOutcome>, GuardrailAction)> {
+-		if window.is_empty() {
++		if window.is_empty() && agentz::Config::from_snapshot(original)?.is_none() {
+ 			return Ok((None, GuardrailAction::Allow));
+ 		}
+ 		let mut resp = TextResponse {
+@@ -665,6 +680,8 @@ impl PromptGuard {
+ 			original,
+ 			guardrail_log,
+ 			Some(allow_recorded),
++			check_index,
++			false,
+ 		)
+ 		.await?;
+ 		let streaming = match rejection {
+@@ -944,14 +961,26 @@ impl Policy {
+ 		original: Option<&cel::RequestSnapshot>,
+ 		guardrail_log: Option<&GuardrailLog>,
+ 	) -> anyhow::Result<Option<(Response, &'static str)>> {
+-		if let Some(log) = guardrail_log {
++		let config = agentz::Config::from_snapshot(original)?;
++		if let Some(config) = &config {
++			let guards = self.prompt_guard.as_ref();
++			config.validate_counts(
++				guards.map_or(0, |g| g.request.len()),
++				guards.map_or(0, |g| g.response.len()),
++			)?;
++		}
++		if config.is_none()
++			&& let Some(log) = guardrail_log
++		{
+ 			log.non_atomic_mutate(|entries| entries.retain(|e| e.phase != "request"));
+ 		}
+-		for g in self
++		let mut mutated = false;
++		for (index, g) in self
+ 			.prompt_guard
+ 			.as_ref()
+ 			.iter()
+ 			.flat_map(|g| g.request.iter())
++			.enumerate()
+ 		{
+ 			let (action, rejection) = Self::apply_single_request_guard(
+ 				g,
+@@ -961,13 +990,45 @@ impl Policy {
+ 				claims.clone(),
+ 				original,
+ 				guardrail_log,
++				index,
++				false,
+ 			)
+ 			.await?;
++			mutated |= action == GuardrailAction::Mask;
+ 			Self::record_guardrail_trip(client, GuardrailPhase::Request, action);
+ 			if let Some(res) = rejection {
+ 				return Ok(Some((res, g.kind.name())));
+ 			}
+ 		}
++		if mutated && let Some(config) = agentz::Config::from_snapshot(original)? {
++			for (index, guard) in self
++				.prompt_guard
++				.as_ref()
++				.into_iter()
++				.flat_map(|g| g.request.iter())
++				.enumerate()
++			{
++				if !config.request[index].mandatory {
++					continue;
++				}
++				let (action, rejection) = Self::apply_single_request_guard(
++					guard,
++					req,
++					http_headers,
++					client,
++					claims.clone(),
++					original,
++					guardrail_log,
++					index,
++					true,
++				)
++				.await?;
++				Self::record_guardrail_trip(client, GuardrailPhase::Request, action);
++				if let Some(response) = rejection {
++					return Ok(Some((response, guard.kind.name())));
++				}
++			}
++		}
+ 		Ok(None)
+ 	}
+ 
+@@ -981,18 +1042,133 @@ impl Policy {
+ 		claims: Option<Claims>,
+ 		original: Option<&cel::RequestSnapshot>,
+ 		guardrail_log: Option<&GuardrailLog>,
++		check_index: usize,
++		final_validation: bool,
+ 	) -> anyhow::Result<(GuardrailAction, Option<Response>)> {
+-		let (outcome, detail) =
+-			match Self::evaluate_single_request_guard(guard, req, http_headers, client, claims, original)
+-				.await
+-			{
+-				Err(e) if guard.failure_mode() == FailureMode::FailOpen => {
+-					tracing::warn!("request guard error, failing open: {e}");
+-					(GuardrailOutcome::FailOpen, None)
++		let config = agentz::Config::from_snapshot(original)?;
++		if let Some(check) = config.as_ref().and_then(|c| c.request.get(check_index)) {
++			let expected = check
++				.scopes
++				.iter()
++				.map(|scope| match scope.as_str() {
++					"instructions" => ContentScope::SystemPrompt,
++					"conversation" => ContentScope::Messages,
++					"toolResults" => ContentScope::ToolOutput,
++					"toolArguments" => ContentScope::ToolInput,
++					_ => unreachable!("validated AgentZ scope"),
++				})
++				.collect::<Vec<_>>();
++			anyhow::ensure!(
++				expected.len() == guard.scope.len()
++					&& expected.iter().all(|scope| guard.scope.contains(scope)),
++				"AgentZ and native request scopes differ"
++			);
++		}
++		let inspected = if config
++			.as_ref()
++			.is_some_and(|c| c.capture != agentz::Capture::Off)
++		{
++			match guard.kind {
++				RequestGuardKind::Regex(_) | RequestGuardKind::BedrockGuardrails(_) => {
++					Self::scoped_request_texts(req, &guard.scope).0
+ 				},
+-				result => result?,
+-			};
++				_ => req
++					.get_messages()
++					.into_iter()
++					.filter(|m| !matches!(m.role.as_str(), "tool" | "function"))
++					.map(|m| m.content.to_string())
++					.collect(),
++			}
++		} else {
++			Vec::new()
++		};
++		let mut evaluation = config
++			.as_ref()
++			.map(|c| {
++				let check = c
++					.request
++					.get(check_index)
++					.ok_or_else(|| anyhow::anyhow!("AgentZ request check identity missing"))?;
++				agentz::Evaluation::new(check, c.capture, c.retention_days, inspected)
++			})
++			.transpose()?;
++		if evaluation.as_ref().is_some_and(|e| e.capture_limited) {
++			let evaluation = evaluation.take().expect("checked capture admission");
++			let response = evaluation.response(GuardrailPhase::Request, true, false);
++			let mut detail = GuardDetail::default();
++			evaluation.finish(&mut detail, GuardrailAction::Reject, true, Vec::new());
++			record_guardrail(
++				guardrail_log,
++				GuardrailPhase::Request,
++				guard.kind.name(),
++				GuardrailAction::Reject,
++				Some(detail),
++			);
++			return Ok((GuardrailAction::Reject, Some(response)));
++		}
++		let result =
++			Self::evaluate_single_request_guard(guard, req, http_headers, client, claims, original).await;
++		let mut error = false;
++		let (mut outcome, mut detail) = match result {
++			Ok(result) => result,
++			Err(e) => {
++				error = true;
++				tracing::warn!("request guard operational error: {e}");
++				if guard.kind.is_audit() {
++					(GuardrailOutcome::Audit, None)
++				} else if guard.failure_mode() == FailureMode::FailOpen {
++					(GuardrailOutcome::FailOpen, None)
++				} else if let Some(evaluation) = &evaluation {
++					(
++						GuardrailOutcome::Rejected(evaluation.response(GuardrailPhase::Request, true, false)),
++						None,
++					)
++				} else {
++					record_guardrail(
++						guardrail_log,
++						GuardrailPhase::Request,
++						guard.kind.name(),
++						GuardrailAction::Reject,
++						None,
++					);
++					Self::record_guardrail_trip(client, GuardrailPhase::Request, GuardrailAction::Reject);
++					return Err(e);
++				}
++			},
++		};
++		if let Some(evaluation) = &evaluation
++			&& guard.scope.contains(&ContentScope::ToolInput)
++			&& matches!(outcome, GuardrailOutcome::Masked(_))
++		{
++			error = true;
++			outcome =
++				GuardrailOutcome::Rejected(evaluation.response(GuardrailPhase::Request, true, false));
++		}
++		if let Some(evaluation) = &evaluation
++			&& final_validation
++			&& matches!(outcome, GuardrailOutcome::Masked(_))
++		{
++			outcome =
++				GuardrailOutcome::Rejected(evaluation.response(GuardrailPhase::Request, false, false));
++		}
++		if let Some(evaluation) = &evaluation
++			&& matches!(outcome, GuardrailOutcome::Rejected(_))
++		{
++			outcome =
++				GuardrailOutcome::Rejected(evaluation.response(GuardrailPhase::Request, error, false));
++		}
+ 		let (action, rejection) = Self::apply_request_guard_outcome(outcome, req)?;
++		if let Some(evaluation) = evaluation {
++			let replacement = if action == GuardrailAction::Mask {
++				Self::scoped_request_texts(req, &guard.scope).0
++			} else {
++				Vec::new()
++			};
++			evaluation.finish(detail.get_or_insert_default(), action, error, replacement);
++			if final_validation && let Some(event) = detail.as_mut().and_then(|d| d.agentz.as_mut()) {
++				event["validationPass"] = "mandatoryFinal".into();
++			}
++		}
+ 		record_guardrail(
+ 			guardrail_log,
+ 			GuardrailPhase::Request,
+@@ -1372,7 +1548,7 @@ impl Policy {
+ 		mut resp: bedrock_guardrails::ApplyGuardrailResponse,
+ 		guardrails: &BedrockGuardrails,
+ 	) -> (GuardrailOutcome<Mask>, Option<GuardDetail>) {
+-		if !resp.is_blocked() && !resp.is_anonymized() {
++		if !resp.is_intervened() {
+ 			return (GuardrailOutcome::None, None);
+ 		}
+ 		let detail = resp.build_detail(guardrails);
+@@ -1539,8 +1715,14 @@ impl Policy {
+ 			.then(|| req.to_value())
+ 			.transpose()?;
+ 		let context = webhook::EvaluationContext::new(original, llm_request.as_ref());
+-		let messages = req.get_messages();
+-		let headers = Self::get_webhook_forward_headers(http_headers, &webhook.forward_header_matches);
++		let messages = req
++			.get_messages()
++			.into_iter()
++			.filter(|m| !matches!(m.role.as_str(), "tool" | "function"))
++			.collect();
++		let source_headers = original.map(|s| &s.headers).unwrap_or(http_headers);
++		let headers =
++			Self::get_webhook_forward_headers(source_headers, &webhook.forward_header_matches);
+ 		let whr = webhook::send_request(client, webhook, context, &headers, messages).await?;
+ 		if webhook.action == RejectAuditAction::Audit {
+ 			let (would_action, reason) = match whr.action {
+@@ -1557,6 +1739,27 @@ impl Policy {
+ 				}),
+ 			));
+ 		}
++		if matches!(whr.action, RequestAction::Mask(_)) {
++			let value = req.to_value()?;
++			if let Some(messages) = value.get("messages").and_then(serde_json::Value::as_array) {
++				anyhow::ensure!(
++					messages.iter().all(|m| m.as_object().is_some_and(|m| m
++						.keys()
++						.all(|k| matches!(k.as_str(), "role" | "content"))
++						&& m.get("content").is_none_or(serde_json::Value::is_string))),
++					"webhook masking cannot replace structured messages"
++				);
++			}
++			if let Some(items) = value.get("input").and_then(serde_json::Value::as_array) {
++				anyhow::ensure!(
++					items.iter().all(|m| m.as_object().is_some_and(|m| m
++						.keys()
++						.all(|k| matches!(k.as_str(), "type" | "role" | "content"))
++						&& m.get("content").is_some_and(serde_json::Value::is_string))),
++					"webhook masking cannot replace structured response inputs"
++				);
++			}
++		}
+ 		Self::webhook_request_outcome(whr.action)
+ 	}
+ 
+@@ -1853,7 +2056,8 @@ impl Policy {
+ 		original: Option<&cel::RequestSnapshot>,
+ 		guardrail_log: Option<&GuardrailLog>,
+ 	) -> anyhow::Result<Option<Response>> {
+-		for g in guards {
++		let mut mutated = false;
++		for (index, g) in guards.iter().enumerate() {
+ 			let (action, rejection) = Self::apply_single_response_guard(
+ 				g,
+ 				resp,
+@@ -1862,13 +2066,39 @@ impl Policy {
+ 				original,
+ 				guardrail_log,
+ 				None,
++				index,
++				false,
+ 			)
+ 			.await?;
++			mutated |= action == GuardrailAction::Mask;
+ 			Self::record_guardrail_trip(client, GuardrailPhase::Response, action);
+ 			if let Some(res) = rejection {
+ 				return Ok(Some(res));
+ 			}
+ 		}
++		if mutated && let Some(config) = agentz::Config::from_snapshot(original)? {
++			for (index, guard) in guards.iter().enumerate() {
++				if !config.response[index].mandatory {
++					continue;
++				}
++				let (action, rejection) = Self::apply_single_response_guard(
++					guard,
++					resp,
++					http_headers,
++					client,
++					original,
++					guardrail_log,
++					None,
++					index,
++					true,
++				)
++				.await?;
++				Self::record_guardrail_trip(client, GuardrailPhase::Response, action);
++				if let Some(response) = rejection {
++					return Ok(Some(response));
++				}
++			}
++		}
+ 		Ok(None)
+ 	}
+ 
+@@ -1881,30 +2111,126 @@ impl Policy {
+ 		original: Option<&cel::RequestSnapshot>,
+ 		guardrail_log: Option<&GuardrailLog>,
+ 		streaming_allow_recorded: Option<&mut bool>,
++		check_index: usize,
++		final_validation: bool,
+ 	) -> anyhow::Result<(GuardrailAction, Option<Response>)> {
+-		let (outcome, detail) =
+-			match Self::evaluate_single_response_guard(guard, resp, http_headers, client, original).await
+-			{
+-				Err(e)
+-					if streaming_allow_recorded.is_none()
+-						&& guard.failure_mode() == FailureMode::FailOpen =>
+-				{
+-					tracing::warn!("response guard error, failing open: {e}");
++		let streaming = streaming_allow_recorded.is_some();
++		let config = agentz::Config::from_snapshot(original)?;
++		if let Some(check) = config.as_ref().and_then(|c| c.response.get(check_index)) {
++			anyhow::ensure!(
++				check.scopes == ["conversation"],
++				"unsupported AgentZ response content scope"
++			);
++		}
++		let partial = streaming
++			&& config
++				.as_ref()
++				.is_none_or(|c| c.delivery == agentz::Delivery::CheckedStreaming);
++		let mut inspected = Vec::new();
++		if config
++			.as_ref()
++			.is_some_and(|c| c.capture != agentz::Capture::Off)
++		{
++			resp.visit_text_mut(&mut |text| inspected.push(text.clone()));
++		}
++		let mut evaluation = config
++			.as_ref()
++			.map(|c| {
++				let check = c
++					.response
++					.get(check_index)
++					.ok_or_else(|| anyhow::anyhow!("AgentZ response check identity missing"))?;
++				agentz::Evaluation::new(check, c.capture, c.retention_days, inspected)
++			})
++			.transpose()?;
++		if evaluation.as_ref().is_some_and(|e| e.capture_limited) {
++			let evaluation = evaluation.take().expect("checked capture admission");
++			let response = evaluation.response(GuardrailPhase::Response, true, false);
++			let mut detail = GuardDetail::default();
++			evaluation.finish(&mut detail, GuardrailAction::Reject, true, Vec::new());
++			record_guardrail(
++				guardrail_log,
++				GuardrailPhase::Response,
++				guard.kind.name(),
++				GuardrailAction::Reject,
++				Some(detail),
++			);
++			return Ok((GuardrailAction::Reject, Some(response)));
++		}
++		let result =
++			Self::evaluate_single_response_guard(guard, resp, http_headers, client, original).await;
++		let mut error = false;
++		let (mut outcome, mut detail) = match result {
++			Ok(result) => result,
++			Err(e) => {
++				error = true;
++				tracing::warn!("response guard operational error: {e}");
++				if guard.kind.is_audit() {
++					(GuardrailOutcome::Audit, None)
++				} else if guard.failure_mode() == FailureMode::FailOpen {
+ 					(GuardrailOutcome::FailOpen, None)
+-				},
+-				result => result?,
+-			};
+-
+-		if streaming_allow_recorded.is_some() && matches!(outcome, GuardrailOutcome::Masked(_)) {
+-			// Streaming cannot apply masking; do not report this as a passed check.
+-			return Ok((GuardrailAction::Allow, None));
++				} else if let Some(evaluation) = &evaluation {
++					(
++						GuardrailOutcome::Rejected(evaluation.response(
++							GuardrailPhase::Response,
++							true,
++							streaming,
++						)),
++						None,
++					)
++				} else {
++					record_guardrail(
++						guardrail_log,
++						GuardrailPhase::Response,
++						guard.kind.name(),
++						GuardrailAction::Reject,
++						None,
++					);
++					if !streaming {
++						Self::record_guardrail_trip(client, GuardrailPhase::Response, GuardrailAction::Reject);
++					}
++					return Err(e);
++				}
++			},
++		};
++		if streaming && matches!(outcome, GuardrailOutcome::Masked(_)) {
++			if let Some(evaluation) = &evaluation {
++				error = true;
++				outcome =
++					GuardrailOutcome::Rejected(evaluation.response(GuardrailPhase::Response, true, partial));
++			} else {
++				anyhow::bail!("streaming guardrail masking is unsupported");
++			}
++		}
++		if let Some(evaluation) = &evaluation
++			&& final_validation
++			&& matches!(outcome, GuardrailOutcome::Masked(_))
++		{
++			outcome =
++				GuardrailOutcome::Rejected(evaluation.response(GuardrailPhase::Response, false, false));
++		}
++		if let Some(evaluation) = &evaluation
++			&& matches!(outcome, GuardrailOutcome::Rejected(_))
++		{
++			outcome =
++				GuardrailOutcome::Rejected(evaluation.response(GuardrailPhase::Response, error, partial));
+ 		}
+-
+ 		let (action, rejection) = Self::apply_response_guard_outcome(outcome, resp)?;
+-		let record = match streaming_allow_recorded {
+-			Some(recorded) if action == GuardrailAction::Allow => !std::mem::replace(recorded, true),
+-			_ => true,
+-		};
++		let record = evaluation.is_some()
++			|| match streaming_allow_recorded {
++				Some(recorded) if action == GuardrailAction::Allow => !std::mem::replace(recorded, true),
++				_ => true,
++			};
++		if let Some(evaluation) = evaluation {
++			let mut replacement = Vec::new();
++			if action == GuardrailAction::Mask {
++				resp.visit_text_mut(&mut |text| replacement.push(text.clone()));
++			}
++			evaluation.finish(detail.get_or_insert_default(), action, error, replacement);
++			if final_validation && let Some(event) = detail.as_mut().and_then(|d| d.agentz.as_mut()) {
++				event["validationPass"] = "mandatoryFinal".into();
++			}
++		}
+ 		if record {
+ 			record_guardrail(
+ 				guardrail_log,
+@@ -2038,6 +2364,17 @@ pub enum RequestGuardKind {
+ }
+ 
+ impl RequestGuardKind {
++	fn is_audit(&self) -> bool {
++		match self {
++			Self::Regex(config) => matches!(config.action, Action::Audit),
++			Self::Webhook(config) => config.action == RejectAuditAction::Audit,
++			Self::OpenAIModeration(config) => config.action == RejectAuditAction::Audit,
++			Self::BedrockGuardrails(config) => config.action == RejectAuditAction::Audit,
++			Self::GoogleModelArmor(config) => config.action == RejectAuditAction::Audit,
++			Self::AzureContentSafety(config) => config.action == RejectAuditAction::Audit,
++		}
++	}
++
+ 	fn name(&self) -> &'static str {
+ 		match self {
+ 			RequestGuardKind::Regex(_) => "regex",
+@@ -2425,6 +2762,16 @@ pub enum ResponseGuardKind {
+ }
+ 
+ impl ResponseGuardKind {
++	fn is_audit(&self) -> bool {
++		match self {
++			Self::Regex(config) => matches!(config.action, Action::Audit),
++			Self::Webhook(config) => config.action == RejectAuditAction::Audit,
++			Self::BedrockGuardrails(config) => config.action == RejectAuditAction::Audit,
++			Self::GoogleModelArmor(config) => config.action == RejectAuditAction::Audit,
++			Self::AzureContentSafety(config) => config.action == RejectAuditAction::Audit,
++		}
++	}
++
+ 	fn name(&self) -> &'static str {
+ 		match self {
+ 			ResponseGuardKind::Regex(_) => "regex",
+diff --git a/crates/agentgateway/src/llm/policy/moderation.rs b/crates/agentgateway/src/llm/policy/moderation.rs
+index 9c836e10..967f542d 100644
+--- a/crates/agentgateway/src/llm/policy/moderation.rs
++++ b/crates/agentgateway/src/llm/policy/moderation.rs
+@@ -27,8 +27,14 @@ pub async fn send_request(
+ 	let content = req
+ 		.get_messages()
+ 		.into_iter()
++		.filter(|m| !matches!(m.role.as_str(), "tool" | "function"))
+ 		.map(|t| t.content)
+ 		.collect_vec();
++	let sent_count = content.len();
++	anyhow::ensure!(
++		sent_count > 0,
++		"moderation request has no inspected content"
++	);
+ 	let mut rb = ::http::Request::builder()
+ 		.uri("https://api.openai.com/v1/moderations")
+ 		.method(::http::Method::POST)
+@@ -50,7 +56,15 @@ pub async fn send_request(
+ 		.with_outbound(OutboundCallKind::Policy, OutboundCallSubtype::Guardrail)
+ 		.call_with_explicit_policies_list(with_default_timeout(req), mock_be, pols)
+ 		.await?;
++	anyhow::ensure!(
++		resp.status().is_success(),
++		"moderation provider returned a non-success status"
++	);
+ 	let resp: async_openai::types::moderations::CreateModerationResponse =
+ 		json::from_response_body(resp).await?;
++	anyhow::ensure!(
++		resp.results.len() == sent_count,
++		"moderation provider returned an incomplete result count"
++	);
+ 	Ok(resp)
+ }
+diff --git a/crates/agentgateway/src/llm/policy/streaming_guardrails.rs b/crates/agentgateway/src/llm/policy/streaming_guardrails.rs
+index 8a4a827a..db6e5af1 100644
+--- a/crates/agentgateway/src/llm/policy/streaming_guardrails.rs
++++ b/crates/agentgateway/src/llm/policy/streaming_guardrails.rs
+@@ -96,6 +96,7 @@ pub fn make_evaluator(
+ 	http_headers: HeaderMap,
+ 	original: Option<Arc<RequestSnapshot>>,
+ 	guardrail_log: GuardrailLog,
++	check_index: usize,
+ ) -> Box<dyn StreamingEvaluator> {
+ 	Box::new(ResponseGuardEvaluator {
+ 		guard: guard.clone(),
+@@ -103,6 +104,7 @@ pub fn make_evaluator(
+ 		http_headers,
+ 		original,
+ 		guardrail_log,
++		check_index,
+ 		worst_action: GuardrailAction::Allow,
+ 		audit_recorded: false,
+ 		allow_recorded: false,
+@@ -116,6 +118,7 @@ struct ResponseGuardEvaluator {
+ 	http_headers: HeaderMap,
+ 	original: Option<Arc<RequestSnapshot>>,
+ 	guardrail_log: GuardrailLog,
++	check_index: usize,
+ 	// Fold window results into one metric for the stream.
+ 	worst_action: GuardrailAction,
+ 	// Only log the audit action once per stream, even if triggered by multiple windows.
+@@ -139,12 +142,41 @@ impl Drop for ResponseGuardEvaluator {
+ 
+ #[async_trait::async_trait]
+ impl StreamingEvaluator for ResponseGuardEvaluator {
++	fn delivery_error(&mut self, partial: bool, unsupported_content: bool) -> Bytes {
++		self.observe_action(GuardrailAction::Reject);
++		if let Ok(Some(config)) = super::agentz::Config::from_snapshot(self.original.as_deref())
++			&& let Some(check) = config.response.get(self.check_index)
++			&& let Ok(mut evaluation) =
++				super::agentz::Evaluation::new(check, config.capture, config.retention_days, Vec::new())
++		{
++			evaluation.unsupported_content = unsupported_content;
++			let response = evaluation.response(GuardrailPhase::Response, true, partial);
++			let body = response.body().known_bytes().cloned().unwrap_or_default();
++			let mut detail = crate::cel::GuardDetail::default();
++			evaluation.finish(&mut detail, GuardrailAction::Reject, true, Vec::new());
++			super::record_guardrail(
++				Some(&self.guardrail_log),
++				GuardrailPhase::Response,
++				self.guard.kind.name(),
++				GuardrailAction::Reject,
++				Some(detail),
++			);
++			return body;
++		}
++		Bytes::from_static(b"Guardrail stream could not be inspected")
++	}
++
+ 	fn failure_mode(&self) -> FailureMode {
+ 		self.guard.failure_mode()
+ 	}
+ 
+ 	async fn evaluate(&mut self, window: &str) -> anyhow::Result<Option<StreamingGuardrailOutcome>> {
+-		let log = if self.audit_recorded {
++		let log = if self.audit_recorded
++			&& super::agentz::Config::from_snapshot(self.original.as_deref())
++				.ok()
++				.flatten()
++				.is_none()
++		{
+ 			None
+ 		} else {
+ 			Some(&self.guardrail_log)
+@@ -158,6 +190,7 @@ impl StreamingEvaluator for ResponseGuardEvaluator {
+ 			self.original.as_deref(),
+ 			log,
+ 			&mut self.allow_recorded,
++			self.check_index,
+ 		)
+ 		.await
+ 		{
+@@ -197,7 +230,46 @@ impl StreamingEvaluator for ResponseGuardEvaluator {
+ /// Synthetic SSE error event sent to the client when a guardrail blocks content.
+ ///
+ /// Encoded as a single `data: {...}\n\n` SSE frame.
+-fn guardrail_blocked_sse_bytes(body: Bytes) -> Bytes {
++fn guardrail_blocked_sse_bytes(body: Bytes, input_format: crate::llm::InputFormat) -> Bytes {
++	if let Ok(mut event) = serde_json::from_slice::<serde_json::Value>(&body)
++		&& event
++			.get("error")
++			.and_then(|e| e.get("guardrail"))
++			.is_some()
++	{
++		let code = event["error"]["code"].clone();
++		let message = event["error"]["message"].clone();
++		match input_format {
++			crate::llm::InputFormat::Messages => {
++				event["type"] = "error".into();
++				event["error"]["type"] = if code == "guardrail_denied" {
++					"invalid_request_error".into()
++				} else {
++					"api_error".into()
++				};
++			},
++			crate::llm::InputFormat::Responses => {
++				event["type"] = "error".into();
++				event["code"] = code;
++				event["message"] = message;
++				event["param"] = serde_json::Value::Null;
++			},
++			crate::llm::InputFormat::Gemini => {
++				event["error"]["code"] = if code == "guardrail_denied" {
++					403.into()
++				} else {
++					503.into()
++				};
++				event["error"]["status"] = if code == "guardrail_denied" {
++					"PERMISSION_DENIED".into()
++				} else {
++					"UNAVAILABLE".into()
++				};
++			},
++			_ => {},
++		}
++		return Bytes::from(format!("event: error\ndata: {event}\n\n"));
++	}
+ 	let message = String::from_utf8_lossy(&body);
+ 	let event = serde_json::json!({
+ 		"error": {
+@@ -234,9 +306,15 @@ pin_project! {
+ 		inner: agent_http::RawBody,
+ 		evaluators: Vec<Box<dyn StreamingEvaluator>>,
+ 		eval_threshold: usize,
++		strict: bool,
++		input_format: crate::llm::InputFormat,
++		saw_terminal: bool,
++		whole_output: bool,
++		released: bool,
+ 		buffer_limit: usize,
+ 		held_frames: Vec<Bytes>,
+ 		held_bytes: usize,
++		total_bytes: usize,
+ 		pending_text: String,
+ 		overlap_tail: String,
+ 		sse_decoder: SseDecoder<Bytes>,
+@@ -284,9 +362,15 @@ impl GuardedSseBody {
+ 			inner,
+ 			evaluators,
+ 			eval_threshold,
++			strict: false,
++			input_format: crate::llm::InputFormat::Completions,
++			saw_terminal: false,
++			whole_output: false,
++			released: false,
+ 			buffer_limit,
+ 			held_frames: Vec::new(),
+ 			held_bytes: 0,
++			total_bytes: 0,
+ 			pending_text: String::new(),
+ 			overlap_tail: String::new(),
+ 			sse_decoder: SseDecoder::with_max_size(buffer_limit),
+@@ -296,6 +380,40 @@ impl GuardedSseBody {
+ 		})
+ 	}
+ 
++	/// AgentZ's strict delivery adapter. Whole output never releases frames before EOF validation.
++	pub fn with_delivery(
++		inner: agent_http::RawBody,
++		evaluators: Vec<Box<dyn StreamingEvaluator>>,
++		buffer_limit: usize,
++		whole_output: bool,
++		input_format: crate::llm::InputFormat,
++	) -> agent_http::RawBody {
++		agent_http::RawBody::new(Self {
++			inner,
++			evaluators,
++			eval_threshold: if whole_output {
++				usize::MAX
++			} else {
++				DEFAULT_EVAL_THRESHOLD
++			},
++			strict: true,
++			input_format,
++			saw_terminal: false,
++			whole_output,
++			released: false,
++			buffer_limit,
++			held_frames: Vec::new(),
++			held_bytes: 0,
++			total_bytes: 0,
++			pending_text: String::new(),
++			overlap_tail: String::new(),
++			sse_decoder: SseDecoder::with_max_size(buffer_limit),
++			decode_buffer: bytes::BytesMut::new(),
++			state: GuardedBodyState::Buffering,
++			logger: None,
++		})
++	}
++
+ 	/// Extract text delta from a parsed SSE frame if present.
+ 	fn extract_text_delta(frame: SseFrame<Bytes>) -> Option<String> {
+ 		let SseFrame::Event(Event { data, .. }) = frame else {
+@@ -306,21 +424,55 @@ impl GuardedSseBody {
+ 		}
+ 		if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&data) {
+ 			// OpenAI responses: response.output_text.delta
+-			if v.get("type").and_then(|t| t.as_str()) == Some("response.output_text.delta")
+-				&& let Some(text) = v.get("delta").and_then(|s| s.as_str())
++			if matches!(
++				v.get("type").and_then(|t| t.as_str()),
++				Some(
++					"response.output_text.delta"
++						| "response.reasoning_text.delta"
++						| "response.reasoning_summary_text.delta"
++				)
++			) && let Some(text) = v.get("delta").and_then(|s| s.as_str())
+ 			{
+ 				return Some(text.to_string());
+ 			}
+-			// OpenAI completions: choices[0].delta.content
+-			if let Some(text) = v
+-				.get("choices")
+-				.and_then(|c| c.get(0))
+-				.and_then(|c| c.get("delta"))
+-				.and_then(|d| d.get("content"))
+-				.and_then(|s| s.as_str())
++			// Some Responses providers emit a final message without text deltas.
++			if v.get("type").and_then(serde_json::Value::as_str) == Some("response.completed") {
++				return v
++					.get("response")
++					.and_then(|r| r.get("output"))
++					.and_then(serde_json::Value::as_array)
++					.map(|items| {
++						items
++							.iter()
++							.filter_map(|item| item.get("content").and_then(serde_json::Value::as_array))
++							.flatten()
++							.filter_map(|part| {
++								part
++									.get("text")
++									.or_else(|| part.get("refusal"))
++									.and_then(serde_json::Value::as_str)
++							})
++							.collect::<Vec<_>>()
++							.join("\n")
++					});
++			}
++			if let Some(block) = v.get("content_block")
++				&& let Some(text) = block.get("text").and_then(serde_json::Value::as_str)
+ 			{
+ 				return Some(text.to_string());
+ 			}
++			// Every choice is client-visible; inspecting only the first choice is a bypass.
++			if let Some(choices) = v.get("choices").and_then(serde_json::Value::as_array) {
++				let mut text = String::new();
++				for delta in choices.iter().filter_map(|c| c.get("delta")) {
++					for key in ["content", "reasoning", "reasoning_content"] {
++						if let Some(value) = delta.get(key).and_then(serde_json::Value::as_str) {
++							text.push_str(value);
++						}
++					}
++				}
++				return Some(text);
++			}
+ 			// Anthropic messages: delta.text
+ 			if let Some(text) = v
+ 				.get("delta")
+@@ -373,6 +525,7 @@ impl http_body::Body for GuardedSseBody {
+ 				// -----------------------------------------------------------------
+ 				GuardedBodyState::Flushing { queue, eof } => {
+ 					if let Some(frame) = queue.pop_front() {
++						*this.released = true;
+ 						return Poll::Ready(Some(Ok(Frame::data(frame))));
+ 					} else if *eof {
+ 						*this.state = GuardedBodyState::Done;
+@@ -387,7 +540,10 @@ impl http_body::Body for GuardedSseBody {
+ 				GuardedBodyState::Blocked(body) => {
+ 					let body = std::mem::take(body);
+ 					*this.state = GuardedBodyState::Done;
+-					return Poll::Ready(Some(Ok(Frame::data(guardrail_blocked_sse_bytes(body)))));
++					return Poll::Ready(Some(Ok(Frame::data(guardrail_blocked_sse_bytes(
++						body,
++						*this.input_format,
++					)))));
+ 				},
+ 				// -----------------------------------------------------------------
+ 				// Done: stream exhausted.
+@@ -419,7 +575,19 @@ impl http_body::Body for GuardedSseBody {
+ 				GuardedBodyState::Buffering => {
+ 					match this.inner.as_mut().poll_frame(cx) {
+ 						Poll::Pending => return Poll::Pending,
+-						Poll::Ready(Some(Err(e))) => return Poll::Ready(Some(Err(e))),
++						Poll::Ready(Some(Err(e))) => {
++							if *this.strict {
++								let body = this
++									.evaluators
++									.first_mut()
++									.map(|e| e.delivery_error(*this.released, false))
++									.unwrap_or_default();
++								this.held_frames.clear();
++								*this.state = GuardedBodyState::Blocked(body);
++								continue;
++							}
++							return Poll::Ready(Some(Err(e)));
++						},
+ 						Poll::Ready(Some(Ok(frame))) => {
+ 							let Some(data) = frame.data_ref() else {
+ 								return Poll::Ready(Some(Ok(frame)));
+@@ -427,12 +595,66 @@ impl http_body::Body for GuardedSseBody {
+ 
+ 							let raw = data.clone();
+ 							*this.held_bytes += raw.len();
++							*this.total_bytes += raw.len();
++							if *this.strict && *this.total_bytes > 16 * 1024 * 1024 {
++								let body = this
++									.evaluators
++									.first_mut()
++									.map(|e| e.delivery_error(*this.released, false))
++									.unwrap_or_default();
++								this.held_frames.clear();
++								*this.state = GuardedBodyState::Blocked(body);
++								continue;
++							}
+ 							this.held_frames.push(raw.clone());
+ 
+ 							this.decode_buffer.extend_from_slice(&raw);
+ 							loop {
+ 								match this.sse_decoder.decode(this.decode_buffer) {
+ 									Ok(Some(sse_frame)) => {
++										if let SseFrame::Event(Event { data, .. }) = &sse_frame {
++											if data.as_ref() == b"[DONE]" {
++												*this.saw_terminal = true;
++											}
++											if let Ok(value) = serde_json::from_slice::<serde_json::Value>(data) {
++												if *this.strict && super::agentz::validate_text_content(&value).is_err() {
++													let body = this
++														.evaluators
++														.first_mut()
++														.map(|e| e.delivery_error(*this.released, true))
++														.unwrap_or_default();
++													this.held_frames.clear();
++													*this.state = GuardedBodyState::Blocked(body);
++													break;
++												}
++
++												let kind = value.get("type").and_then(serde_json::Value::as_str);
++												*this.saw_terminal |=
++													matches!(kind, Some("response.completed" | "message_stop"))
++														|| value
++															.get("choices")
++															.and_then(serde_json::Value::as_array)
++															.is_some_and(|c| {
++																c.iter()
++																	.any(|c| c.get("finish_reason").is_some_and(|r| !r.is_null()))
++															}) || value
++														.get("candidates")
++														.and_then(serde_json::Value::as_array)
++														.is_some_and(|c| c.iter().any(|c| c.get("finishReason").is_some()));
++											}
++										}
++										if *this.strict
++											&& matches!(&sse_frame, SseFrame::Event(Event { data, .. }) if !data.is_empty() && data.as_ref() != b"[DONE]" && serde_json::from_slice::<serde_json::Value>(data).is_err())
++										{
++											let body = this
++												.evaluators
++												.first_mut()
++												.map(|e| e.delivery_error(*this.released, false))
++												.unwrap_or_default();
++											this.held_frames.clear();
++											*this.state = GuardedBodyState::Blocked(body);
++											break;
++										}
+ 										if let Some(delta) = GuardedSseBody::extract_text_delta(sse_frame) {
+ 											this.pending_text.push_str(&delta);
+ 										}
+@@ -442,6 +664,15 @@ impl http_body::Body for GuardedSseBody {
+ 										// Clear the buffer and reset the decoder so invalid bytes
+ 										// don't accumulate across chunks and cause repeated errors.
+ 										warn!("SSE decode error in streaming guardrail body, resetting decoder: {e}");
++										if *this.strict {
++											let body = this
++												.evaluators
++												.first_mut()
++												.map(|e| e.delivery_error(*this.released, false))
++												.unwrap_or_default();
++											this.held_frames.clear();
++											*this.state = GuardedBodyState::Blocked(body);
++										}
+ 										this.decode_buffer.clear();
+ 										*this.sse_decoder = SseDecoder::with_max_size(*this.buffer_limit);
+ 										break;
+@@ -449,7 +680,21 @@ impl http_body::Body for GuardedSseBody {
+ 								}
+ 							}
+ 
++							if matches!(this.state, GuardedBodyState::Blocked(_)) {
++								continue;
++							}
+ 							let over_limit = *this.held_bytes >= *this.buffer_limit;
++							if over_limit && *this.strict && (*this.whole_output || this.pending_text.is_empty())
++							{
++								let body = this
++									.evaluators
++									.first_mut()
++									.map(|e| e.delivery_error(*this.released, false))
++									.unwrap_or_default();
++								this.held_frames.clear();
++								*this.state = GuardedBodyState::Blocked(body);
++								continue;
++							}
+ 							if this.pending_text.len() >= *this.eval_threshold || over_limit {
+ 								// Having a full buffer but empty text implies that the
+ 								// buffer is full of non-text frames (e.g. control frames or unsupported SSE formats that fail to decode).
+@@ -475,6 +720,49 @@ impl http_body::Body for GuardedSseBody {
+ 							loop {
+ 								match this.sse_decoder.decode_eof(this.decode_buffer) {
+ 									Ok(Some(sse_frame)) => {
++										if let SseFrame::Event(Event { data, .. }) = &sse_frame {
++											if data.as_ref() == b"[DONE]" {
++												*this.saw_terminal = true;
++											}
++											if let Ok(value) = serde_json::from_slice::<serde_json::Value>(data) {
++												if *this.strict && super::agentz::validate_text_content(&value).is_err() {
++													let body = this
++														.evaluators
++														.first_mut()
++														.map(|e| e.delivery_error(*this.released, true))
++														.unwrap_or_default();
++													this.held_frames.clear();
++													*this.state = GuardedBodyState::Blocked(body);
++													break;
++												}
++
++												let kind = value.get("type").and_then(serde_json::Value::as_str);
++												*this.saw_terminal |=
++													matches!(kind, Some("response.completed" | "message_stop"))
++														|| value
++															.get("choices")
++															.and_then(serde_json::Value::as_array)
++															.is_some_and(|c| {
++																c.iter()
++																	.any(|c| c.get("finish_reason").is_some_and(|r| !r.is_null()))
++															}) || value
++														.get("candidates")
++														.and_then(serde_json::Value::as_array)
++														.is_some_and(|c| c.iter().any(|c| c.get("finishReason").is_some()));
++											}
++										}
++										if *this.strict
++											&& matches!(&sse_frame, SseFrame::Event(Event { data, .. }) if !data.is_empty() && data.as_ref() != b"[DONE]" && serde_json::from_slice::<serde_json::Value>(data).is_err())
++										{
++											let body = this
++												.evaluators
++												.first_mut()
++												.map(|e| e.delivery_error(*this.released, false))
++												.unwrap_or_default();
++											this.held_frames.clear();
++											*this.state = GuardedBodyState::Blocked(body);
++											break;
++										}
+ 										if let Some(delta) = GuardedSseBody::extract_text_delta(sse_frame) {
+ 											this.pending_text.push_str(&delta);
+ 										}
+@@ -482,13 +770,35 @@ impl http_body::Body for GuardedSseBody {
+ 									Ok(None) => break,
+ 									Err(e) => {
+ 										warn!("SSE decode error at EOF in streaming guardrail body: {e}");
++										if *this.strict {
++											let body = this
++												.evaluators
++												.first_mut()
++												.map(|e| e.delivery_error(*this.released, false))
++												.unwrap_or_default();
++											this.held_frames.clear();
++											*this.state = GuardedBodyState::Blocked(body);
++										}
+ 										this.decode_buffer.clear();
+ 										break;
+ 									},
+ 								}
+ 							}
+ 
+-							if this.pending_text.is_empty() {
++							if matches!(this.state, GuardedBodyState::Blocked(_)) {
++								continue;
++							}
++							if *this.strict && !*this.saw_terminal {
++								let body = this
++									.evaluators
++									.first_mut()
++									.map(|e| e.delivery_error(*this.released, false))
++									.unwrap_or_default();
++								this.held_frames.clear();
++								*this.state = GuardedBodyState::Blocked(body);
++								continue;
++							}
++							if this.pending_text.is_empty() && !*this.strict {
+ 								let queue: VecDeque<Bytes> = this.held_frames.drain(..).collect();
+ 								*this.held_bytes = 0;
+ 								*this.state = GuardedBodyState::Flushing { queue, eof: true };
+@@ -518,6 +828,70 @@ mod tests {
+ 
+ 	use super::*;
+ 
++	#[test]
++	fn safe_terminal_errors_follow_each_client_protocol() {
++		let body = Bytes::from(serde_json::json!({"error":{"type":"guardrail_denied","code":"guardrail_denied","message":"Edit the request.","guardrail":{"code":"guardrail_denied","phase":"output","safeLabel":"Policy","explanation":"Edit the request.","referenceId":"reference","partialOutput":true}}}).to_string());
++		for format in [
++			crate::llm::InputFormat::Completions,
++			crate::llm::InputFormat::Messages,
++			crate::llm::InputFormat::Responses,
++		] {
++			let encoded = guardrail_blocked_sse_bytes(body.clone(), format);
++			let encoded = std::str::from_utf8(&encoded).unwrap();
++			assert!(encoded.starts_with("event: error\ndata: "));
++			assert!(!encoded.contains("[DONE]"));
++			let value: serde_json::Value =
++				serde_json::from_str(encoded.strip_prefix("event: error\ndata: ").unwrap().trim()).unwrap();
++			assert_eq!(value["error"]["guardrail"]["referenceId"], "reference");
++			assert_eq!(value["error"]["guardrail"]["partialOutput"], true);
++			if format == crate::llm::InputFormat::Messages {
++				assert_eq!(value["type"], "error");
++				assert_eq!(value["error"]["type"], "invalid_request_error");
++			}
++			if format == crate::llm::InputFormat::Responses {
++				assert_eq!(value["type"], "error");
++				assert_eq!(value["code"], "guardrail_denied");
++				assert_eq!(value["message"], "Edit the request.");
++			}
++		}
++	}
++
++	#[tokio::test]
++	async fn whole_output_does_not_release_earlier_safe_chunks_before_later_denial() {
++		let safe = delta_bytes(&"safe ".repeat(512));
++		let body = make_body(vec![safe, delta_bytes("forbidden"), sse_bytes("[DONE]")]);
++		let guarded = GuardedSseBody::with_delivery(
++			body,
++			vec![Box::new(pattern_evaluator("forbidden"))],
++			1024 * 1024,
++			true,
++			crate::llm::InputFormat::Completions,
++		);
++		let bytes = guarded.collect().await.unwrap().to_bytes();
++		assert!(!contains(&bytes, b"safe safe"));
++		assert!(contains(&bytes, b"guardrail_blocked"));
++	}
++
++	#[tokio::test]
++	async fn whole_output_rejects_incomplete_or_malformed_streams_without_releasing_them() {
++		for chunks in [
++			vec![delta_bytes("safe but truncated")],
++			vec![sse_bytes("not-json"), sse_bytes("[DONE]")],
++		] {
++			let guarded = GuardedSseBody::with_delivery(
++				make_body(chunks),
++				vec![Box::new(PassEvaluator)],
++				1024 * 1024,
++				true,
++				crate::llm::InputFormat::Completions,
++			);
++			let bytes = guarded.collect().await.unwrap().to_bytes();
++			assert!(contains(&bytes, b"guardrail_blocked"));
++			assert!(!contains(&bytes, b"safe but truncated"));
++			assert!(!contains(&bytes, b"not-json"));
++		}
++	}
++
+ 	struct PassEvaluator;
+ 
+ 	#[async_trait::async_trait]
+diff --git a/crates/agentgateway/src/llm/policy/tests.rs b/crates/agentgateway/src/llm/policy/tests.rs
+index 47d20dcc..86add66b 100644
+--- a/crates/agentgateway/src/llm/policy/tests.rs
++++ b/crates/agentgateway/src/llm/policy/tests.rs
+@@ -102,6 +102,8 @@ async fn audit_mode_records_allow_when_nothing_matches() {
+ 		None,
+ 		None,
+ 		Some(&mut false),
++		0,
++		false,
+ 	)
+ 	.await
+ 	.unwrap();
+@@ -145,6 +147,8 @@ async fn audit_mode_records_audit_and_passes_through_on_match() {
+ 		None,
+ 		None,
+ 		Some(&mut false),
++		0,
++		false,
+ 	)
+ 	.await
+ 	.unwrap();
+@@ -198,6 +202,12 @@ fn bedrock_audit_outcome_maps_interventions_to_audit() {
+ 		matches!(anonymized, GuardrailOutcome::Audit),
+ 		"a would-mask assessment audits, never masks"
+ 	);
++	let (unclassified, detail) = outcome(json!({"action": "GUARDRAIL_INTERVENED"}));
++	assert!(matches!(unclassified, GuardrailOutcome::Audit));
++	assert!(
++		detail.is_some(),
++		"an explicit intervention must remain visible in audit mode"
++	);
+ 
+ 	let (detect_only, detail) = outcome(json!({
+ 		"action": "NONE",
+@@ -227,7 +237,7 @@ async fn streaming_guard_records_one_metric_per_stream() {
+ 	};
+ 	let client = crate::test_helpers::policy_client();
+ 	let headers = ::http::HeaderMap::new();
+-	let mut evaluator = make_evaluator(&guard, client.clone(), headers, None, Default::default());
++	let mut evaluator = make_evaluator(&guard, client.clone(), headers, None, Default::default(), 0);
+ 
+ 	let _ = evaluator.evaluate("clean window one").await.unwrap();
+ 	let _ = evaluator.evaluate("this window has SECRET").await.unwrap();
+@@ -2485,6 +2495,8 @@ async fn regex_reject_records_guardrail_info() {
+ 		None,
+ 		None,
+ 		Some(&log),
++		0,
++		false,
+ 	)
+ 	.await
+ 	.unwrap();
+diff --git a/crates/agentgateway/src/llm/policy/webhook.rs b/crates/agentgateway/src/llm/policy/webhook.rs
+index fc32ee52..45ee50c6 100644
+--- a/crates/agentgateway/src/llm/policy/webhook.rs
++++ b/crates/agentgateway/src/llm/policy/webhook.rs
+@@ -39,14 +39,14 @@ impl<'a> EvaluationContext<'a> {
+ }
+ 
+ #[derive(Debug, Clone, Serialize, Deserialize)]
+-#[serde(rename_all = "snake_case")]
++#[serde(rename_all = "snake_case", deny_unknown_fields)]
+ pub struct GuardrailsPromptRequest {
+ 	/// body contains the object which is a list of the Message JSON objects from the prompts in the request
+ 	pub body: PromptMessages,
+ }
+ 
+ #[derive(Debug, Clone, Serialize, Deserialize)]
+-#[serde(rename_all = "snake_case")]
++#[serde(rename_all = "snake_case", deny_unknown_fields)]
+ pub struct GuardrailsPromptResponse {
+ 	/// action is the action to be taken based on the request.
+ 	/// The following actions are available on the response:
+@@ -57,14 +57,14 @@ pub struct GuardrailsPromptResponse {
+ }
+ 
+ #[derive(Debug, Clone, Serialize, Deserialize)]
+-#[serde(rename_all = "snake_case")]
++#[serde(rename_all = "snake_case", deny_unknown_fields)]
+ pub struct GuardrailsResponseRequest {
+ 	/// body contains the object with a list of Choice that contains the response content from the LLM.
+ 	pub body: ResponseChoices,
+ }
+ 
+ #[derive(Debug, Clone, Serialize, Deserialize)]
+-#[serde(rename_all = "snake_case")]
++#[serde(rename_all = "snake_case", deny_unknown_fields)]
+ pub struct GuardrailsResponseResponse {
+ 	/// action is the action to be taken based on the request.
+ 	/// The following actions are available on the response:
+@@ -75,21 +75,21 @@ pub struct GuardrailsResponseResponse {
+ }
+ 
+ #[derive(Debug, Clone, Serialize, Deserialize)]
+-#[serde(rename_all = "snake_case")]
++#[serde(rename_all = "snake_case", deny_unknown_fields)]
+ pub struct PromptMessages {
+ 	/// List of prompt messages including role and content.
+ 	pub messages: Vec<Message>,
+ }
+ 
+ #[derive(Debug, Clone, Serialize, Deserialize)]
+-#[serde(rename_all = "snake_case")]
++#[serde(rename_all = "snake_case", deny_unknown_fields)]
+ pub struct ResponseChoices {
+ 	/// list of possible independent responses from the LLM
+ 	pub choices: Vec<ResponseChoice>,
+ }
+ 
+ #[derive(Debug, Clone, Serialize, Deserialize)]
+-#[serde(rename_all = "snake_case")]
++#[serde(rename_all = "snake_case", deny_unknown_fields)]
+ pub struct PassAction {
+ 	/// reason is a human readable string that explains the reason for the action.
+ 	#[serde(skip_serializing_if = "Option::is_none")]
+@@ -97,7 +97,7 @@ pub struct PassAction {
+ }
+ 
+ #[derive(Debug, Clone, Serialize, Deserialize)]
+-#[serde(rename_all = "snake_case")]
++#[serde(rename_all = "snake_case", deny_unknown_fields)]
+ pub struct MaskAction {
+ 	/// body contains the modified messages that masked out some of the original contents.
+ 	/// When used in a GuardrailPromptResponse, this should be PromptMessages.
+@@ -109,7 +109,7 @@ pub struct MaskAction {
+ }
+ 
+ #[derive(Debug, Clone, Serialize, Deserialize)]
+-#[serde(rename_all = "snake_case")]
++#[serde(rename_all = "snake_case", deny_unknown_fields)]
+ pub struct RejectAction {
+ 	/// body is the rejection message that will be used for HTTP error response body.
+ 	pub body: String,
+@@ -181,10 +181,9 @@ fn build_request<T: serde::Serialize>(
+ 	let mut rb = ::http::Request::builder()
+ 		.uri(format!("/{path}"))
+ 		.method(http::Method::POST);
++	// The caller already restricted this map to explicit forward_header_matches.
+ 	for (k, v) in http_headers {
+-		// TODO: this is configurable by users
+ 		if k == header::CONTENT_LENGTH {
+-			// TODO: probably others
+ 			continue;
+ 		}
+ 		rb = rb.header(k.clone(), v.clone());
+@@ -245,6 +244,7 @@ pub(super) async fn send_request(
+ 	http_headers: &HeaderMap,
+ 	messages: Vec<Message>,
+ ) -> anyhow::Result<GuardrailsPromptResponse> {
++	let roles = messages.iter().map(|m| m.role.clone()).collect::<Vec<_>>();
+ 	let whr = with_default_timeout(build_request_for_request(
+ 		webhook,
+ 		context,
+@@ -261,7 +261,25 @@ pub(super) async fn send_request(
+ 			),
+ 	)
+ 	.await?;
+-	let parsed = json::from_response_body(res).await?;
++	anyhow::ensure!(
++		res.status().is_success(),
++		"guardrail webhook returned a non-success status"
++	);
++	let parsed: GuardrailsPromptResponse = json::from_response_body(res).await?;
++	if let RequestAction::Mask(mask) = &parsed.action {
++		let MaskActionBody::PromptMessages(body) = &mask.body else {
++			anyhow::bail!("invalid request mask body");
++		};
++		anyhow::ensure!(
++			body.messages.len() == roles.len()
++				&& body
++					.messages
++					.iter()
++					.zip(&roles)
++					.all(|(m, role)| &m.role == role),
++			"webhook mask changed message identity"
++		);
++	}
+ 	Ok(parsed)
+ }
+ 
+@@ -272,6 +290,10 @@ pub(super) async fn send_response(
+ 	http_headers: &HeaderMap,
+ 	choices: Vec<ResponseChoice>,
+ ) -> anyhow::Result<GuardrailsResponseResponse> {
++	let roles = choices
++		.iter()
++		.map(|c| c.message.role.clone())
++		.collect::<Vec<_>>();
+ 	let whr = with_default_timeout(build_request_for_response(
+ 		webhook,
+ 		context,
+@@ -286,12 +308,59 @@ pub(super) async fn send_response(
+ 			webhook.target.policies.as_slice(),
+ 		)
+ 		.await?;
+-	let parsed = json::from_response_body(res).await?;
++	anyhow::ensure!(
++		res.status().is_success(),
++		"guardrail webhook returned a non-success status"
++	);
++	let parsed: GuardrailsResponseResponse = json::from_response_body(res).await?;
++	if let ResponseAction::Mask(mask) = &parsed.action {
++		let MaskActionBody::ResponseChoices(body) = &mask.body else {
++			anyhow::bail!("invalid response mask body");
++		};
++		anyhow::ensure!(
++			body.choices.len() == roles.len()
++				&& body
++					.choices
++					.iter()
++					.zip(&roles)
++					.all(|(c, role)| &c.message.role == role),
++			"webhook mask changed choice identity"
++		);
++	}
+ 	Ok(parsed)
+ }
+ 
+ #[cfg(test)]
+ mod tests {
++	#[test]
++	fn malformed_verdicts_never_become_pass() {
++		for action in [
++			serde_json::json!({"unknown":true}),
++			serde_json::json!({"body":"blocked","reason":"missing status"}),
++			serde_json::json!({"status_code":403,"reason":"missing body"}),
++			serde_json::json!({"body":{"messages":[]},"status_code":403}),
++		] {
++			let response = serde_json::json!({"action":action});
++			assert!(
++				serde_json::from_value::<GuardrailsPromptResponse>(response.clone()).is_err(),
++				"{response}"
++			);
++			assert!(
++				serde_json::from_value::<GuardrailsResponseResponse>(response.clone()).is_err(),
++				"{response}"
++			);
++		}
++		assert!(
++			serde_json::from_value::<GuardrailsPromptResponse>(serde_json::json!({"action":{}})).is_ok()
++		);
++		assert!(
++			serde_json::from_value::<GuardrailsPromptResponse>(
++				serde_json::json!({"action":{"reason":"ok"}})
++			)
++			.is_ok()
++		);
++	}
++
+ 	use std::sync::Arc;
+ 
+ 	use secrecy::SecretString;
+diff --git a/crates/agentgateway/src/proxy/httpproxy.rs b/crates/agentgateway/src/proxy/httpproxy.rs
+index 73d6f8f7..df6f86ff 100644
+--- a/crates/agentgateway/src/proxy/httpproxy.rs
++++ b/crates/agentgateway/src/proxy/httpproxy.rs
+@@ -316,6 +316,15 @@ async fn apply_request_policies(
+ 		.apply("transformation", c, l, req, rp.headers())
+ 		.await?;
+ 
++	if req
++		.extensions()
++		.get::<crate::http::transformation_cel::TransformationMetadata>()
++		.is_some_and(|m| m.0.contains_key("agentz_guardrails"))
++	{
++		// Capture before backend authentication injects model credentials.
++		l.request_snapshot = Some(Arc::new(crate::cel::snapshot_request(req, false)));
++	}
++
+ 	pol
+ 		.csrf
+ 		.apply_without_response("csrf", c, l, req, rp.headers())
+@@ -3216,6 +3225,12 @@ async fn make_backend_call(
+ 		),
+ 	});
+ 	let mut resp = resp?;
++	// Model providers cannot author trusted guardrail outcomes. Transparent HTTP
++	// forwarding retains outcomes already produced by an internal LLM gateway.
++	if backend_call.backend_policies.llm_provider.is_some() {
++		resp.headers_mut().remove("x-agentz-guardrail-outcome");
++		resp.headers_mut().remove("x-agentz-guardrail-test");
++	}
+ 	// Protect reads from the actual upstream before any policy buffers, transforms,
+ 	// or replaces its body. CONNECT tunnels take a separate path above.
+ 	if resp.status() != StatusCode::SWITCHING_PROTOCOLS
+@@ -3776,6 +3791,14 @@ pub(crate) fn resolve_response(
+ 			});
+ 	}
+ 	let reason = match &result {
++		Ok(response)
++			if response
++				.extensions()
++				.get::<super::GuardrailOutcome>()
++				.is_some() =>
++		{
++			ProxyResponseReason::Guardrail
++		},
+ 		Ok(_) => ProxyResponseReason::Upstream,
+ 		Err(failure) => failure.as_reason(),
+ 	};
+@@ -3863,6 +3886,9 @@ fn should_retry(
+ ) -> bool {
+ 	match res {
+ 		Ok(resp) => {
++			if resp.extensions().get::<super::GuardrailOutcome>().is_some() {
++				return false;
++			}
+ 			if pol.codes.contains(&resp.status()) {
+ 				return true;
+ 			}
+diff --git a/crates/agentgateway/src/proxy/mod.rs b/crates/agentgateway/src/proxy/mod.rs
+index 4b664e90..fbdf0322 100644
+--- a/crates/agentgateway/src/proxy/mod.rs
++++ b/crates/agentgateway/src/proxy/mod.rs
+@@ -170,6 +170,10 @@ impl Display for ProxyResponseReason {
+ 	}
+ }
+ 
++/// A locally generated guardrail outcome, never a provider response.
++#[derive(Clone, Copy, Debug)]
++pub(crate) struct GuardrailOutcome;
++
+ /// Marks responses whose rate-limit headers come from a denying policy.
+ #[derive(Clone, Copy, Debug)]
+ pub(crate) struct RateLimitDenied;
+diff --git a/crates/agentgateway/src/telemetry/log.rs b/crates/agentgateway/src/telemetry/log.rs
+index a10462bb..9b341d66 100644
+--- a/crates/agentgateway/src/telemetry/log.rs
++++ b/crates/agentgateway/src/telemetry/log.rs
+@@ -1224,6 +1224,11 @@ impl RequestLog {
+ 		retry_after: Option<Duration>,
+ 		cel_exec: &CelLoggingExecutor<'_>,
+ 	) {
++		// A local guardrail verdict says nothing about model endpoint health or latency.
++		// Dropping the active handle releases capacity without recording a health sample.
++		if self.reason == Some(ProxyResponseReason::Guardrail) {
++			return;
++		}
+ 		let unhealthy = DropOnLog::eviction_unhealthy(self, status, cel_exec);
+ 		let (health, eviction_duration, restore_health) = DropOnLog::eviction_decision(
+ 			&self.health_policy,
+diff --git a/crates/llm/src/types/gemini.rs b/crates/llm/src/types/gemini.rs
+index caa1d5a0..e768d026 100644
+--- a/crates/llm/src/types/gemini.rs
++++ b/crates/llm/src/types/gemini.rs
+@@ -142,9 +142,7 @@ fn visit_tool_part_text(part: &mut vg::Part, f: &mut dyn FnMut(ContentScope, &mu
+ 		// not a tool, visit_content_text covers Text
+ 		vg::Part::Text(_) => {},
+ 		vg::Part::FunctionCall(p) => {
+-			crate::types::visit_json_strings(&mut p.function_call.args, &mut |text| {
+-				f(ContentScope::ToolInput, text)
+-			});
++			crate::types::visit_json_at(&mut p.function_call.args, &[], ContentScope::ToolInput, f);
+ 		},
+ 		// only scan the response, not IDs or `rest` which may contain multi-modal
+ 		// things that are difficult to scan
+diff --git a/crates/llm/src/types/mod.rs b/crates/llm/src/types/mod.rs
+index c31d877b..6e685dc5 100644
+--- a/crates/llm/src/types/mod.rs
++++ b/crates/llm/src/types/mod.rs
+@@ -131,9 +131,8 @@ pub(crate) fn visit_json_strings(value: &mut serde_json::Value, f: &mut dyn FnMu
+ 	}
+ }
+ 
+-/// Recursively every string value in the JSON tree at `path`; a bare string is visited as one
+-/// opaque value.
+-/// TODO Numbers and bools are not scanned.
++/// Visit complete JSON tool arguments at `path`, preserving keys and non-string values.
++/// Other scopes visit string leaves; a bare string is always one opaque value.
+ pub(crate) fn visit_json_at(
+ 	value: &mut serde_json::Value,
+ 	path: &[&str],
+@@ -141,7 +140,19 @@ pub(crate) fn visit_json_at(
+ 	f: &mut dyn FnMut(ContentScope, &mut String),
+ ) {
+ 	if let Some(target) = path.iter().try_fold(value, |v, k| v.get_mut(*k)) {
+-		visit_json_strings(target, &mut |text| f(scope, text));
++		if scope == ContentScope::ToolInput && !target.is_string() {
++			// Arguments include keys, numbers and booleans, not only string leaf values.
++			let original = target.to_string();
++			let mut text = original.clone();
++			f(scope, &mut text);
++			if text != original
++				&& let Ok(replacement) = serde_json::from_str(&text)
++			{
++				*target = replacement;
++			}
++		} else {
++			visit_json_strings(target, &mut |text| f(scope, text));
++		}
+ 	}
+ }
+ 

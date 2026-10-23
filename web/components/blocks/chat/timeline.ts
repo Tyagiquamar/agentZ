@@ -2,6 +2,7 @@ import type { AssistantMessage, Message, Part, ToolPart, UserMessage } from "@op
 import { attachmentFromPart, type ChatAttachment } from "@/components/blocks/chat/attachments"
 import { describeMessageError } from "@/components/blocks/chat/errors"
 import { z } from "zod"
+import type { GuardrailOutcome } from "@/lib/gateway/client"
 
 const messageActorSchema = z
   .object({
@@ -38,7 +39,14 @@ export type TimelineRow =
       type: "assistant"
     }
   | { key: string; type: "checkpoint"; variant: "compaction" | "interrupted" }
-  | { body: string; key: string; label: string; type: "assistant-error" }
+  | {
+      body: string
+      key: string
+      label: string
+      type: "assistant-error"
+      guardrail?: GuardrailOutcome
+      userMessageID?: string
+    }
 
 const contextToolNames = new Set(["read", "list", "glob", "grep"])
 
@@ -170,6 +178,7 @@ function projectTurn(input: {
   partsByMessage: Record<string, Part[]>
   textByPart: Record<string, string>
   turnKey: string
+  userMessageID: string
   isActive: boolean
 }): void {
   const { assistants, compacted, out, partsByMessage, textByPart, turnKey, isActive } = input
@@ -206,8 +215,9 @@ function projectTurn(input: {
       continue
     }
 
-    if (assistant.error && assistant.error.name !== "MessageAbortedError" && !error) {
-      error = describeMessageError(assistant.error)
+    if (assistant.error && assistant.error.name !== "MessageAbortedError") {
+      const outcome = describeMessageError(assistant.error)
+      if (!error || outcome.guardrail) error = outcome
     }
   }
 
@@ -215,7 +225,7 @@ function projectTurn(input: {
     out.push({
       createdAt,
       entries,
-      isStreaming: isActive,
+      isStreaming: isActive && !error,
       key: interruption ? `${turnKey}:${segment}` : turnKey,
       type: "assistant",
     })
@@ -227,6 +237,9 @@ function projectTurn(input: {
       key: `assistant-error:${assistants.at(-1)?.id ?? "x"}`,
       label: error.label,
       type: "assistant-error",
+      ...(error.guardrail
+        ? { guardrail: error.guardrail, userMessageID: input.userMessageID }
+        : {}),
     })
   }
 }
@@ -329,6 +342,7 @@ export function projectTimeline(input: ProjectInput): {
       partsByMessage: input.partsByMessage,
       textByPart: input.textByPart,
       turnKey: `assistant:${turn.user.id}`,
+      userMessageID: turn.user.id,
     })
   })
 

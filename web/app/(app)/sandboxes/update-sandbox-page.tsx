@@ -8,12 +8,19 @@ import { listSkills } from "@/lib/gateway/client"
 import { getGatewayServerClient } from "@/lib/gateway/server-client"
 import { listInferenceProvidersCachedQuery } from "@/data/inference-provider.queries"
 import { listInferencePoolsCachedQuery } from "@/data/inference-pool.queries"
+import {
+  listGuardrailPoliciesQuery,
+  getGuardrailSettingsQuery,
+  listGuardrailConnectionsQuery,
+} from "@/data/guardrail.queries"
 import { SandboxWizard } from "./wizard"
 import { AdministrationPageHeader, AdministrationState } from "@/components/administration"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { CircleAlert } from "lucide-react"
 
 type UpdateSandboxPageProps = {
+  canCreateGuardrailPolicy: boolean
+  canCreateGuardrailConnection: boolean
   basePath: string
   params: Promise<{
     name: string
@@ -35,6 +42,8 @@ export async function generateMetadata({
 }
 
 export default async function UpdateSandboxPage({
+  canCreateGuardrailPolicy,
+  canCreateGuardrailConnection,
   basePath,
   params,
   providersHref,
@@ -45,6 +54,8 @@ export default async function UpdateSandboxPage({
   return (
     <Suspense fallback={<UpdateSandboxSkeleton />}>
       <UpdateSandboxContent
+        canCreateGuardrailPolicy={canCreateGuardrailPolicy}
+        canCreateGuardrailConnection={canCreateGuardrailConnection}
         basePath={basePath}
         name={name}
         providersHref={providersHref}
@@ -55,11 +66,15 @@ export default async function UpdateSandboxPage({
 }
 
 async function UpdateSandboxContent({
+  canCreateGuardrailPolicy,
+  canCreateGuardrailConnection,
   basePath,
   name,
   providersHref,
   workspaceId,
 }: {
+  canCreateGuardrailPolicy: boolean
+  canCreateGuardrailConnection: boolean
   basePath: string
   name: string
   providersHref: UrlObject
@@ -79,12 +94,26 @@ async function UpdateSandboxContent({
   const poolsResult = workspaceId
     ? listInferencePoolsCachedQuery(workspaceId)
     : Promise.resolve({ pools: [], error: undefined })
-  const [sandboxes, mcpConnections, skills, providers, pools] = await Promise.all([
+  const [
+    sandboxes,
+    mcpConnections,
+    skills,
+    providers,
+    pools,
+    policies,
+    guardrailSettings,
+    guardrailConnections,
+  ] = await Promise.all([
     sandboxResult,
     mcpResult,
     skillsResult,
     providersResult,
     poolsResult,
+    listGuardrailPoliciesQuery(workspaceId),
+    getGuardrailSettingsQuery(workspaceId),
+    canCreateGuardrailPolicy
+      ? listGuardrailConnectionsQuery(workspaceId)
+      : Promise.resolve({ data: { items: [] }, error: undefined }),
   ])
 
   if (sandboxes.error || !sandboxes.sandboxes) {
@@ -95,6 +124,27 @@ async function UpdateSandboxContent({
       </Alert>
     )
   }
+
+  if (
+    policies.error ||
+    guardrailSettings.error ||
+    guardrailConnections.error ||
+    !policies.data ||
+    !guardrailSettings.data ||
+    !guardrailConnections.data
+  )
+    return (
+      <AdministrationState
+        description={
+          policies.error?.message ??
+          guardrailSettings.error?.message ??
+          guardrailConnections.error?.message ??
+          "Guardrail configuration is unavailable."
+        }
+        kind="failed"
+        title="Could not load protection settings"
+      />
+    )
 
   const sandbox = sandboxes.sandboxes.find((item) => item.name === name)
   if (!sandbox) {
@@ -120,6 +170,7 @@ async function UpdateSandboxContent({
     mcpConnectionRefs,
     skills: sandbox.skills,
     inference: sandbox.inference,
+    guardrails: sandbox.guardrails,
   })
 
   return (
@@ -129,6 +180,12 @@ async function UpdateSandboxContent({
       <SandboxWizard
         key={wizardKey}
         mode="update"
+        canCreateGuardrailPolicy={canCreateGuardrailPolicy}
+        canCreateGuardrailConnection={canCreateGuardrailConnection}
+        initialGuardrails={sandbox.guardrails}
+        guardrailConnections={guardrailConnections.data.items}
+        guardrailPolicies={policies.data.items}
+        guardrailSettings={guardrailSettings.data}
         providersHref={providersHref}
         scope={{ basePath, workspaceId }}
         initialName={sandbox.name}

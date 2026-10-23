@@ -70,6 +70,7 @@ import {
 } from "@/components/ui/sheet"
 import { RelativeDateTime } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { ClientGuardrailsPanel } from "@/components/guardrails/client-guardrails"
 import { ApplicationAccessDetails } from "@/app/(account)/settings/applications/application-access-sheet"
 import { externalAgentInput } from "@/data/schema"
 import type { ExternalAgent } from "@/data/external-agents"
@@ -383,6 +384,10 @@ export function ExternalAgents({
               <TabsList className="mx-4">
                 <TabsTrigger value="setup">Setup</TabsTrigger>
                 <TabsTrigger value="access">Access</TabsTrigger>
+                {(organization.superadmin || workspace.capabilities.administer) &&
+                selected.connected ? (
+                  <TabsTrigger value="guardrails">Guardrails</TabsTrigger>
+                ) : null}
               </TabsList>
               <TabsContent value="setup" className="overflow-y-auto">
                 <AgentSetup agent={selected} />
@@ -430,6 +435,16 @@ export function ExternalAgents({
                   </Empty>
                 )}
               </TabsContent>
+              {(organization.superadmin || workspace.capabilities.administer) &&
+              selected.connected ? (
+                <TabsContent className="overflow-y-auto" value="guardrails">
+                  <ClientGuardrailsPanel
+                    clientId={selected.clientId}
+                    orgSlug={orgSlug}
+                    workspaceSlug={workspaceSlug}
+                  />
+                </TabsContent>
+              ) : null}
             </Tabs>
           </SheetContent>
         </Sheet>

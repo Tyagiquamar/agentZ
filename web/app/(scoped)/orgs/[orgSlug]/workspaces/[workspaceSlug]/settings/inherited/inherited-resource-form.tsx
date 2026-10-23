@@ -234,6 +234,10 @@ export function InheritedResourceForm({
                   pathname = `${pathname}/sandboxes/update/${encodeURIComponent(consumer.name)}`
                 } else if (consumer.kind === "Inference Pool") {
                   pathname = `${pathname}/inference/pools`
+                } else if (consumer.kind === "Guardrail Policy") {
+                  pathname = `${pathname}/guardrails/policies/${encodeURIComponent(consumer.name)}`
+                } else if (consumer.kind === "External Client") {
+                  pathname = `${pathname}/applications/access`
                 }
                 return (
                   <li key={`${consumer.kind}:${consumer.name}`}>

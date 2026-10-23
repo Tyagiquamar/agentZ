@@ -2,6 +2,7 @@ package observer
 
 import (
 	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -11,6 +12,46 @@ import (
 	resourcepb "go.opentelemetry.io/proto/otlp/resource/v1"
 	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
 )
+
+func TestGuardrailEvidenceHasSeparateRetentionAndTrustBoundary(t *testing.T) {
+	t.Parallel()
+	span := appSpanFixture(0)
+	evidence := `[{"phase":"request","guard":"webhook","action":"reject","actionReason":"private detector response","agentz":{"version":1,"eventId":"event-1","referenceId":"reference-1","policyId":"policy-1","checkId":"check-1","revision":"revision-1","connectionId":"connection-1","attachment":"client/test","mandatory":true,"safeLabel":"Personal information","explanation":"Remove personal details and try again.","durationMs":2.5,"retentionDays":30,"startedAt":1792692000000,"sequence":0,"scopes":["conversation"],"inspected":["private inspected message"]}}]`
+	span.Attributes = append(span.Attributes, &commonpb.KeyValue{
+		Key: attrGuardrailEvaluations, Value: &commonpb.AnyValue{Value: &commonpb.AnyValue_StringValue{StringValue: evidence}},
+	})
+	request := &tracev1.ExportTraceServiceRequest{
+		ResourceSpans: []*tracepb.ResourceSpans{{
+			Resource: &resourcepb.Resource{Attributes: []*commonpb.KeyValue{{
+				Key: "service.name", Value: &commonpb.AnyValue{Value: &commonpb.AnyValue_StringValue{StringValue: "agentz-oauth-gateway"}},
+			}}},
+			ScopeSpans: []*tracepb.ScopeSpans{{Spans: []*tracepb.Span{span}}},
+		}},
+	}
+	events, rejected := traceEventsFromOTLPRequest(request, false)
+	if len(events) != 0 || rejected != 1 {
+		t.Fatal("native telemetry listener accepted forged gateway evidence")
+	}
+	events, rejected = traceEventsFromOTLPRequest(request, true)
+	if rejected != 0 || len(events) != 2 || events[0].guardrail == nil || events[1].app == nil {
+		t.Fatal("gateway listener did not retain both evaluation and app operation")
+	}
+	row := events[0].guardrail.row
+	if row.ReferenceID != "reference-1" || !row.ExpiresAt.Equal(row.OccurredAt.AddDate(0, 0, 30)) {
+		t.Fatal("evaluation lost its correlation or shared retention deadline")
+	}
+	if bytes.Contains(row.Evaluation, []byte("private detector response")) || !bytes.Contains(row.Evaluation, []byte("private inspected message")) {
+		t.Fatal("provider reason was retained or explicitly captured evidence was lost")
+	}
+	_, attrs := extractSpanPayload(spanClassLLM, attrsMap(span.Attributes))
+	stored, err := json.Marshal(attrs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(stored, []byte("private inspected message")) || bytes.Contains(stored, []byte(attrGuardrailEvaluations)) {
+		t.Fatal("guardrail evidence escaped into ordinary trace storage")
+	}
+}
 
 func appSpanFixture(payloadSize int) *tracepb.Span {
 	attributes := map[string]string{

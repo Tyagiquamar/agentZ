@@ -4,6 +4,7 @@ import { HoldToConfirm } from "@/components/interior/hold-to-confirm"
 
 import * as React from "react"
 import { toast } from "sonner"
+import type { GuardrailOutcome } from "@/lib/gateway/client"
 import type { Route } from "next"
 import Link from "next/link"
 import { useRouter } from "@bprogress/next/app"
@@ -277,7 +278,11 @@ function createColumns({
       accessorKey: "status",
       header: "Status",
       cell: ({ row }) => (
-        <RunStatusBadge reason={row.original.reason} status={row.original.status} />
+        <RunStatusBadge
+          outcome={row.original.guardrailOutcome}
+          reason={row.original.reason}
+          status={row.original.status}
+        />
       ),
     },
     {
@@ -318,7 +323,15 @@ function createColumns({
   ]
 }
 
-function RunStatusBadge({ reason, status }: { reason: string; status: WorkflowRunStatus }) {
+function RunStatusBadge({
+  reason,
+  status,
+  outcome,
+}: {
+  reason: string
+  status: WorkflowRunStatus
+  outcome?: GuardrailOutcome
+}) {
   const meta = runStatusMeta[status]
   const icon = <meta.icon data-icon="inline-start" />
   const badge = (
@@ -327,6 +340,18 @@ function RunStatusBadge({ reason, status }: { reason: string; status: WorkflowRu
       {meta.label}
     </Badge>
   )
+
+  if (outcome)
+    return (
+      <div className="flex flex-col gap-1">
+        {badge}
+        <span className="text-xs text-muted-foreground">
+          {outcome.code === "guardrail_denied"
+            ? "Blocked by guardrail"
+            : "Guardrail service unavailable"}
+        </span>
+      </div>
+    )
 
   if (reason.length === 0) {
     return badge

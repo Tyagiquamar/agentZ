@@ -62,6 +62,9 @@ export type SidebarScope =
       kind: "organization"
       mcpConnectionCapabilities: ResourceCapabilities
       inferenceProviderCapabilities: ResourceCapabilities
+      guardrailPolicyCapabilities: ResourceCapabilities
+      guardrailConnectionCapabilities: ResourceCapabilities
+      guardrailEventCapabilities: ResourceCapabilities
       sandboxCapabilities: ResourceCapabilities
       skillCapabilities: ResourceCapabilities
     } & WorkspaceNavigationScope)
@@ -135,6 +138,9 @@ export function AppSidebar({
             canEnterOrganization={scope.canEnterOrganization}
             mcpConnectionCapabilities={scope.mcpConnectionCapabilities}
             inferenceProviderCapabilities={scope.inferenceProviderCapabilities}
+            guardrailPolicyCapabilities={scope.guardrailPolicyCapabilities}
+            guardrailConnectionCapabilities={scope.guardrailConnectionCapabilities}
+            guardrailEventCapabilities={scope.guardrailEventCapabilities}
             organization={scope.organization}
             skillCapabilities={scope.skillCapabilities}
             sandboxCapabilities={scope.sandboxCapabilities}
@@ -308,6 +314,9 @@ async function WorkspaceChatSessions({
 }
 
 function OrganizationNavigation({
+  guardrailPolicyCapabilities,
+  guardrailConnectionCapabilities,
+  guardrailEventCapabilities,
   canEnterOrganization,
   mcpConnectionCapabilities,
   inferenceProviderCapabilities,
@@ -318,12 +327,25 @@ function OrganizationNavigation({
   canEnterOrganization: boolean
   mcpConnectionCapabilities: ResourceCapabilities
   inferenceProviderCapabilities: ResourceCapabilities
+  guardrailPolicyCapabilities: ResourceCapabilities
+  guardrailConnectionCapabilities: ResourceCapabilities
+  guardrailEventCapabilities: ResourceCapabilities
   organization: OrganizationSummary
   skillCapabilities: ResourceCapabilities
   sandboxCapabilities: ResourceCapabilities
 }) {
   const root = `/orgs/${organization.slug}` as const
+  const canReadGuardrails =
+    guardrailPolicyCapabilities.read ||
+    guardrailConnectionCapabilities.read ||
+    guardrailEventCapabilities.read
+  const guardrailsView = guardrailPolicyCapabilities.read
+    ? "policies"
+    : guardrailConnectionCapabilities.read
+      ? "connections"
+      : "events"
   const hasResources =
+    canReadGuardrails ||
     skillCapabilities.read ||
     mcpConnectionCapabilities.read ||
     sandboxCapabilities.read ||
@@ -393,6 +415,17 @@ function OrganizationNavigation({
               <SidebarMenuItem data-tour="sandboxes">
                 <SidebarNavigationLink href={`${root}/sandboxes`} label="Sandboxes">
                   <Box aria-hidden="true" />
+                </SidebarNavigationLink>
+              </SidebarMenuItem>
+            ) : null}
+            {canReadGuardrails ? (
+              <SidebarMenuItem>
+                <SidebarNavigationLink
+                  href={`${root}/guardrails/${guardrailsView}`}
+                  label="Guardrails"
+                  match={`${root}/guardrails`}
+                >
+                  <ShieldCheck aria-hidden="true" />
                 </SidebarNavigationLink>
               </SidebarMenuItem>
             ) : null}

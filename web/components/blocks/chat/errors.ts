@@ -14,6 +14,30 @@ import type {
   SessionRevertError,
   SessionUnrevertError,
 } from "@opencode-ai/sdk/v2"
+import type { GuardrailOutcome } from "@/lib/gateway/client"
+import { zGuardrailErrorEnvelope } from "@/lib/gateway/client/zod.gen"
+
+/** Read the gateway's structured outcome without interpreting provider error text. */
+export function guardrailMessageOutcome(
+  error: AssistantMessage["error"]
+): GuardrailOutcome | undefined {
+  if (error?.name !== "APIError" || !error.data.responseBody) return undefined
+  if (new Headers(error.data.responseHeaders).get("x-agentz-guardrail-outcome") !== "1")
+    return undefined
+  try {
+    const parsed = zGuardrailErrorEnvelope.safeParse(JSON.parse(error.data.responseBody))
+    if (!parsed.success) return undefined
+    const outcome = parsed.data.error.guardrail
+    if (
+      (error.data.statusCode === 422 && outcome.code === "guardrail_denied") ||
+      (error.data.statusCode === 503 && outcome.code === "guardrail_unavailable")
+    )
+      return outcome
+  } catch {
+    return undefined
+  }
+  return undefined
+}
 
 type OpenCodeClientError =
   | PermissionListError
@@ -45,7 +69,19 @@ export function opencodeErrorMessage(
 export function describeMessageError(error: AssistantMessage["error"]): {
   body: string
   label: string
+  guardrail?: GuardrailOutcome
 } {
+  const guardrail = guardrailMessageOutcome(error)
+  if (guardrail) {
+    return {
+      body: `${guardrail.explanation} Reference ${guardrail.referenceId}`,
+      label:
+        guardrail.code === "guardrail_denied"
+          ? "Blocked by guardrail"
+          : "Guardrail service unavailable",
+      guardrail,
+    }
+  }
   if (!error) {
     return {
       body: "An unexpected error occurred",

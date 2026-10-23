@@ -4,6 +4,191 @@ export type ClientOptions = {
   baseUrl: `${string}://${string}` | (string & {})
 }
 
+export type GuardrailOutcome = {
+  code: "guardrail_denied" | "guardrail_unavailable"
+  phase: "input" | "output"
+  safeLabel: string
+  explanation: string
+  referenceId: string
+  partialOutput: boolean
+}
+
+export type GuardrailCredentials = {
+  apiKey?: string
+  accessKeyId?: string
+  secretAccessKey?: string
+  sessionToken?: string
+  token?: string
+  /**
+   * ADC-compatible Google credential JSON.
+   */
+  googleCredentialsJson?: string
+}
+
+export type GuardrailCaptureMode = "off" | "findings" | "all"
+
+export type GuardrailAssignment = {
+  policies?: Array<ResourceReference>
+  captureMode?: GuardrailCaptureMode
+}
+
+export type GuardrailSettings = {
+  mandatoryPolicies: Array<string>
+  allowContentCapture: boolean
+  retentionDays: number
+}
+
+export type GuardrailRegex = {
+  patterns: Array<string>
+  replacement?: string
+}
+
+export type GuardrailCheck = {
+  id: string
+  name: string
+  phase: "input" | "output"
+  scopes: Array<"instructions" | "conversation" | "toolResults" | "toolArguments">
+  mode: "enforce" | "audit"
+  failureMode: "closed" | "open"
+  action: "deny" | "mask"
+  connection?: ResourceReference
+  regex?: GuardrailRegex
+  guardrailId?: string
+  guardrailVersion?: string
+  template?: string
+  safeExplanation?: string
+}
+
+export type GuardrailStatus = {
+  state: "Pending" | "Ready" | "Error"
+  revision: string
+  message: string
+  observedGeneration: number
+}
+
+export type GuardrailConnectionInput = {
+  name: string
+  displayName: string
+  description?: string
+  provider: "OpenAI" | "Bedrock" | "ModelArmor" | "Webhook"
+  endpoint?: string
+  region?: string
+}
+
+export type GuardrailConnection = {
+  name: string
+  displayName: string
+  description: string
+  provider: "OpenAI" | "Bedrock" | "ModelArmor" | "Webhook"
+  endpoint: string
+  region: string
+  scope: ResourceScope
+  credentialsConfigured: boolean
+  canModify: boolean
+  canDelete: boolean
+  status: GuardrailStatus
+}
+
+export type GuardrailResourceDiscoveryInput = {
+  scope: ResourceScope
+  kind: "guardrails" | "versions" | "projects" | "locations" | "templates"
+  /**
+   * Guardrail ID or ARN for versions; projects/PROJECT for locations; projects/PROJECT/locations/LOCATION for templates. Omit for guardrails or projects.
+   */
+  parent?: string
+  pageToken?: string
+  pageSize?: number
+}
+
+export type GuardrailDiscoveredResource = {
+  id: string
+  label: string
+  description?: string
+}
+
+export type GuardrailResourceDiscovery = {
+  provider: "OpenAI" | "Bedrock" | "ModelArmor" | "Webhook"
+  kind: "guardrails" | "versions" | "projects" | "locations" | "templates"
+  items: Array<GuardrailDiscoveredResource>
+  nextPageToken?: string
+  unreachable?: Array<string>
+}
+
+export type GuardrailPolicyInput = {
+  name: string
+  displayName: string
+  description?: string
+  checks: Array<GuardrailCheck>
+}
+
+export type GuardrailPolicy = {
+  name: string
+  displayName: string
+  description: string
+  checks: Array<GuardrailCheck>
+  scope: ResourceScope
+  mandatory: boolean
+  canModify: boolean
+  canDelete: boolean
+  status: GuardrailStatus
+}
+
+export type GuardrailEffectiveInput = {
+  sandbox?: string
+  sandboxScope?: ResourceScope
+  clientId?: string
+  assignment: GuardrailAssignment
+}
+
+export type GuardrailEffectiveCheck = {
+  policyId: string
+  policyName: string
+  mandatory: boolean
+  check: GuardrailCheck
+}
+
+export type GuardrailEffective = {
+  revision: string
+  delivery: "checkedStreaming" | "wholeOutput"
+  captureMode: GuardrailCaptureMode
+  checks: Array<GuardrailEffectiveCheck>
+}
+
+export type GuardrailTestInput = {
+  policy?: ResourceReference
+  assignment?: GuardrailAssignment
+  sandbox?: string
+  sandboxScope?: ResourceScope
+  clientId?: string
+  inlinePolicy?: GuardrailPolicyInput
+  phase: "input" | "output"
+  content: string
+}
+
+export type GuardrailTestCheckResult = {
+  checkId: string
+  action: string
+  explanation: string
+}
+
+export type GuardrailErrorEnvelope = {
+  error: {
+    type: string
+    code: string
+    message: string
+    guardrail: GuardrailOutcome
+  }
+}
+
+export type GuardrailTestResult = {
+  outcome?: GuardrailOutcome
+  action: "allow" | "deny" | "mask" | "error"
+  content: string
+  referenceId: string
+  explanation: string
+  checks: Array<GuardrailTestCheckResult>
+}
+
 export type LensApp = {
   client_id: string
   name: string
@@ -295,6 +480,10 @@ export type EventTrailTargetType =
   | "inference_provider"
   | "inference_pool"
   | "agent"
+  | "guardrail_connection"
+  | "guardrail_policy"
+  | "guardrail_settings"
+  | "external_access_guardrails"
 
 export type EventTrailField = {
   field: "member_id" | "name" | "provisioning_attempt" | "role" | "slug" | "state" | "user_id"
@@ -413,6 +602,9 @@ export type ResourceActor = {
 }
 
 export type Tenant = {
+  guardrail_connection_capabilities: ResourceCapabilities
+  guardrail_policy_capabilities: ResourceCapabilities
+  guardrail_event_capabilities: ResourceCapabilities
   organization_id: string
   namespace: string
   ready: boolean
@@ -445,6 +637,9 @@ export type Workspace = {
 }
 
 export type WorkspaceCapabilities = {
+  guardrail_connections: ResourceCapabilities
+  guardrail_policies: ResourceCapabilities
+  guardrail_events: ResourceCapabilities
   administer: boolean
   agents: AgentWorkspaceCapabilities
   skills: ResourceCapabilities
@@ -475,9 +670,17 @@ export type CreateWorkspaceRequest = {
   selected_organization_resources: SelectedOrganizationResources
 }
 
-export type InheritedResourceType = "skill" | "sandbox" | "mcp_connection" | "inference_provider"
+export type InheritedResourceType =
+  | "skill"
+  | "sandbox"
+  | "mcp_connection"
+  | "inference_provider"
+  | "guardrail_connection"
+  | "guardrail_policy"
 
 export type SelectedOrganizationResources = {
+  guardrail_connections: Array<string>
+  guardrail_policies: Array<string>
   skills: Array<string>
   sandboxes: Array<string>
   mcp_connections: Array<string>
@@ -1105,6 +1308,7 @@ export type WorkflowRunInputs = JsonValue
 export type WorkflowRunTriggerType = "Schedule" | "Webhook"
 
 export type WorkflowRunSummary = {
+  guardrailOutcome?: GuardrailOutcome
   name: WorkflowRunName
   workflow_name: WorkflowName
   trigger_type: WorkflowRunTriggerType
@@ -1119,6 +1323,7 @@ export type WorkflowRunSummary = {
 }
 
 export type WorkflowRunDetail = {
+  guardrailOutcome?: GuardrailOutcome
   name: WorkflowRunName
   agent_name: AgentName
   workflow_name: WorkflowName
@@ -1648,6 +1853,7 @@ export type WatchSecretsEvent = {
 }
 
 export type Sandbox = {
+  guardrails?: GuardrailAssignment
   name: SandboxName
   scope: ResourceScope
   created_by: ResourceActor
@@ -1674,6 +1880,7 @@ export type ListSandboxesResponse = {
 }
 
 export type CreateSandboxRequest = {
+  guardrails?: GuardrailAssignment
   name: SandboxName
   packages?: Array<string>
   allowed_hosts?: Array<string>
@@ -1683,6 +1890,7 @@ export type CreateSandboxRequest = {
 }
 
 export type UpdateSandboxRequest = {
+  guardrails?: GuardrailAssignment
   packages: Array<string>
   allowed_hosts: Array<string>
   mcp_connection_refs: Array<McpConnectionRef>
@@ -2792,6 +3000,62 @@ export type CodingRepositoryItem = {
   private: boolean
 }
 
+export type GuardrailEvaluationContext = {
+  version: 1
+  eventId: string
+  referenceId: string
+  policyId: string
+  checkId: string
+  revision: string
+  connectionId: string
+  attachment: string
+  mandatory: boolean
+  safeLabel: string
+  explanation: string
+  durationMs: number
+  sequence: number
+  scopes: Array<string>
+  startedAt: number
+  validationPass?: "mandatoryFinal"
+  retentionDays: number
+  errorCode?: string
+  inspected?: Array<string>
+  replacement?: Array<string>
+}
+
+export type GuardrailRuntimeEvaluation = {
+  phase: "request" | "response"
+  guard: string
+  action: "allow" | "failOpen" | "audit" | "mask" | "reject"
+  guardrailId?: string
+  guardrailVersion?: string
+  actionReason?: string
+  assessments?: Array<{
+    [key: string]: unknown
+  }>
+  agentz?: GuardrailEvaluationContext
+}
+
+export type GuardrailEvent = {
+  id: string
+  organization_id: string
+  workspace_id: string
+  occurred_at: string
+  expires_at: string
+  sandbox_name: string
+  agent_name: string
+  client_id: string
+  session_id: string
+  model: string
+  trace_id: string
+  evaluation: GuardrailRuntimeEvaluation
+}
+
+export type ListGuardrailEventsResponse = {
+  events: Array<GuardrailEvent>
+  next_cursor?: string
+}
+
 export type ApiError = {
   name: "APIError"
   data: {
@@ -3279,6 +3543,16 @@ export type UserMessage = {
   tools?: {
     [key: string]: boolean
   }
+}
+
+export type GuardrailConnectionInputWritable = {
+  name: string
+  displayName: string
+  description?: string
+  provider: "OpenAI" | "Bedrock" | "ModelArmor" | "Webhook"
+  endpoint?: string
+  region?: string
+  credentials?: GuardrailCredentials
 }
 
 export type WorkflowRunInputsWritable = JsonValueWritable
@@ -11540,3 +11814,639 @@ export type ListDashboardTableRowsResponses = {
 
 export type ListDashboardTableRowsResponse =
   ListDashboardTableRowsResponses[keyof ListDashboardTableRowsResponses]
+
+export type ListGuardrailConnectionsData = {
+  body?: never
+  headers?: {
+    /**
+     * Stable Workspace ID selecting Workspace scope. Omit for Organisation scope.
+     *
+     */
+    "X-AgentZ-Workspace-ID"?: string
+  }
+  path?: never
+  query?: never
+  url: "/api/guardrails/connections"
+}
+
+export type ListGuardrailConnectionsErrors = {
+  /**
+   * Unexpected server error.
+   */
+  default: Error
+}
+
+export type ListGuardrailConnectionsError =
+  ListGuardrailConnectionsErrors[keyof ListGuardrailConnectionsErrors]
+
+export type ListGuardrailConnectionsResponses = {
+  /**
+   * Scoped resources, including explicitly inherited organization resources.
+   */
+  200: {
+    items: Array<GuardrailConnection>
+  }
+}
+
+export type ListGuardrailConnectionsResponse =
+  ListGuardrailConnectionsResponses[keyof ListGuardrailConnectionsResponses]
+
+export type CreateGuardrailConnectionData = {
+  body: GuardrailConnectionInputWritable
+  headers?: {
+    /**
+     * Stable Workspace ID selecting Workspace scope. Omit for Organisation scope.
+     *
+     */
+    "X-AgentZ-Workspace-ID"?: string
+  }
+  path?: never
+  query?: never
+  url: "/api/guardrails/connections"
+}
+
+export type CreateGuardrailConnectionErrors = {
+  /**
+   * Unexpected server error.
+   */
+  default: Error
+}
+
+export type CreateGuardrailConnectionError =
+  CreateGuardrailConnectionErrors[keyof CreateGuardrailConnectionErrors]
+
+export type CreateGuardrailConnectionResponses = {
+  /**
+   * Created resource, pending projection.
+   */
+  201: GuardrailConnection
+}
+
+export type CreateGuardrailConnectionResponse =
+  CreateGuardrailConnectionResponses[keyof CreateGuardrailConnectionResponses]
+
+export type DeleteGuardrailConnectionData = {
+  body?: never
+  headers?: {
+    /**
+     * Stable Workspace ID selecting Workspace scope. Omit for Organisation scope.
+     *
+     */
+    "X-AgentZ-Workspace-ID"?: string
+  }
+  path: {
+    name: string
+  }
+  query?: never
+  url: "/api/guardrails/connections/{name}"
+}
+
+export type DeleteGuardrailConnectionErrors = {
+  /**
+   * Unexpected server error.
+   */
+  default: Error
+}
+
+export type DeleteGuardrailConnectionError =
+  DeleteGuardrailConnectionErrors[keyof DeleteGuardrailConnectionErrors]
+
+export type DeleteGuardrailConnectionResponses = {
+  /**
+   * Unreferenced resource deleted.
+   */
+  204: void
+}
+
+export type DeleteGuardrailConnectionResponse =
+  DeleteGuardrailConnectionResponses[keyof DeleteGuardrailConnectionResponses]
+
+export type GetGuardrailConnectionData = {
+  body?: never
+  headers?: {
+    /**
+     * Stable Workspace ID selecting Workspace scope. Omit for Organisation scope.
+     *
+     */
+    "X-AgentZ-Workspace-ID"?: string
+  }
+  path: {
+    name: string
+  }
+  query?: never
+  url: "/api/guardrails/connections/{name}"
+}
+
+export type GetGuardrailConnectionErrors = {
+  /**
+   * Unexpected server error.
+   */
+  default: Error
+}
+
+export type GetGuardrailConnectionError =
+  GetGuardrailConnectionErrors[keyof GetGuardrailConnectionErrors]
+
+export type GetGuardrailConnectionResponses = {
+  /**
+   * Resource detail.
+   */
+  200: GuardrailConnection
+}
+
+export type GetGuardrailConnectionResponse =
+  GetGuardrailConnectionResponses[keyof GetGuardrailConnectionResponses]
+
+export type UpdateGuardrailConnectionData = {
+  body: GuardrailConnectionInputWritable
+  headers?: {
+    /**
+     * Stable Workspace ID selecting Workspace scope. Omit for Organisation scope.
+     *
+     */
+    "X-AgentZ-Workspace-ID"?: string
+  }
+  path: {
+    name: string
+  }
+  query?: never
+  url: "/api/guardrails/connections/{name}"
+}
+
+export type UpdateGuardrailConnectionErrors = {
+  /**
+   * Unexpected server error.
+   */
+  default: Error
+}
+
+export type UpdateGuardrailConnectionError =
+  UpdateGuardrailConnectionErrors[keyof UpdateGuardrailConnectionErrors]
+
+export type UpdateGuardrailConnectionResponses = {
+  /**
+   * Updated resource, pending projection.
+   */
+  200: GuardrailConnection
+}
+
+export type UpdateGuardrailConnectionResponse =
+  UpdateGuardrailConnectionResponses[keyof UpdateGuardrailConnectionResponses]
+
+export type DiscoverGuardrailConnectionResourcesData = {
+  body: GuardrailResourceDiscoveryInput
+  headers?: {
+    /**
+     * Stable Workspace ID selecting Workspace scope. Omit for Organisation scope.
+     *
+     */
+    "X-AgentZ-Workspace-ID"?: string
+  }
+  path: {
+    name: string
+  }
+  query?: never
+  url: "/api/guardrails/connections/{name}/resources"
+}
+
+export type DiscoverGuardrailConnectionResourcesErrors = {
+  /**
+   * Request validation failed.
+   */
+  400: Error
+  /**
+   * Request authentication failed.
+   */
+  401: Error
+  /**
+   * The authenticated principal lacks authority for this operation.
+   */
+  403: Error
+  /**
+   * Requested resource was not found. For tenant-gated APIs this can also mean the current tenant is not initialized and the error code is `tenant_not_found`.
+   *
+   */
+  404: Error
+  /**
+   * The cloud provider rate limited discovery.
+   */
+  429: Error
+  /**
+   * Unexpected server error.
+   */
+  500: Error
+  /**
+   * The Agent filesystem is unavailable.
+   */
+  502: Error
+  /**
+   * Saved connection credentials are unavailable.
+   */
+  503: Error
+  /**
+   * The dashboard query exceeded its configured timeout.
+   */
+  504: Error
+}
+
+export type DiscoverGuardrailConnectionResourcesError =
+  DiscoverGuardrailConnectionResourcesErrors[keyof DiscoverGuardrailConnectionResourcesErrors]
+
+export type DiscoverGuardrailConnectionResourcesResponses = {
+  /**
+   * One page of non-secret provider resources.
+   */
+  200: GuardrailResourceDiscovery
+}
+
+export type DiscoverGuardrailConnectionResourcesResponse =
+  DiscoverGuardrailConnectionResourcesResponses[keyof DiscoverGuardrailConnectionResourcesResponses]
+
+export type ListGuardrailPoliciesData = {
+  body?: never
+  headers?: {
+    /**
+     * Stable Workspace ID selecting Workspace scope. Omit for Organisation scope.
+     *
+     */
+    "X-AgentZ-Workspace-ID"?: string
+  }
+  path?: never
+  query?: never
+  url: "/api/guardrails/policies"
+}
+
+export type ListGuardrailPoliciesErrors = {
+  /**
+   * Unexpected server error.
+   */
+  default: Error
+}
+
+export type ListGuardrailPoliciesError =
+  ListGuardrailPoliciesErrors[keyof ListGuardrailPoliciesErrors]
+
+export type ListGuardrailPoliciesResponses = {
+  /**
+   * Scoped resources, including explicitly inherited organization resources.
+   */
+  200: {
+    items: Array<GuardrailPolicy>
+  }
+}
+
+export type ListGuardrailPoliciesResponse =
+  ListGuardrailPoliciesResponses[keyof ListGuardrailPoliciesResponses]
+
+export type CreateGuardrailPolicyData = {
+  body: GuardrailPolicyInput
+  headers?: {
+    /**
+     * Stable Workspace ID selecting Workspace scope. Omit for Organisation scope.
+     *
+     */
+    "X-AgentZ-Workspace-ID"?: string
+  }
+  path?: never
+  query?: never
+  url: "/api/guardrails/policies"
+}
+
+export type CreateGuardrailPolicyErrors = {
+  /**
+   * Unexpected server error.
+   */
+  default: Error
+}
+
+export type CreateGuardrailPolicyError =
+  CreateGuardrailPolicyErrors[keyof CreateGuardrailPolicyErrors]
+
+export type CreateGuardrailPolicyResponses = {
+  /**
+   * Created resource, pending projection.
+   */
+  201: GuardrailPolicy
+}
+
+export type CreateGuardrailPolicyResponse =
+  CreateGuardrailPolicyResponses[keyof CreateGuardrailPolicyResponses]
+
+export type DeleteGuardrailPolicyData = {
+  body?: never
+  headers?: {
+    /**
+     * Stable Workspace ID selecting Workspace scope. Omit for Organisation scope.
+     *
+     */
+    "X-AgentZ-Workspace-ID"?: string
+  }
+  path: {
+    name: string
+  }
+  query?: never
+  url: "/api/guardrails/policies/{name}"
+}
+
+export type DeleteGuardrailPolicyErrors = {
+  /**
+   * Unexpected server error.
+   */
+  default: Error
+}
+
+export type DeleteGuardrailPolicyError =
+  DeleteGuardrailPolicyErrors[keyof DeleteGuardrailPolicyErrors]
+
+export type DeleteGuardrailPolicyResponses = {
+  /**
+   * Unreferenced resource deleted.
+   */
+  204: void
+}
+
+export type DeleteGuardrailPolicyResponse =
+  DeleteGuardrailPolicyResponses[keyof DeleteGuardrailPolicyResponses]
+
+export type GetGuardrailPolicyData = {
+  body?: never
+  headers?: {
+    /**
+     * Stable Workspace ID selecting Workspace scope. Omit for Organisation scope.
+     *
+     */
+    "X-AgentZ-Workspace-ID"?: string
+  }
+  path: {
+    name: string
+  }
+  query?: never
+  url: "/api/guardrails/policies/{name}"
+}
+
+export type GetGuardrailPolicyErrors = {
+  /**
+   * Unexpected server error.
+   */
+  default: Error
+}
+
+export type GetGuardrailPolicyError = GetGuardrailPolicyErrors[keyof GetGuardrailPolicyErrors]
+
+export type GetGuardrailPolicyResponses = {
+  /**
+   * Resource detail.
+   */
+  200: GuardrailPolicy
+}
+
+export type GetGuardrailPolicyResponse =
+  GetGuardrailPolicyResponses[keyof GetGuardrailPolicyResponses]
+
+export type UpdateGuardrailPolicyData = {
+  body: GuardrailPolicyInput
+  headers?: {
+    /**
+     * Stable Workspace ID selecting Workspace scope. Omit for Organisation scope.
+     *
+     */
+    "X-AgentZ-Workspace-ID"?: string
+  }
+  path: {
+    name: string
+  }
+  query?: never
+  url: "/api/guardrails/policies/{name}"
+}
+
+export type UpdateGuardrailPolicyErrors = {
+  /**
+   * Unexpected server error.
+   */
+  default: Error
+}
+
+export type UpdateGuardrailPolicyError =
+  UpdateGuardrailPolicyErrors[keyof UpdateGuardrailPolicyErrors]
+
+export type UpdateGuardrailPolicyResponses = {
+  /**
+   * Updated resource, pending projection.
+   */
+  200: GuardrailPolicy
+}
+
+export type UpdateGuardrailPolicyResponse =
+  UpdateGuardrailPolicyResponses[keyof UpdateGuardrailPolicyResponses]
+
+export type GetGuardrailSettingsData = {
+  body?: never
+  headers?: {
+    /**
+     * Stable Workspace ID selecting Workspace scope. Omit for Organisation scope.
+     *
+     */
+    "X-AgentZ-Workspace-ID"?: string
+  }
+  path?: never
+  query?: never
+  url: "/api/guardrails/settings"
+}
+
+export type GetGuardrailSettingsErrors = {
+  /**
+   * Unexpected server error.
+   */
+  default: Error
+}
+
+export type GetGuardrailSettingsError = GetGuardrailSettingsErrors[keyof GetGuardrailSettingsErrors]
+
+export type GetGuardrailSettingsResponses = {
+  /**
+   * Organization baseline and audit settings, inherited read-only by workspaces.
+   */
+  200: GuardrailSettings
+}
+
+export type GetGuardrailSettingsResponse =
+  GetGuardrailSettingsResponses[keyof GetGuardrailSettingsResponses]
+
+export type UpdateGuardrailSettingsData = {
+  body: GuardrailSettings
+  headers?: {
+    /**
+     * Stable Workspace ID selecting Workspace scope. Omit for Organisation scope.
+     *
+     */
+    "X-AgentZ-Workspace-ID"?: string
+  }
+  path?: never
+  query?: never
+  url: "/api/guardrails/settings"
+}
+
+export type UpdateGuardrailSettingsErrors = {
+  /**
+   * Unexpected server error.
+   */
+  default: Error
+}
+
+export type UpdateGuardrailSettingsError =
+  UpdateGuardrailSettingsErrors[keyof UpdateGuardrailSettingsErrors]
+
+export type UpdateGuardrailSettingsResponses = {
+  /**
+   * Organization settings saved.
+   */
+  200: GuardrailSettings
+}
+
+export type UpdateGuardrailSettingsResponse =
+  UpdateGuardrailSettingsResponses[keyof UpdateGuardrailSettingsResponses]
+
+export type GetEffectiveGuardrailsData = {
+  body: GuardrailEffectiveInput
+  headers?: {
+    /**
+     * Stable Workspace ID selecting Workspace scope. Omit for Organisation scope.
+     *
+     */
+    "X-AgentZ-Workspace-ID"?: string
+  }
+  path?: never
+  query?: never
+  url: "/api/guardrails/effective"
+}
+
+export type GetEffectiveGuardrailsErrors = {
+  /**
+   * Unexpected server error.
+   */
+  default: Error
+}
+
+export type GetEffectiveGuardrailsError =
+  GetEffectiveGuardrailsErrors[keyof GetEffectiveGuardrailsErrors]
+
+export type GetEffectiveGuardrailsResponses = {
+  /**
+   * Resolved mandatory and optional checks.
+   */
+  200: GuardrailEffective
+}
+
+export type GetEffectiveGuardrailsResponse =
+  GetEffectiveGuardrailsResponses[keyof GetEffectiveGuardrailsResponses]
+
+export type TestGuardrailsData = {
+  body: GuardrailTestInput
+  headers?: {
+    /**
+     * Stable Workspace ID selecting Workspace scope. Omit for Organisation scope.
+     *
+     */
+    "X-AgentZ-Workspace-ID"?: string
+  }
+  path?: never
+  query?: never
+  url: "/api/guardrails/test"
+}
+
+export type TestGuardrailsErrors = {
+  /**
+   * Guardrail evaluator unavailable.
+   */
+  503: GuardrailErrorEnvelope
+  /**
+   * Unexpected server error.
+   */
+  default: Error
+}
+
+export type TestGuardrailsError = TestGuardrailsErrors[keyof TestGuardrailsErrors]
+
+export type TestGuardrailsResponses = {
+  /**
+   * Test verdicts for the selected policy through the configured detector.
+   */
+  200: GuardrailTestResult
+}
+
+export type TestGuardrailsResponse = TestGuardrailsResponses[keyof TestGuardrailsResponses]
+
+export type ListGuardrailEventsData = {
+  body?: never
+  headers?: {
+    /**
+     * Stable Workspace ID selecting Workspace scope. Omit for Organisation scope.
+     *
+     */
+    "X-AgentZ-Workspace-ID"?: string
+  }
+  path?: never
+  query?: {
+    action?: "allow" | "failOpen" | "audit" | "mask" | "reject"
+    phase?: "request" | "response"
+    policy_id?: string
+    reference_id?: string
+    session_id?: string
+    cursor?: string
+    limit?: number
+  }
+  url: "/api/guardrails/events"
+}
+
+export type ListGuardrailEventsErrors = {
+  /**
+   * Unexpected server error.
+   */
+  default: Error
+}
+
+export type ListGuardrailEventsError = ListGuardrailEventsErrors[keyof ListGuardrailEventsErrors]
+
+export type ListGuardrailEventsResponses = {
+  /**
+   * Retained evaluations, newest first.
+   */
+  200: ListGuardrailEventsResponse
+}
+
+export type ListGuardrailEventsResponse2 =
+  ListGuardrailEventsResponses[keyof ListGuardrailEventsResponses]
+
+export type GetGuardrailEventData = {
+  body?: never
+  headers?: {
+    /**
+     * Stable Workspace ID selecting Workspace scope. Omit for Organisation scope.
+     *
+     */
+    "X-AgentZ-Workspace-ID"?: string
+  }
+  path: {
+    eventId: string
+  }
+  query?: never
+  url: "/api/guardrails/events/{eventId}"
+}
+
+export type GetGuardrailEventErrors = {
+  /**
+   * Unexpected server error.
+   */
+  default: Error
+}
+
+export type GetGuardrailEventError = GetGuardrailEventErrors[keyof GetGuardrailEventErrors]
+
+export type GetGuardrailEventResponses = {
+  /**
+   * Authorized event detail.
+   */
+  200: GuardrailEvent
+}
+
+export type GetGuardrailEventResponse = GetGuardrailEventResponses[keyof GetGuardrailEventResponses]

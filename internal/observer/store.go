@@ -107,6 +107,25 @@ func (s *dbStore) insertBatch(ctx context.Context, b batch) error {
 			return err
 		}
 	}
+	guardrailScopes := make(map[string]observerdb.GetGuardrailSubjectScopeRow)
+	for _, ev := range b.guardrails {
+		row := ev.row
+		if row.OrganizationID == "" {
+			scope, ok := guardrailScopes[ev.namespace]
+			if !ok {
+				scope, err = q.GetGuardrailSubjectScope(ctx, ev.namespace)
+				if err != nil {
+					return fmt.Errorf("resolve guardrail event scope: %w", err)
+				}
+				guardrailScopes[ev.namespace] = scope
+			}
+			row.OrganizationID = scope.OrganizationID
+			row.WorkspaceID = scope.WorkspaceID
+		}
+		if err := q.InsertGuardrailEvent(ctx, row); err != nil {
+			return fmt.Errorf("insert guardrail event: %w", err)
+		}
+	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit tx: %w", err)

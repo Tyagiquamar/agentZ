@@ -42,6 +42,40 @@ var agentPolicies = func() *cedar.PolicySet {
 type Operation string
 
 const (
+	// OperationListGuardrailConnections manages scoped prompt safeguards.
+	OperationListGuardrailConnections Operation = "listGuardrailConnections"
+	// OperationGetGuardrailConnection manages scoped prompt safeguards.
+	OperationGetGuardrailConnection Operation = "getGuardrailConnection"
+	// OperationDiscoverGuardrailConnectionResources browses resources using a saved connection.
+	OperationDiscoverGuardrailConnectionResources Operation = "discoverGuardrailConnectionResources"
+	// OperationCreateGuardrailConnection manages scoped prompt safeguards.
+	OperationCreateGuardrailConnection Operation = "createGuardrailConnection"
+	// OperationUpdateGuardrailConnection manages scoped prompt safeguards.
+	OperationUpdateGuardrailConnection Operation = "updateGuardrailConnection"
+	// OperationDeleteGuardrailConnection manages scoped prompt safeguards.
+	OperationDeleteGuardrailConnection Operation = "deleteGuardrailConnection"
+	// OperationListGuardrailPolicies manages scoped prompt safeguards.
+	OperationListGuardrailPolicies Operation = "listGuardrailPolicies"
+	// OperationGetGuardrailPolicy manages scoped prompt safeguards.
+	OperationGetGuardrailPolicy Operation = "getGuardrailPolicy"
+	// OperationCreateGuardrailPolicy manages scoped prompt safeguards.
+	OperationCreateGuardrailPolicy Operation = "createGuardrailPolicy"
+	// OperationUpdateGuardrailPolicy manages scoped prompt safeguards.
+	OperationUpdateGuardrailPolicy Operation = "updateGuardrailPolicy"
+	// OperationDeleteGuardrailPolicy manages scoped prompt safeguards.
+	OperationDeleteGuardrailPolicy Operation = "deleteGuardrailPolicy"
+	// OperationGetGuardrailSettings reads or evaluates prompt safeguards.
+	OperationGetGuardrailSettings Operation = "getGuardrailSettings"
+	// OperationGetEffectiveGuardrails reads or evaluates prompt safeguards.
+	OperationGetEffectiveGuardrails Operation = "getEffectiveGuardrails"
+	// OperationTestGuardrails reads or evaluates prompt safeguards.
+	OperationTestGuardrails Operation = "testGuardrails"
+	// OperationUpdateGuardrailSettings changes the organization baseline.
+	OperationUpdateGuardrailSettings Operation = "updateGuardrailSettings"
+	// OperationListGuardrailEvents reads scoped guardrail audit history.
+	OperationListGuardrailEvents Operation = "listGuardrailEvents"
+	// OperationGetGuardrailEvent reads a retained evaluation and captured content.
+	OperationGetGuardrailEvent Operation = "getGuardrailEvent"
 	// OperationListSkills lists immutable Skill resources.
 	OperationListSkills Operation = "listSkills"
 	// OperationCreateSkill creates an immutable Skill resource.
@@ -500,6 +534,37 @@ func (e Effective) HasAccess(scope Scope) bool {
 
 func mapOperation(operation Operation) (gatewaydb.PermissionResource, gatewaydb.PermissionAction, bool) {
 	switch operation {
+	case OperationListGuardrailEvents, OperationGetGuardrailEvent:
+		return gatewaydb.PermissionResourceGuardrailEvent, gatewaydb.PermissionActionRead, true
+	case OperationListGuardrailConnections, OperationDiscoverGuardrailConnectionResources:
+		return gatewaydb.PermissionResourceGuardrailConnection, gatewaydb.PermissionActionRead, true
+	case OperationGetGuardrailConnection:
+		return gatewaydb.PermissionResourceGuardrailConnection, gatewaydb.PermissionActionRead, true
+	case OperationCreateGuardrailConnection:
+		return gatewaydb.PermissionResourceGuardrailConnection, gatewaydb.PermissionActionCreate, true
+	case OperationUpdateGuardrailConnection:
+		return gatewaydb.PermissionResourceGuardrailConnection, gatewaydb.PermissionActionModify, true
+	case OperationDeleteGuardrailConnection:
+		return gatewaydb.PermissionResourceGuardrailConnection, gatewaydb.PermissionActionDelete, true
+	case OperationListGuardrailPolicies:
+		return gatewaydb.PermissionResourceGuardrailPolicy, gatewaydb.PermissionActionRead, true
+	case OperationGetGuardrailPolicy:
+		return gatewaydb.PermissionResourceGuardrailPolicy, gatewaydb.PermissionActionRead, true
+	case OperationCreateGuardrailPolicy:
+		return gatewaydb.PermissionResourceGuardrailPolicy, gatewaydb.PermissionActionCreate, true
+	case OperationUpdateGuardrailPolicy:
+		return gatewaydb.PermissionResourceGuardrailPolicy, gatewaydb.PermissionActionModify, true
+	case OperationDeleteGuardrailPolicy:
+		return gatewaydb.PermissionResourceGuardrailPolicy, gatewaydb.PermissionActionDelete, true
+	case OperationGetGuardrailSettings:
+		return gatewaydb.PermissionResourceGuardrailPolicy, gatewaydb.PermissionActionRead, true
+	case OperationGetEffectiveGuardrails:
+		return gatewaydb.PermissionResourceGuardrailPolicy, gatewaydb.PermissionActionRead, true
+	case OperationTestGuardrails:
+		return gatewaydb.PermissionResourceGuardrailPolicy, gatewaydb.PermissionActionRead, true
+	case OperationUpdateGuardrailSettings:
+		return gatewaydb.PermissionResourceGuardrailPolicy, gatewaydb.PermissionActionModify, true
+
 	case OperationListSkills:
 		return gatewaydb.PermissionResourceSkill, gatewaydb.PermissionActionRead, true
 	case OperationCreateSkill:

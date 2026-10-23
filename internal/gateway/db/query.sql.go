@@ -1407,6 +1407,27 @@ func (q *Queries) GatewayDeleteExpiredEventTrailEvents(ctx context.Context, expi
 	return result.RowsAffected(), nil
 }
 
+const gatewayDeleteGuardrailClientAccess = `-- name: GatewayDeleteGuardrailClientAccess :execrows
+DELETE FROM guardrail_client_access
+WHERE organization_id = $1
+  AND workspace_id = $2
+  AND client_id = $3
+`
+
+type GatewayDeleteGuardrailClientAccessParams struct {
+	OrganizationID string `json:"organization_id"`
+	WorkspaceID    string `json:"workspace_id"`
+	ClientID       string `json:"client_id"`
+}
+
+func (q *Queries) GatewayDeleteGuardrailClientAccess(ctx context.Context, arg GatewayDeleteGuardrailClientAccessParams) (int64, error) {
+	result, err := q.db.Exec(ctx, gatewayDeleteGuardrailClientAccess, arg.OrganizationID, arg.WorkspaceID, arg.ClientID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const gatewayDeleteOldCodingOperations = `-- name: GatewayDeleteOldCodingOperations :exec
 DELETE FROM coding_operations WHERE created_at < now() - interval '7 days'
 AND result->>'state' NOT IN ('queued', 'running')
@@ -2314,6 +2335,73 @@ func (q *Queries) GatewayGetExternalAgent(ctx context.Context, clientID string) 
 		&i.UserID,
 		&i.Kind,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const gatewayGetGuardrailClientAccess = `-- name: GatewayGetGuardrailClientAccess :one
+SELECT organization_id, workspace_id, client_id, policies, capture_mode, updated_at, updated_by FROM guardrail_client_access
+WHERE organization_id = $1
+  AND workspace_id = $2
+  AND client_id = $3
+`
+
+type GatewayGetGuardrailClientAccessParams struct {
+	OrganizationID string `json:"organization_id"`
+	WorkspaceID    string `json:"workspace_id"`
+	ClientID       string `json:"client_id"`
+}
+
+func (q *Queries) GatewayGetGuardrailClientAccess(ctx context.Context, arg GatewayGetGuardrailClientAccessParams) (GuardrailClientAccess, error) {
+	row := q.db.QueryRow(ctx, gatewayGetGuardrailClientAccess, arg.OrganizationID, arg.WorkspaceID, arg.ClientID)
+	var i GuardrailClientAccess
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.WorkspaceID,
+		&i.ClientID,
+		&i.Policies,
+		&i.CaptureMode,
+		&i.UpdatedAt,
+		&i.UpdatedBy,
+	)
+	return i, err
+}
+
+const gatewayGetGuardrailEvent = `-- name: GatewayGetGuardrailEvent :one
+SELECT id, organization_id, workspace_id, occurred_at, expires_at, sandbox_name, agent_name, client_id, session_id, model, trace_id, phase, action, policy_id, reference_id, evaluation, ingested_at FROM observer_guardrail_events
+WHERE id = $1
+  AND organization_id = $2
+  AND ($3::text = '' OR workspace_id = $3)
+  AND expires_at > now()
+`
+
+type GatewayGetGuardrailEventParams struct {
+	ID             string `json:"id"`
+	OrganizationID string `json:"organization_id"`
+	WorkspaceID    string `json:"workspace_id"`
+}
+
+func (q *Queries) GatewayGetGuardrailEvent(ctx context.Context, arg GatewayGetGuardrailEventParams) (ObserverGuardrailEvent, error) {
+	row := q.db.QueryRow(ctx, gatewayGetGuardrailEvent, arg.ID, arg.OrganizationID, arg.WorkspaceID)
+	var i ObserverGuardrailEvent
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.WorkspaceID,
+		&i.OccurredAt,
+		&i.ExpiresAt,
+		&i.SandboxName,
+		&i.AgentName,
+		&i.ClientID,
+		&i.SessionID,
+		&i.Model,
+		&i.TraceID,
+		&i.Phase,
+		&i.Action,
+		&i.PolicyID,
+		&i.ReferenceID,
+		&i.Evaluation,
+		&i.IngestedAt,
 	)
 	return i, err
 }
@@ -5123,6 +5211,123 @@ func (q *Queries) GatewayListFileEventsAggregated(ctx context.Context, arg Gatew
 	return items, nil
 }
 
+const gatewayListGuardrailClientAccess = `-- name: GatewayListGuardrailClientAccess :many
+SELECT organization_id, workspace_id, client_id, policies, capture_mode, updated_at, updated_by FROM guardrail_client_access
+WHERE organization_id = $1
+  AND workspace_id = $2
+ORDER BY client_id
+`
+
+type GatewayListGuardrailClientAccessParams struct {
+	OrganizationID string `json:"organization_id"`
+	WorkspaceID    string `json:"workspace_id"`
+}
+
+func (q *Queries) GatewayListGuardrailClientAccess(ctx context.Context, arg GatewayListGuardrailClientAccessParams) ([]GuardrailClientAccess, error) {
+	rows, err := q.db.Query(ctx, gatewayListGuardrailClientAccess, arg.OrganizationID, arg.WorkspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GuardrailClientAccess{}
+	for rows.Next() {
+		var i GuardrailClientAccess
+		if err := rows.Scan(
+			&i.OrganizationID,
+			&i.WorkspaceID,
+			&i.ClientID,
+			&i.Policies,
+			&i.CaptureMode,
+			&i.UpdatedAt,
+			&i.UpdatedBy,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const gatewayListGuardrailEvents = `-- name: GatewayListGuardrailEvents :many
+SELECT id, organization_id, workspace_id, occurred_at, expires_at, sandbox_name, agent_name, client_id, session_id, model, trace_id, phase, action, policy_id, reference_id, evaluation, ingested_at FROM observer_guardrail_events
+WHERE organization_id = $1
+  AND ($2::text = '' OR workspace_id = $2)
+  AND expires_at > now()
+  AND ($3::text = '' OR action = $3)
+  AND ($4::text = '' OR phase = $4)
+  AND ($5::text = '' OR policy_id = $5)
+  AND ($6::text = '' OR reference_id = $6)
+  AND ($7::text = '' OR session_id = $7)
+  AND ($8::text = '' OR (occurred_at, id) < ($9, $8))
+ORDER BY occurred_at DESC, id DESC
+LIMIT $10
+`
+
+type GatewayListGuardrailEventsParams struct {
+	OrganizationID string    `json:"organization_id"`
+	WorkspaceID    string    `json:"workspace_id"`
+	Action         string    `json:"action"`
+	Phase          string    `json:"phase"`
+	PolicyID       string    `json:"policy_id"`
+	ReferenceID    string    `json:"reference_id"`
+	SessionID      string    `json:"session_id"`
+	CursorID       string    `json:"cursor_id"`
+	CursorAt       time.Time `json:"cursor_at"`
+	PageSize       int32     `json:"page_size"`
+}
+
+func (q *Queries) GatewayListGuardrailEvents(ctx context.Context, arg GatewayListGuardrailEventsParams) ([]ObserverGuardrailEvent, error) {
+	rows, err := q.db.Query(ctx, gatewayListGuardrailEvents,
+		arg.OrganizationID,
+		arg.WorkspaceID,
+		arg.Action,
+		arg.Phase,
+		arg.PolicyID,
+		arg.ReferenceID,
+		arg.SessionID,
+		arg.CursorID,
+		arg.CursorAt,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ObserverGuardrailEvent{}
+	for rows.Next() {
+		var i ObserverGuardrailEvent
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.WorkspaceID,
+			&i.OccurredAt,
+			&i.ExpiresAt,
+			&i.SandboxName,
+			&i.AgentName,
+			&i.ClientID,
+			&i.SessionID,
+			&i.Model,
+			&i.TraceID,
+			&i.Phase,
+			&i.Action,
+			&i.PolicyID,
+			&i.ReferenceID,
+			&i.Evaluation,
+			&i.IngestedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const gatewayListLensApps = `-- name: GatewayListLensApps :many
 WITH subjects AS (
  SELECT op.client_id, op.app_name AS name, op.agent_kind, MAX(op.start_time) AS last_seen
@@ -5389,6 +5594,40 @@ func (q *Queries) GatewayListNetworkEventsAggregated(ctx context.Context, arg Ga
 			&i.Action,
 			&i.Source,
 			&i.Occurrences,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const gatewayListOrganizationGuardrailClientAccess = `-- name: GatewayListOrganizationGuardrailClientAccess :many
+SELECT organization_id, workspace_id, client_id, policies, capture_mode, updated_at, updated_by FROM guardrail_client_access
+WHERE organization_id = $1
+ORDER BY workspace_id, client_id
+`
+
+func (q *Queries) GatewayListOrganizationGuardrailClientAccess(ctx context.Context, organizationID string) ([]GuardrailClientAccess, error) {
+	rows, err := q.db.Query(ctx, gatewayListOrganizationGuardrailClientAccess, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GuardrailClientAccess{}
+	for rows.Next() {
+		var i GuardrailClientAccess
+		if err := rows.Scan(
+			&i.OrganizationID,
+			&i.WorkspaceID,
+			&i.ClientID,
+			&i.Policies,
+			&i.CaptureMode,
+			&i.UpdatedAt,
+			&i.UpdatedBy,
 		); err != nil {
 			return nil, err
 		}
@@ -7889,6 +8128,26 @@ func (q *Queries) GatewayUpdateCodingRepository(ctx context.Context, arg Gateway
 	return err
 }
 
+const gatewayUpdateGuardrailRetention = `-- name: GatewayUpdateGuardrailRetention :execrows
+UPDATE observer_guardrail_events
+SET expires_at = occurred_at + make_interval(days => $1::integer)
+WHERE organization_id = $2
+  AND expires_at > now()
+`
+
+type GatewayUpdateGuardrailRetentionParams struct {
+	RetentionDays  int32  `json:"retention_days"`
+	OrganizationID string `json:"organization_id"`
+}
+
+func (q *Queries) GatewayUpdateGuardrailRetention(ctx context.Context, arg GatewayUpdateGuardrailRetentionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, gatewayUpdateGuardrailRetention, arg.RetentionDays, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const gatewayUpsertChatSession = `-- name: GatewayUpsertChatSession :exec
 WITH changed AS (
 INSERT INTO chat_sessions(
@@ -7972,6 +8231,52 @@ func (q *Queries) GatewayUpsertChatSession(ctx context.Context, arg GatewayUpser
 		arg.SourceUpdatedAt,
 	)
 	return err
+}
+
+const gatewayUpsertGuardrailClientAccess = `-- name: GatewayUpsertGuardrailClientAccess :one
+INSERT INTO guardrail_client_access (
+  organization_id, workspace_id, client_id, policies, capture_mode, updated_by
+) VALUES (
+  $1, $2, $3,
+  $4, $5, $6
+)
+ON CONFLICT (organization_id, workspace_id, client_id) DO UPDATE
+SET policies = EXCLUDED.policies,
+    capture_mode = EXCLUDED.capture_mode,
+    updated_at = now(),
+    updated_by = EXCLUDED.updated_by
+RETURNING organization_id, workspace_id, client_id, policies, capture_mode, updated_at, updated_by
+`
+
+type GatewayUpsertGuardrailClientAccessParams struct {
+	OrganizationID string               `json:"organization_id"`
+	WorkspaceID    string               `json:"workspace_id"`
+	ClientID       string               `json:"client_id"`
+	Policies       []byte               `json:"policies"`
+	CaptureMode    GuardrailCaptureMode `json:"capture_mode"`
+	UpdatedBy      pgtype.Text          `json:"updated_by"`
+}
+
+func (q *Queries) GatewayUpsertGuardrailClientAccess(ctx context.Context, arg GatewayUpsertGuardrailClientAccessParams) (GuardrailClientAccess, error) {
+	row := q.db.QueryRow(ctx, gatewayUpsertGuardrailClientAccess,
+		arg.OrganizationID,
+		arg.WorkspaceID,
+		arg.ClientID,
+		arg.Policies,
+		arg.CaptureMode,
+		arg.UpdatedBy,
+	)
+	var i GuardrailClientAccess
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.WorkspaceID,
+		&i.ClientID,
+		&i.Policies,
+		&i.CaptureMode,
+		&i.UpdatedAt,
+		&i.UpdatedBy,
+	)
+	return i, err
 }
 
 const gatewayUpsertWorkspaceChatPreference = `-- name: GatewayUpsertWorkspaceChatPreference :one

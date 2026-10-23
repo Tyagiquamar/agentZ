@@ -83,6 +83,7 @@ spec:
             - --log-level={{ .Values.config.logLevel }}
             - --log-format={{ .Values.config.logFormat }}
             - "--addr=0.0.0.0:{{ .Values.service.port }}"
+            - "--guardrail-callback-url=http://$(POD_IP):{{ .Values.service.port }}"
             - "--postgres-dsn=$(AGENTZ_POSTGRES_DSN)"
             {{- if (dig "agentz" "delegationEnabled" false (.Values.global | default dict)) }}
             - --gateway-service-account-name={{ include "gateway.serviceAccountName" . }}
@@ -127,6 +128,10 @@ spec:
               containerPort: {{ .Values.service.port }}
               protocol: TCP
           env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
             {{- if .Values.config.codingGithubClientID }}
             - name: CODING_GITHUB_CLIENT_ID
               value: {{ .Values.config.codingGithubClientID | quote }}

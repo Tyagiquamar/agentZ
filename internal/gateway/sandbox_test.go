@@ -410,6 +410,7 @@ func sandboxTestService(t *testing.T, queries gatewaydb.Querier) *Service {
 		testOrganizationID,
 	)
 	objects := []ctrlclient.Object{
+		&agentzv1alpha1.Tenant{ObjectMeta: metav1.ObjectMeta{Name: organizationNamespace}, Spec: agentzv1alpha1.TenantSpec{OrganizationID: testOrganizationID}, Status: agentzv1alpha1.TenantStatus{Namespace: organizationNamespace}},
 		&corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: organizationNamespace,

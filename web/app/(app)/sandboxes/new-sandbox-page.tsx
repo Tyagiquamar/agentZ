@@ -1,6 +1,11 @@
 import type { UrlObject } from "node:url"
 import { Suspense } from "react"
-import { AdministrationPageHeader } from "@/components/administration"
+import {
+  listGuardrailPoliciesQuery,
+  getGuardrailSettingsQuery,
+  listGuardrailConnectionsQuery,
+} from "@/data/guardrail.queries"
+import { AdministrationPageHeader, AdministrationState } from "@/components/administration"
 import { listMcpConnectionsCachedQuery } from "@/data/mcp.queries"
 import { defaultSandboxPackages } from "@/data/sandbox-defaults"
 import { listSkills } from "@/lib/gateway/client"
@@ -10,10 +15,14 @@ import { listInferencePoolsCachedQuery } from "@/data/inference-pool.queries"
 import { SandboxWizard } from "./wizard"
 
 export default function NewSandboxPage({
+  canCreateGuardrailPolicy,
+  canCreateGuardrailConnection,
   basePath,
   providersHref,
   workspaceId,
 }: {
+  canCreateGuardrailPolicy: boolean
+  canCreateGuardrailConnection: boolean
   basePath: string
   providersHref: UrlObject
   workspaceId?: string
@@ -23,6 +32,8 @@ export default function NewSandboxPage({
       <AdministrationPageHeader title="New sandbox" />
       <Suspense fallback={<WizardSkeleton />}>
         <NewSandboxWizard
+          canCreateGuardrailPolicy={canCreateGuardrailPolicy}
+          canCreateGuardrailConnection={canCreateGuardrailConnection}
           basePath={basePath}
           providersHref={providersHref}
           workspaceId={workspaceId}
@@ -33,32 +44,67 @@ export default function NewSandboxPage({
 }
 
 async function NewSandboxWizard({
+  canCreateGuardrailPolicy,
+  canCreateGuardrailConnection,
   basePath,
   providersHref,
   workspaceId,
 }: {
+  canCreateGuardrailPolicy: boolean
+  canCreateGuardrailConnection: boolean
   basePath: string
   providersHref: UrlObject
   workspaceId?: string
 }) {
-  const [result, skills, providers, pools] = await Promise.all([
-    listMcpConnectionsCachedQuery(
-      { limit: 50, sort_by: "created_at", sort_order: "desc" },
+  const [result, skills, providers, pools, policies, guardrailSettings, guardrailConnections] =
+    await Promise.all([
+      listMcpConnectionsCachedQuery(
+        { limit: 50, sort_by: "created_at", sort_order: "desc" },
+        workspaceId
+      ),
+      listSkills({
+        client: getGatewayServerClient(workspaceId),
+        headers: workspaceId ? { "X-AgentZ-Workspace-ID": workspaceId } : undefined,
+        query: { limit: 50, sort_by: "name", sort_order: "asc" },
+      }),
+      listInferenceProvidersCachedQuery(workspaceId),
       workspaceId
-    ),
-    listSkills({
-      client: getGatewayServerClient(workspaceId),
-      headers: workspaceId ? { "X-AgentZ-Workspace-ID": workspaceId } : undefined,
-      query: { limit: 50, sort_by: "name", sort_order: "asc" },
-    }),
-    listInferenceProvidersCachedQuery(workspaceId),
-    workspaceId
-      ? listInferencePoolsCachedQuery(workspaceId)
-      : Promise.resolve({ pools: [], error: undefined }),
-  ])
+        ? listInferencePoolsCachedQuery(workspaceId)
+        : Promise.resolve({ pools: [], error: undefined }),
+      listGuardrailPoliciesQuery(workspaceId),
+      getGuardrailSettingsQuery(workspaceId),
+      canCreateGuardrailPolicy
+        ? listGuardrailConnectionsQuery(workspaceId)
+        : Promise.resolve({ data: { items: [] }, error: undefined }),
+    ])
+  if (
+    policies.error ||
+    guardrailSettings.error ||
+    guardrailConnections.error ||
+    !policies.data ||
+    !guardrailSettings.data ||
+    !guardrailConnections.data
+  )
+    return (
+      <AdministrationState
+        description={
+          policies.error?.message ??
+          guardrailSettings.error?.message ??
+          guardrailConnections.error?.message ??
+          "Guardrail configuration is unavailable."
+        }
+        kind="failed"
+        title="Could not load protection settings"
+      />
+    )
   return (
     <SandboxWizard
       mode="create"
+      canCreateGuardrailPolicy={canCreateGuardrailPolicy}
+      canCreateGuardrailConnection={canCreateGuardrailConnection}
+      guardrailConnections={guardrailConnections.data.items}
+      guardrailPolicies={policies.data.items}
+      guardrailSettings={guardrailSettings.data}
       providersHref={providersHref}
       scope={{ basePath, workspaceId }}
       initialPackages={[...defaultSandboxPackages]}

@@ -8,7 +8,7 @@ import type { Route } from "next"
 import Link from "next/link"
 import { useRouter } from "@bprogress/next/app"
 import { startTransition, useActionState, useState } from "react"
-import { Box, CircleAlert, Code2, Layers, Plus, Wrench } from "lucide-react"
+import { Box, CircleAlert, Code2, Layers, Plus, Wrench, ShieldCheck, Cable } from "lucide-react"
 import { ProviderIcon } from "@/app/(app)/inference/providers/provider-shared"
 import { renderMcpServerIcon } from "@/app/(app)/mcps/catalog"
 import { createWorkspaceAction, type CreateWorkspaceFormState } from "@/app/(scoped)/orgs/actions"
@@ -50,6 +50,8 @@ import { workspaceNameSchema } from "@/data/schema"
 import { toast } from "sonner"
 
 type WorkspaceCreationResources = {
+  guardrail_connections: { name: string; displayName: string }[]
+  guardrail_policies: { name: string; displayName: string }[]
   skills: SelectedOrganizationResources["skills"]
   sandboxes: SelectedOrganizationResources["sandboxes"]
   mcp_connections: Pick<McpConnectionSummary, "endpoint_url" | "name">[]
@@ -78,6 +80,8 @@ export function WorkspaceForm({
       type: "general",
       admin_member_ids: [],
       selected_organization_resources: {
+        guardrail_connections: [],
+        guardrail_policies: [],
         skills: [],
         sandboxes: [],
         mcp_connections: [],
@@ -108,6 +112,16 @@ export function WorkspaceForm({
     value: candidate.member_id,
   }))
   const resourceOptions = {
+    guardrail_connections: resources.guardrail_connections.map((item) => ({
+      icon: Cable,
+      label: item.displayName,
+      value: item.name,
+    })),
+    guardrail_policies: resources.guardrail_policies.map((item) => ({
+      icon: ShieldCheck,
+      label: item.displayName,
+      value: item.name,
+    })),
     skills: resources.skills.map((name) => ({ icon: Wrench, label: name, value: name })),
     sandboxes: resources.sandboxes.map((name) => ({ icon: Box, label: name, value: name })),
     mcp_connections: resources.mcp_connections.map(({ endpoint_url, name }) => ({
@@ -143,7 +157,7 @@ export function WorkspaceForm({
           formData.set("type", values.type ?? "general")
           for (const id of values.admin_member_ids) formData.append("admin_member_ids", id)
           for (const { field, key } of inheritanceCategories)
-            for (const name of values.selected_organization_resources[key])
+            for (const name of values.selected_organization_resources[key] ?? [])
               formData.append(field, name)
           startTransition(() => formAction(formData))
         })}
@@ -354,6 +368,16 @@ export function WorkspaceForm({
 }
 
 const inheritanceCategories = [
+  {
+    field: "inherited_guardrail_connections",
+    key: "guardrail_connections",
+    label: "Guardrail connections",
+  },
+  {
+    field: "inherited_guardrail_policies",
+    key: "guardrail_policies",
+    label: "Optional guardrail policies",
+  },
   { field: "inherited_skills", key: "skills", label: "Skills" },
   { field: "inherited_sandboxes", key: "sandboxes", label: "Sandboxes" },
   {

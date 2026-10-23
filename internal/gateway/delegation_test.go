@@ -49,6 +49,10 @@ type delegationQueries struct {
 	externalAgent  *gatewaydb.ExternalAgent
 }
 
+func (q *delegationQueries) GatewayGetGuardrailClientAccess(context.Context, gatewaydb.GatewayGetGuardrailClientAccessParams) (gatewaydb.GuardrailClientAccess, error) {
+	return gatewaydb.GuardrailClientAccess{}, pgx.ErrNoRows
+}
+
 func (q *delegationQueries) GatewayGetExternalAgent(context.Context, string) (gatewaydb.ExternalAgent, error) {
 	if q.externalAgent == nil {
 		return gatewaydb.ExternalAgent{}, pgx.ErrNoRows
@@ -682,10 +686,11 @@ func TestDelegatedInferenceUsesPrivateGateway(t *testing.T) {
 		&corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:   namespace,
-				Labels: map[string]string{agentzv1alpha1.WorkspaceNameLabel: namespace},
+				Labels: map[string]string{agentzv1alpha1.WorkspaceNameLabel: namespace, agentzv1alpha1.TenantOrganizationIDLabel: agentzv1alpha1.ScopeNamespace(agentzv1alpha1.ResourceScopeOrganisation, testOrganizationID)},
 			},
 		},
 		provider,
+		&agentzv1alpha1.Workspace{ObjectMeta: metav1.ObjectMeta{Name: namespace}, Spec: agentzv1alpha1.WorkspaceSpec{WorkspaceID: testWorkspaceID, OrganizationID: testOrganizationID}},
 	}
 	for _, object := range objects {
 		if err := service.k8sClient.Create(t.Context(), object); err != nil {
@@ -743,7 +748,8 @@ func TestDelegatedInferenceUsesPrivateGateway(t *testing.T) {
 			Namespace:  ns,
 			Generation: 1,
 			Annotations: map[string]string{
-				"agentz.accuknox.com/selection": fmt.Sprintf("%x", sha256.Sum256(encoded)),
+				"agentz.accuknox.com/guardrail-workspace-id": testWorkspaceID,
+				"agentz.accuknox.com/selection":              fmt.Sprintf("%x", sha256.Sum256(encoded)),
 			},
 		}
 		conditions := []metav1.Condition{

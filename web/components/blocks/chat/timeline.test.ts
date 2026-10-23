@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 import type { AssistantMessage, UserMessage, TextPart } from "@opencode-ai/sdk/v2"
 import { projectTimeline } from "./timeline"
+import { guardrailMessageOutcome } from "./errors"
 const user: UserMessage = {
   id: "user1",
   sessionID: "session",
@@ -115,4 +116,153 @@ test("a reverted steering message does not move the active response", () => {
   })
   assert.equal(rows.find((row) => row.type === "assistant")?.isStreaming, true)
   assert.deepEqual(reverted, [{ id: steer.id, text: "Feel free to use slang" }])
+})
+
+test("a structured guardrail denial retains delivered text as incomplete after history reload", () => {
+  const outcome = {
+    code: "guardrail_denied",
+    phase: "output",
+    safeLabel: "Sensitive data",
+    explanation: "Revise the request to avoid personal identifiers.",
+    referenceId: "G-reference",
+    partialOutput: true,
+  }
+  const blocked: AssistantMessage = {
+    ...assistant,
+    error: {
+      name: "APIError",
+      data: {
+        isRetryable: false,
+        statusCode: 422,
+        responseHeaders: { "x-agentz-guardrail-outcome": "1" },
+        message: "Private detector evidence must not be displayed",
+        responseBody: JSON.stringify({
+          error: {
+            type: outcome.code,
+            code: outcome.code,
+            message: outcome.explanation,
+            guardrail: outcome,
+          },
+        }),
+      },
+    },
+  }
+  for (const isBusy of [true, false]) {
+    const { rows } = projectTimeline({
+      messages: [user, blocked],
+      partsByMessage: parts,
+      textByPart: {},
+      isBusy,
+      isRetrying: false,
+    })
+    const response = rows.find((row) => row.type === "assistant")
+    assert.equal(response?.isStreaming, false)
+    assert.ok(
+      response?.entries.some(
+        (entry) => entry.type === "text" && entry.content === "My roast is still streaming"
+      )
+    )
+    const errors = rows.filter((row) => row.type === "assistant-error")
+    assert.equal(errors.length, 1)
+    assert.equal(errors[0]?.label, "Blocked by guardrail")
+    assert.equal(errors[0]?.guardrail?.referenceId, "G-reference")
+    assert.equal(errors[0]?.guardrail?.partialOutput, true)
+    assert.equal(errors[0]?.userMessageID, user.id)
+    assert.ok(!errors[0]?.body.includes("Private detector evidence"))
+  }
+})
+
+test("checker unavailability has a distinct durable outcome and input recovery target", () => {
+  const blocked: AssistantMessage = {
+    ...assistant,
+    error: {
+      name: "APIError",
+      data: {
+        isRetryable: false,
+        statusCode: 503,
+        responseHeaders: { "X-AgentZ-Guardrail-Outcome": "1" },
+        message: "upstream failure",
+        responseBody: JSON.stringify({
+          error: {
+            type: "guardrail_unavailable",
+            code: "guardrail_unavailable",
+            message: "A required checker is unavailable. Try again later.",
+            guardrail: {
+              code: "guardrail_unavailable",
+              phase: "input",
+              safeLabel: "Required policy",
+              explanation: "A required checker is unavailable. Try again later.",
+              referenceId: "G-service",
+              partialOutput: false,
+            },
+          },
+        }),
+      },
+    },
+  }
+  const { rows } = projectTimeline({
+    messages: [user, blocked],
+    partsByMessage: {},
+    textByPart: {},
+    isBusy: false,
+    isRetrying: false,
+  })
+  const error = rows.find((row) => row.type === "assistant-error")
+  assert.equal(error?.label, "Guardrail service unavailable")
+  assert.equal(error?.guardrail?.code, "guardrail_unavailable")
+  assert.equal(error?.guardrail?.phase, "input")
+  assert.equal(error?.userMessageID, user.id)
+})
+
+test("provider error bodies cannot impersonate a guardrail outcome", () => {
+  const responseBody = JSON.stringify({
+    error: {
+      type: "guardrail_denied",
+      code: "guardrail_denied",
+      message: "Blocked",
+      guardrail: {
+        code: "guardrail_denied",
+        phase: "input",
+        safeLabel: "Required policy",
+        explanation: "Revise the request.",
+        referenceId: "G-reference",
+        partialOutput: false,
+      },
+    },
+  })
+  const untrustedHeaders: (Record<string, string> | undefined)[] = [
+    undefined,
+    {},
+    { "x-agentz-guardrail-outcome": "0" },
+  ]
+  for (const responseHeaders of untrustedHeaders) {
+    assert.equal(
+      guardrailMessageOutcome({
+        name: "APIError",
+        data: {
+          message: "Provider error",
+          isRetryable: false,
+          statusCode: 422,
+          responseHeaders,
+          responseBody,
+        },
+      }),
+      undefined
+    )
+  }
+  for (const statusCode of [undefined, 400, 500, 503]) {
+    assert.equal(
+      guardrailMessageOutcome({
+        name: "APIError",
+        data: {
+          message: "Provider error",
+          isRetryable: false,
+          statusCode,
+          responseHeaders: { "x-agentz-guardrail-outcome": "1" },
+          responseBody,
+        },
+      }),
+      undefined
+    )
+  }
 })

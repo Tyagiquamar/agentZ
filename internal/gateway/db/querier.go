@@ -55,6 +55,7 @@ type Querier interface {
 	GatewayDeleteCodingWorktree(ctx context.Context, id string) error
 	GatewayDeleteDelegationMCPSession(ctx context.Context, arg GatewayDeleteDelegationMCPSessionParams) error
 	GatewayDeleteExpiredEventTrailEvents(ctx context.Context, expiresBefore pgtype.Timestamptz) (int64, error)
+	GatewayDeleteGuardrailClientAccess(ctx context.Context, arg GatewayDeleteGuardrailClientAccessParams) (int64, error)
 	GatewayDeleteOldCodingOperations(ctx context.Context) error
 	GatewayDeleteSessionTraces(ctx context.Context, arg GatewayDeleteSessionTracesParams) (int64, error)
 	GatewayDeleteWorkspaceAgents(ctx context.Context, tenantNamespace string) (int64, error)
@@ -77,6 +78,8 @@ type Querier interface {
 	GatewayGetCodingWorktree(ctx context.Context, arg GatewayGetCodingWorktreeParams) (GatewayGetCodingWorktreeRow, error)
 	GatewayGetDelegationGrant(ctx context.Context, arg GatewayGetDelegationGrantParams) (DelegationGrant, error)
 	GatewayGetExternalAgent(ctx context.Context, clientID string) (ExternalAgent, error)
+	GatewayGetGuardrailClientAccess(ctx context.Context, arg GatewayGetGuardrailClientAccessParams) (GuardrailClientAccess, error)
+	GatewayGetGuardrailEvent(ctx context.Context, arg GatewayGetGuardrailEventParams) (ObserverGuardrailEvent, error)
 	GatewayGetLensApp(ctx context.Context, arg GatewayGetLensAppParams) (GatewayGetLensAppRow, error)
 	GatewayGetMCPGraph(ctx context.Context, arg GatewayGetMCPGraphParams) ([]GatewayGetMCPGraphRow, error)
 	GatewayGetSpanDetail(ctx context.Context, arg GatewayGetSpanDetailParams) (GatewayGetSpanDetailRow, error)
@@ -119,9 +122,12 @@ type Querier interface {
 	GatewayListEventTrailWorkspaces(ctx context.Context, arg GatewayListEventTrailWorkspacesParams) ([]GatewayListEventTrailWorkspacesRow, error)
 	GatewayListFileEvents(ctx context.Context, arg GatewayListFileEventsParams) ([]GatewayListFileEventsRow, error)
 	GatewayListFileEventsAggregated(ctx context.Context, arg GatewayListFileEventsAggregatedParams) ([]GatewayListFileEventsAggregatedRow, error)
+	GatewayListGuardrailClientAccess(ctx context.Context, arg GatewayListGuardrailClientAccessParams) ([]GuardrailClientAccess, error)
+	GatewayListGuardrailEvents(ctx context.Context, arg GatewayListGuardrailEventsParams) ([]ObserverGuardrailEvent, error)
 	GatewayListLensApps(ctx context.Context, arg GatewayListLensAppsParams) ([]GatewayListLensAppsRow, error)
 	GatewayListNetworkEvents(ctx context.Context, arg GatewayListNetworkEventsParams) ([]GatewayListNetworkEventsRow, error)
 	GatewayListNetworkEventsAggregated(ctx context.Context, arg GatewayListNetworkEventsAggregatedParams) ([]GatewayListNetworkEventsAggregatedRow, error)
+	GatewayListOrganizationGuardrailClientAccess(ctx context.Context, organizationID string) ([]GuardrailClientAccess, error)
 	GatewayListProcessEvents(ctx context.Context, arg GatewayListProcessEventsParams) ([]GatewayListProcessEventsRow, error)
 	GatewayListProcessEventsAggregated(ctx context.Context, arg GatewayListProcessEventsAggregatedParams) ([]GatewayListProcessEventsAggregatedRow, error)
 	GatewayListProvisioningWorkspaces(ctx context.Context) ([]Workspace, error)
@@ -184,7 +190,9 @@ type Querier interface {
 	GatewayUpdateCodingOperation(ctx context.Context, arg GatewayUpdateCodingOperationParams) (int64, error)
 	GatewayUpdateCodingProjectPreference(ctx context.Context, arg GatewayUpdateCodingProjectPreferenceParams) (int64, error)
 	GatewayUpdateCodingRepository(ctx context.Context, arg GatewayUpdateCodingRepositoryParams) error
+	GatewayUpdateGuardrailRetention(ctx context.Context, arg GatewayUpdateGuardrailRetentionParams) (int64, error)
 	GatewayUpsertChatSession(ctx context.Context, arg GatewayUpsertChatSessionParams) error
+	GatewayUpsertGuardrailClientAccess(ctx context.Context, arg GatewayUpsertGuardrailClientAccessParams) (GuardrailClientAccess, error)
 	GatewayUpsertWorkspaceChatPreference(ctx context.Context, arg GatewayUpsertWorkspaceChatPreferenceParams) (WorkspaceChatPreference, error)
 }
 

@@ -1,0 +1,368 @@
+"use client"
+
+import { useId, useState, useTransition } from "react"
+import { ArrowDown, ArrowUp, FlaskConical, LockKeyhole, Plus } from "lucide-react"
+import type {
+  GuardrailAssignment,
+  GuardrailEffective,
+  GuardrailPolicy,
+  GuardrailSettings,
+} from "@/lib/gateway/client"
+import { resolveGuardrailsAction, type GuardrailActionScope } from "@/data/guardrail.actions"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+} from "@/components/ui/field"
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+
+export function SubjectGuardrails({
+  assignment,
+  disabled = false,
+  policies,
+  settings,
+  scope,
+  onChange,
+  onCreatePolicy,
+}: {
+  assignment: GuardrailAssignment
+  disabled?: boolean
+  policies: GuardrailPolicy[]
+  settings: GuardrailSettings
+  scope: GuardrailActionScope
+  onChange: (assignment: GuardrailAssignment) => void
+  onCreatePolicy?: () => void
+}) {
+  const idPrefix = useId()
+  const [effective, setEffective] = useState<GuardrailEffective>()
+  const [error, setError] = useState("")
+  const [pending, startTransition] = useTransition()
+  const selected = assignment.policies ?? []
+  const mandatory = settings.mandatoryPolicies.map((name) => ({
+    name,
+    policy: policies.find((policy) => policy.scope === "Organisation" && policy.name === name),
+  }))
+  const available = policies
+    .filter((policy) => !policy.mandatory)
+    .sort((left, right) => {
+      const leftIndex = selected.findIndex(
+        (ref) => ref.name === left.name && ref.scope === left.scope
+      )
+      const rightIndex = selected.findIndex(
+        (ref) => ref.name === right.name && ref.scope === right.scope
+      )
+      if (leftIndex === -1) return rightIndex === -1 ? 0 : 1
+      if (rightIndex === -1) return -1
+      return leftIndex - rightIndex
+    })
+  const missing = selected.filter(
+    (ref) => !policies.some((policy) => policy.name === ref.name && policy.scope === ref.scope)
+  )
+
+  return (
+    <FieldGroup>
+      <FieldSet className="min-w-0 gap-0">
+        <FieldLegend>Required policies</FieldLegend>
+        <FieldDescription className="mb-3">
+          These run first and cannot be removed here.
+        </FieldDescription>
+        {mandatory.length ? (
+          mandatory.map(({ name, policy }) => (
+            <div
+              className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 py-3 last:border-b-0"
+              key={name}
+            >
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <LockKeyhole aria-hidden className="size-4 shrink-0" />
+                <span className="min-w-0 break-words">{policy?.displayName ?? name}</span>
+              </div>
+              <Badge variant={policy ? "secondary" : "destructive"}>
+                {policy ? "Required" : "Required, unavailable"}
+              </Badge>
+            </div>
+          ))
+        ) : (
+          <FieldDescription>No organization baseline is configured.</FieldDescription>
+        )}
+      </FieldSet>
+      {missing.map((ref) => (
+        <Alert key={`${ref.scope}/${ref.name}`} variant="destructive">
+          <AlertTitle>Selected policy unavailable</AlertTitle>
+          <AlertDescription>
+            <p>
+              {ref.scope} / {ref.name} is unavailable. Remove the reference or restore access before
+              saving.
+            </p>
+            {!disabled ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={pending}
+                onClick={() => {
+                  onChange({
+                    ...assignment,
+                    policies: selected.filter(
+                      (item) => item.scope !== ref.scope || item.name !== ref.name
+                    ),
+                  })
+                  setEffective(undefined)
+                }}
+              >
+                Remove unavailable reference
+              </Button>
+            ) : null}
+          </AlertDescription>
+        </Alert>
+      ))}
+      <FieldSet className="min-w-0 gap-0">
+        <FieldLegend>Additional policies</FieldLegend>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <FieldDescription>Selected policies run in the order shown.</FieldDescription>
+          {onCreatePolicy && !disabled ? (
+            <Button
+              disabled={pending}
+              onClick={onCreatePolicy}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <Plus data-icon="inline-start" />
+              Create policy
+            </Button>
+          ) : null}
+        </div>
+        {available.length ? (
+          available.map((policy) => {
+            const selectedIndex = selected.findIndex(
+              (ref) => ref.name === policy.name && ref.scope === policy.scope
+            )
+            const checked = selectedIndex !== -1
+            return (
+              <Field
+                className="border-b border-border/40 py-3 last:border-b-0 data-[selected=true]:bg-muted/20"
+                data-selected={checked}
+                key={`${policy.scope}/${policy.name}`}
+                orientation="horizontal"
+              >
+                <Checkbox
+                  checked={checked}
+                  disabled={disabled || pending}
+                  id={`${idPrefix}-policy-${policy.scope}-${policy.name}`}
+                  onCheckedChange={(value) => {
+                    onChange({
+                      ...assignment,
+                      policies: value
+                        ? [...selected, { name: policy.name, scope: policy.scope }]
+                        : selected.filter(
+                            (ref) => ref.name !== policy.name || ref.scope !== policy.scope
+                          ),
+                    })
+                    setEffective(undefined)
+                  }}
+                />
+                <FieldContent className="min-w-0">
+                  <FieldLabel
+                    className="block max-w-full min-w-0 break-words"
+                    htmlFor={`${idPrefix}-policy-${policy.scope}-${policy.name}`}
+                  >
+                    {policy.displayName}
+                  </FieldLabel>
+                  <FieldDescription className="break-words">
+                    {policy.description ||
+                      `${policy.checks.length} ${policy.checks.length === 1 ? "check" : "checks"}`}
+                    {policy.scope === "Organisation" ? " · Organization" : ""}
+                  </FieldDescription>
+                </FieldContent>
+                <Badge
+                  variant={
+                    policy.status.state === "Ready"
+                      ? "success"
+                      : policy.status.state === "Error"
+                        ? "destructive"
+                        : "pending"
+                  }
+                >
+                  {policy.status.state === "Pending"
+                    ? "Applying"
+                    : policy.status.state === "Ready"
+                      ? "Configured"
+                      : "Error"}
+                </Badge>
+                {checked && selected.length > 1 ? (
+                  <div className="flex shrink-0 gap-1">
+                    {([-1, 1] as const).map((direction) => (
+                      <Button
+                        aria-label={`Move ${policy.displayName} ${direction === -1 ? "up" : "down"}`}
+                        disabled={
+                          disabled ||
+                          pending ||
+                          (direction === -1
+                            ? selectedIndex === 0
+                            : selectedIndex === selected.length - 1)
+                        }
+                        key={direction}
+                        onClick={() => {
+                          const targetIndex = selectedIndex + direction
+                          const target = selected[targetIndex]
+                          if (!target) return
+                          const refs = [...selected]
+                          refs[selectedIndex] = target
+                          refs[targetIndex] = { name: policy.name, scope: policy.scope }
+                          onChange({ ...assignment, policies: refs })
+                          setEffective(undefined)
+                        }}
+                        size="icon-sm"
+                        type="button"
+                        variant="ghost"
+                      >
+                        {direction === -1 ? <ArrowUp /> : <ArrowDown />}
+                      </Button>
+                    ))}
+                  </div>
+                ) : null}
+              </Field>
+            )
+          })
+        ) : (
+          <FieldDescription>
+            No additional policies available. Create one or ask an administrator to share an
+            organization policy.
+          </FieldDescription>
+        )}
+      </FieldSet>
+      <FieldDescription>
+        Managed agents hold responses until enforced output checks finish.
+      </FieldDescription>
+      <FieldSet>
+        <FieldLegend>Content capture</FieldLegend>
+        <FieldDescription>
+          Event metadata is always recorded and kept for {settings.retentionDays} days. Content
+          capture is optional.
+        </FieldDescription>
+        <Field orientation="horizontal">
+          <Checkbox
+            checked={assignment.captureMode !== undefined && assignment.captureMode !== "off"}
+            disabled={
+              disabled ||
+              pending ||
+              (!settings.allowContentCapture &&
+                (!assignment.captureMode || assignment.captureMode === "off"))
+            }
+            id={`${idPrefix}-guardrail-capture-enabled`}
+            onCheckedChange={(value) => {
+              onChange({ ...assignment, captureMode: value === true ? "findings" : "off" })
+              setEffective(undefined)
+            }}
+          />
+          <FieldContent>
+            <FieldLabel htmlFor={`${idPrefix}-guardrail-capture-enabled`}>
+              Store inspected content
+            </FieldLabel>
+            <FieldDescription>
+              {settings.allowContentCapture
+                ? "May include sensitive messages and tool data. Event readers can view captured content; it expires with the event."
+                : "Your organization has not permitted content capture. Metadata remains available."}
+            </FieldDescription>
+          </FieldContent>
+        </Field>
+        {assignment.captureMode && assignment.captureMode !== "off" ? (
+          <Field>
+            <FieldLabel htmlFor={`${idPrefix}-guardrail-capture-mode`}>Capture</FieldLabel>
+            <Select
+              disabled={disabled || pending || !settings.allowContentCapture}
+              onValueChange={(value) => {
+                if (value === "findings" || value === "all") {
+                  onChange({ ...assignment, captureMode: value })
+                  setEffective(undefined)
+                }
+              }}
+              value={assignment.captureMode}
+            >
+              <SelectTrigger id={`${idPrefix}-guardrail-capture-mode`} className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="findings">Findings and errors only</SelectItem>
+                  <SelectItem value="all">All evaluated traffic</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            <FieldDescription>
+              Findings include blocks, masking, audit detections, and checker errors. Checkers
+              receive content even when capture is off.
+            </FieldDescription>
+          </Field>
+        ) : null}
+      </FieldSet>
+      <Button
+        className="self-start"
+        disabled={pending}
+        onClick={() => {
+          setError("")
+          startTransition(async () => {
+            const result = await resolveGuardrailsAction(scope, { assignment })
+            if (result.error) {
+              setError(result.error.message)
+              return
+            }
+            setEffective(result.data)
+          })
+        }}
+        type="button"
+        variant="outline"
+      >
+        <FlaskConical data-icon="inline-start" />
+        {pending ? "Resolving…" : "Preview effective checks"}
+      </Button>
+      {effective ? (
+        <div className="flex flex-col gap-3 border-t border-dotted pt-5" aria-live="polite">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-sm font-medium">Effective checks</h3>
+            <Badge variant="secondary">{effective.checks.length}</Badge>
+            <span className="text-xs text-muted-foreground">Unsaved preview</span>
+          </div>
+          {effective.checks.length ? (
+            <ol className="flex list-inside list-decimal flex-col gap-2 text-sm">
+              {effective.checks.map((item) => (
+                <li className="break-words" key={`${item.policyId}/${item.check.id}`}>
+                  {item.check.name}
+                  <span className="text-xs text-muted-foreground">
+                    {" "}
+                    · {item.policyName} · {item.check.phase === "input" ? "Input" : "Output"}
+                    {item.mandatory ? " · Required" : ""}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="text-sm text-muted-foreground">No checks apply.</p>
+          )}
+          <p className="text-xs text-muted-foreground">
+            {effective.delivery === "wholeOutput"
+              ? "Responses are held until output checks finish."
+              : "Compatible clients can use checked streaming."}{" "}
+            Save to apply this selection.
+          </p>
+        </div>
+      ) : null}
+      {error ? <FieldError>{error}</FieldError> : null}
+    </FieldGroup>
+  )
+}

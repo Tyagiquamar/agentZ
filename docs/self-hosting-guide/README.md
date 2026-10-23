@@ -206,6 +206,10 @@ path "kv/metadata/+/*" {
   capabilities = ["delete"]
 }
 
+path "kv/data/+/guardrail-connections/+" {
+  capabilities = ["create", "read", "update", "delete"]
+}
+
 path "kv/data/+/inference-provider-oauth-tickets/*" {
   capabilities = ["create", "read", "update", "delete"]
 }
@@ -220,6 +224,14 @@ path "kv/metadata/+/inference-provider-oauth-tickets/*" {
 HCL
 
 cat > inference-policy.hcl <<'HCL'
+path "kv/data/+/guardrail-connections/+" {
+  capabilities = ["read"]
+}
+
+path "kv/metadata/+/guardrail-connections/+" {
+  capabilities = ["read"]
+}
+
 path "kv/data/+/inference-providers/+" {
   capabilities = ["read"]
 }
@@ -560,3 +572,15 @@ kubectl get deployments,pods,ingress -n agentz-system
 ```
 
 Open `https://agentz.example.com/signup` and register with `ADMIN_EMAIL`.
+
+## Configure prompt guardrails
+
+Use the AgentZ AgentGateway image built with the guardrails patch, including for delegated inference. The upstream controller and CRDs remain at v1.6.0. See the [build and protocol notes](../../hack/agentgateway/README.md) for the pinned proxy build and native fixtures.
+
+In organization **Guardrails**, create reusable connections and policies, then select mandatory policies in **Settings**. Regex checks do not need a connection. AWS Bedrock Guardrails and Google Model Armor checks reference existing cloud resources; manage their detection rules in AWS or Google Cloud. Custom services must implement AgentGateway's guardrail webhook contract.
+
+Workspace administrators can add policies in a workspace-owned Sandbox's **Guardrails** step or an application's workspace access. Organization requirements always run first. Optional organization policies must be explicitly inherited before a workspace can select them. Use **Preview effective checks** to inspect composition and **Playground** to test synthetic fixtures before saving. Saved changes reach subsequent calls after the workload reports enforcement readiness.
+
+Managed agents hold complete responses for enforced output checks. Compatible external clients can use checked streaming; text already delivered cannot be retracted. Unsupported scope, media, and streaming-mask combinations are rejected. A content denial stops the request without automatic model fallback and returns a safe explanation and reference ID.
+
+Structured audit events are always recorded. Inspected content is off by default: the organization must permit capture before administrators enable it for an editable Sandbox or client workspace access. Capture can retain findings and errors or all evaluated traffic. Event metadata and any captured content share the organization's retention period, which defaults to 30 days, and the same read permission. The observer's protected gateway OTLP listener must be reachable only by the gateway services; keep the ordinary ingestion listener separate.

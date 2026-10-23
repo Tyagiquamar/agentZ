@@ -121,7 +121,7 @@ function upsertPart(parts: Part[], next: Part) {
   return at < 0 ? [...parts, next] : [...parts.slice(0, at), next, ...parts.slice(at)]
 }
 
-function buildStore(sessionID: string, records: SessionMessageRecord[]) {
+export function buildStore(sessionID: string, records: SessionMessageRecord[]) {
   const store: OpencodeChatStore = {
     part: {},
     partTextAccumDelta: {},
@@ -237,7 +237,7 @@ function firstVisibleRequest<T extends { sessionID: string }>(
   return undefined
 }
 
-function applyEvent(store: OpencodeChatStore, event: StreamEvent): OpencodeChatStore {
+export function applyEvent(store: OpencodeChatStore, event: StreamEvent): OpencodeChatStore {
   switch (event.type) {
     case "message.updated": {
       const sessionID = event.properties.sessionID
@@ -271,14 +271,12 @@ function applyEvent(store: OpencodeChatStore, event: StreamEvent): OpencodeChatS
       if (part.type !== "text" && part.type !== "reasoning") {
         return { ...store, part: { ...store.part, [part.messageID]: upsertPart(parts, part) } }
       }
-      // Keep already-accumulated deltas when the snapshot lags behind them, so
-      // streamed text never flickers backward mid-turn.
-      const accumulated = store.partTextAccumDelta[part.id]
-      const text = accumulated?.startsWith(part.text) ? accumulated : part.text
+      // A part update is an authoritative snapshot. Queued stream events can
+      // overlap a history read, so reset the delta base to this snapshot.
       return {
         ...store,
-        part: { ...store.part, [part.messageID]: upsertPart(parts, { ...part, text }) },
-        partTextAccumDelta: { ...store.partTextAccumDelta, [part.id]: text },
+        part: { ...store.part, [part.messageID]: upsertPart(parts, part) },
+        partTextAccumDelta: { ...store.partTextAccumDelta, [part.id]: part.text },
       }
     }
 
