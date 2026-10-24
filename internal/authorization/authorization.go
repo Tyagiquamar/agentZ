@@ -64,12 +64,10 @@ const (
 	OperationUpdateGuardrailPolicy Operation = "updateGuardrailPolicy"
 	// OperationDeleteGuardrailPolicy manages scoped prompt safeguards.
 	OperationDeleteGuardrailPolicy Operation = "deleteGuardrailPolicy"
-	// OperationGetGuardrailSettings reads or evaluates prompt safeguards.
+	// OperationGetGuardrailSettings reads organization guardrail settings.
 	OperationGetGuardrailSettings Operation = "getGuardrailSettings"
-	// OperationGetEffectiveGuardrails reads or evaluates prompt safeguards.
+	// OperationGetEffectiveGuardrails resolves mandatory and optional guardrail checks.
 	OperationGetEffectiveGuardrails Operation = "getEffectiveGuardrails"
-	// OperationTestGuardrails reads or evaluates prompt safeguards.
-	OperationTestGuardrails Operation = "testGuardrails"
 	// OperationUpdateGuardrailSettings changes the organization baseline.
 	OperationUpdateGuardrailSettings Operation = "updateGuardrailSettings"
 	// OperationListGuardrailEvents reads scoped guardrail audit history.
@@ -559,8 +557,6 @@ func mapOperation(operation Operation) (gatewaydb.PermissionResource, gatewaydb.
 	case OperationGetGuardrailSettings:
 		return gatewaydb.PermissionResourceGuardrailPolicy, gatewaydb.PermissionActionRead, true
 	case OperationGetEffectiveGuardrails:
-		return gatewaydb.PermissionResourceGuardrailPolicy, gatewaydb.PermissionActionRead, true
-	case OperationTestGuardrails:
 		return gatewaydb.PermissionResourceGuardrailPolicy, gatewaydb.PermissionActionRead, true
 	case OperationUpdateGuardrailSettings:
 		return gatewaydb.PermissionResourceGuardrailPolicy, gatewaydb.PermissionActionModify, true

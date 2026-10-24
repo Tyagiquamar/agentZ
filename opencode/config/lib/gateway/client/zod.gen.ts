@@ -73,12 +73,6 @@ export const zGuardrailResourceDiscovery = z.object({
   unreachable: z.array(z.string()).optional(),
 })
 
-export const zGuardrailTestCheckResult = z.object({
-  checkId: z.string(),
-  action: z.string(),
-  explanation: z.string(),
-})
-
 export const zGuardrailErrorEnvelope = z.object({
   error: z.object({
     type: z.string(),
@@ -86,15 +80,6 @@ export const zGuardrailErrorEnvelope = z.object({
     message: z.string(),
     guardrail: zGuardrailOutcome,
   }),
-})
-
-export const zGuardrailTestResult = z.object({
-  outcome: zGuardrailOutcome.optional(),
-  action: z.enum(["allow", "deny", "mask", "error"]),
-  content: z.string(),
-  referenceId: z.string(),
-  explanation: z.string(),
-  checks: z.array(zGuardrailTestCheckResult),
 })
 
 export const zAppSession = z.object({
@@ -810,17 +795,6 @@ export const zGuardrailEffective = z.object({
   delivery: z.enum(["checkedStreaming", "wholeOutput"]),
   captureMode: zGuardrailCaptureMode,
   checks: z.array(zGuardrailEffectiveCheck),
-})
-
-export const zGuardrailTestInput = z.object({
-  policy: zResourceReference.optional(),
-  assignment: zGuardrailAssignment.optional(),
-  sandbox: z.string().optional(),
-  sandboxScope: zResourceScope.optional(),
-  clientId: z.string().optional(),
-  inlinePolicy: zGuardrailPolicyInput.optional(),
-  phase: z.enum(["input", "output"]),
-  content: z.string().min(1).max(65536),
 })
 
 export const zAgentMemoryConfig = z.object({
@@ -6530,17 +6504,6 @@ export const zGetEffectiveGuardrailsHeaders = z.object({
  * Resolved mandatory and optional checks.
  */
 export const zGetEffectiveGuardrailsResponse = zGuardrailEffective
-
-export const zTestGuardrailsBody = zGuardrailTestInput
-
-export const zTestGuardrailsHeaders = z.object({
-  "X-AgentZ-Workspace-ID": z.string().min(1).max(128).optional(),
-})
-
-/**
- * Test verdicts for the selected policy through the configured detector.
- */
-export const zTestGuardrailsResponse = zGuardrailTestResult
 
 export const zListGuardrailEventsHeaders = z.object({
   "X-AgentZ-Workspace-ID": z.string().min(1).max(128).optional(),

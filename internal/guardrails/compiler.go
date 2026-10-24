@@ -500,7 +500,7 @@ func (b *Bundle) ConfigureManagedDelivery() error {
 	return nil
 }
 
-// CompilePolicy resolves one saved or draft policy for validation and isolated testing.
+// CompilePolicy resolves and compiles a policy to validate its checks and scoped connections.
 func CompilePolicy(ctx context.Context, reader client.Reader, namespace string, policy *api.GuardrailPolicy) (*Bundle, error) {
 	if err := ValidatePolicy(policy.Spec); err != nil {
 		return nil, err
@@ -531,7 +531,7 @@ func CompilePolicy(ctx context.Context, reader client.Reader, namespace string, 
 	if err != nil {
 		return nil, err
 	}
-	if err := bundle.compile(namespace, "playground"); err != nil {
+	if err := bundle.compile(namespace, "policy/"+policy.Name); err != nil {
 		return nil, err
 	}
 	return bundle, nil

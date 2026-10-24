@@ -154,23 +154,6 @@ export type GuardrailEffective = {
   checks: Array<GuardrailEffectiveCheck>
 }
 
-export type GuardrailTestInput = {
-  policy?: ResourceReference
-  assignment?: GuardrailAssignment
-  sandbox?: string
-  sandboxScope?: ResourceScope
-  clientId?: string
-  inlinePolicy?: GuardrailPolicyInput
-  phase: "input" | "output"
-  content: string
-}
-
-export type GuardrailTestCheckResult = {
-  checkId: string
-  action: string
-  explanation: string
-}
-
 export type GuardrailErrorEnvelope = {
   error: {
     type: string
@@ -178,15 +161,6 @@ export type GuardrailErrorEnvelope = {
     message: string
     guardrail: GuardrailOutcome
   }
-}
-
-export type GuardrailTestResult = {
-  outcome?: GuardrailOutcome
-  action: "allow" | "deny" | "mask" | "error"
-  content: string
-  referenceId: string
-  explanation: string
-  checks: Array<GuardrailTestCheckResult>
 }
 
 export type LensApp = {
@@ -12357,42 +12331,6 @@ export type GetEffectiveGuardrailsResponses = {
 
 export type GetEffectiveGuardrailsResponse =
   GetEffectiveGuardrailsResponses[keyof GetEffectiveGuardrailsResponses]
-
-export type TestGuardrailsData = {
-  body: GuardrailTestInput
-  headers?: {
-    /**
-     * Stable Workspace ID selecting Workspace scope. Omit for Organisation scope.
-     *
-     */
-    "X-AgentZ-Workspace-ID"?: string
-  }
-  path?: never
-  query?: never
-  url: "/api/guardrails/test"
-}
-
-export type TestGuardrailsErrors = {
-  /**
-   * Guardrail evaluator unavailable.
-   */
-  503: GuardrailErrorEnvelope
-  /**
-   * Unexpected server error.
-   */
-  default: Error
-}
-
-export type TestGuardrailsError = TestGuardrailsErrors[keyof TestGuardrailsErrors]
-
-export type TestGuardrailsResponses = {
-  /**
-   * Test verdicts for the selected policy through the configured detector.
-   */
-  200: GuardrailTestResult
-}
-
-export type TestGuardrailsResponse = TestGuardrailsResponses[keyof TestGuardrailsResponses]
 
 export type ListGuardrailEventsData = {
   body?: never

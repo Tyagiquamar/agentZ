@@ -22,8 +22,6 @@ var gatewayServeCmd = &cli.Command{
 	Name:  "serve",
 	Usage: "Run the gateway HTTP server",
 	Flags: []cli.Flag{
-		&cli.StringFlag{Name: "guardrail-callback-url", Usage: "Internal URL of this gateway replica for one-use native guardrail tests"},
-		&cli.StringFlag{Name: "guardrail-gateway-url", Usage: "Override the private playground gateway URL for local testing"},
 		&cli.StringFlag{
 			Name:  "delegation-namespace",
 			Usage: "Private native MCP aggregator namespace",
@@ -207,8 +205,6 @@ var gatewayServeCmd = &cli.Command{
 		return gateway.Serve(
 			ctx,
 			gateway.Config{
-				GuardrailCallbackURL:           c.String("guardrail-callback-url"),
-				GuardrailGatewayURL:            c.String("guardrail-gateway-url"),
 				Addr:                           c.String("addr"),
 				CodingGitHubClientID:           c.String("coding-github-client-id"),
 				CodingGitHubClientSecret:       c.String("coding-github-client-secret"),

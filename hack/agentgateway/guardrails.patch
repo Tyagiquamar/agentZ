@@ -28,18 +28,10 @@ index 6d2d0d09..b4dd47f9 100644
  			guardrail_version: Some("3".into()),
  			action_reason: Some("Guardrail blocked.".into()),
 diff --git a/crates/agentgateway/src/cel/types.rs b/crates/agentgateway/src/cel/types.rs
-index 6d5f31f4..7aebb86c 100644
+index 6d5f31f4..37152644 100644
 --- a/crates/agentgateway/src/cel/types.rs
 +++ b/crates/agentgateway/src/cel/types.rs
-@@ -607,6 +607,7 @@ impl<'a> Executor<'a> {
- 	}
- 	fn set_response(&mut self, resp: &'a crate::http::Response) {
- 		self.response = Some(resp.into());
-+		self.guardrails = resp.extensions().get::<Vec<GuardrailInfo>>();
- 		self.proxy = ExtensionOrDirect::Extension(resp.extensions());
- 		if let Some(llm) = resp.extensions().get::<LLMContext>() {
- 			self.llm = ExtensionOrDirect::Direct(Some(llm));
-@@ -1441,6 +1442,9 @@ pub struct GuardrailInfo {
+@@ -1441,6 +1441,9 @@ pub struct GuardrailInfo {
  #[derive(Default, cel::DynamicType)]
  #[dynamic(rename_all = "camelCase")]
  pub struct GuardDetail {
@@ -49,7 +41,7 @@ index 6d5f31f4..7aebb86c 100644
  	/// The configured guardrail identifier.
  	#[serde(default, skip_serializing_if = "Option::is_none")]
  	pub guardrail_id: Option<Strng>,
-@@ -2530,6 +2534,7 @@ pub fn full_example_executor() -> ExecutorSerde {
+@@ -2530,6 +2533,7 @@ pub fn full_example_executor() -> ExecutorSerde {
  			guard: "bedrockGuardrails".into(),
  			action: "reject".into(),
  			detail: GuardDetail {
@@ -57,54 +49,6 @@ index 6d5f31f4..7aebb86c 100644
  				guardrail_id: Some("gr-abc123".into()),
  				guardrail_version: Some("1".into()),
  				action_reason: Some("Guardrail blocked.".into()),
-diff --git a/crates/agentgateway/src/http/transformation_cel.rs b/crates/agentgateway/src/http/transformation_cel.rs
-index a21e0428..8bbec804 100644
---- a/crates/agentgateway/src/http/transformation_cel.rs
-+++ b/crates/agentgateway/src/http/transformation_cel.rs
-@@ -349,6 +349,11 @@ impl store::ResponsePolicyTrait for Transformation {
- 		log: &mut RequestLog,
- 		resp: &mut Response,
- 	) -> Result<PolicyResponse, ProxyResponse> {
-+		if self.response.is_some()
-+			&& let Some(guardrails) = log.guardrails.load_clone()
-+		{
-+			resp.extensions_mut().insert(guardrails);
-+		}
- 		self
- 			.apply_response(resp, log.request_snapshot.as_deref())
- 			.map_err(crate::proxy::ProxyError::Processing)?;
-diff --git a/crates/agentgateway/src/http/transformation_cel_tests.rs b/crates/agentgateway/src/http/transformation_cel_tests.rs
-index 46a9c513..786e3e4d 100644
---- a/crates/agentgateway/src/http/transformation_cel_tests.rs
-+++ b/crates/agentgateway/src/http/transformation_cel_tests.rs
-@@ -1,5 +1,27 @@
- use super::*;
- 
-+#[test]
-+fn response_transform_can_read_completed_guardrail_context() {
-+	let transformation: Transformation = serde_json::from_value(serde_json::json!({
-+		"response":{"set":{"x-guardrail-action":"guardrails[0].action"}}
-+	}))
-+	.unwrap();
-+	let mut response = Response::new(crate::http::Body::empty());
-+	response
-+		.extensions_mut()
-+		.insert(vec![crate::cel::GuardrailInfo {
-+			phase: "request".into(),
-+			guard: "regex".into(),
-+			action: "audit".into(),
-+			detail: Default::default(),
-+		}]);
-+	transformation.apply_response(&mut response, None).unwrap();
-+	assert_eq!(
-+		response.headers().get("x-guardrail-action").unwrap(),
-+		"audit"
-+	);
-+}
-+
- fn build<const N: usize>(items: [(&str, &str); N]) -> Transformation {
- 	serde_json::from_value(serde_json::json!({
- 		"request": {
 diff --git a/crates/agentgateway/src/llm/mod.rs b/crates/agentgateway/src/llm/mod.rs
 index d0478894..8740ba71 100644
 --- a/crates/agentgateway/src/llm/mod.rs
@@ -2425,7 +2369,7 @@ index fc32ee52..45ee50c6 100644
  
  	use secrecy::SecretString;
 diff --git a/crates/agentgateway/src/proxy/httpproxy.rs b/crates/agentgateway/src/proxy/httpproxy.rs
-index 73d6f8f7..df6f86ff 100644
+index 73d6f8f7..4a3404e9 100644
 --- a/crates/agentgateway/src/proxy/httpproxy.rs
 +++ b/crates/agentgateway/src/proxy/httpproxy.rs
 @@ -316,6 +316,15 @@ async fn apply_request_policies(
@@ -2444,7 +2388,7 @@ index 73d6f8f7..df6f86ff 100644
  	pol
  		.csrf
  		.apply_without_response("csrf", c, l, req, rp.headers())
-@@ -3216,6 +3225,12 @@ async fn make_backend_call(
+@@ -3216,6 +3225,11 @@ async fn make_backend_call(
  		),
  	});
  	let mut resp = resp?;
@@ -2452,12 +2396,11 @@ index 73d6f8f7..df6f86ff 100644
 +	// forwarding retains outcomes already produced by an internal LLM gateway.
 +	if backend_call.backend_policies.llm_provider.is_some() {
 +		resp.headers_mut().remove("x-agentz-guardrail-outcome");
-+		resp.headers_mut().remove("x-agentz-guardrail-test");
 +	}
  	// Protect reads from the actual upstream before any policy buffers, transforms,
  	// or replaces its body. CONNECT tunnels take a separate path above.
  	if resp.status() != StatusCode::SWITCHING_PROTOCOLS
-@@ -3776,6 +3791,14 @@ pub(crate) fn resolve_response(
+@@ -3776,6 +3790,14 @@ pub(crate) fn resolve_response(
  			});
  	}
  	let reason = match &result {
@@ -2472,7 +2415,7 @@ index 73d6f8f7..df6f86ff 100644
  		Ok(_) => ProxyResponseReason::Upstream,
  		Err(failure) => failure.as_reason(),
  	};
-@@ -3863,6 +3886,9 @@ fn should_retry(
+@@ -3863,6 +3885,9 @@ fn should_retry(
  ) -> bool {
  	match res {
  		Ok(resp) => {

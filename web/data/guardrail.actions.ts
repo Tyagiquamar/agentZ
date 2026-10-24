@@ -14,14 +14,12 @@ import {
   deleteGuardrailPolicy,
   updateGuardrailSettings,
   getEffectiveGuardrails,
-  testGuardrails,
   discoverGuardrailConnectionResources,
   type CreateGuardrailConnectionData,
   type GuardrailAssignment,
   type GuardrailPolicyInput,
   type GuardrailSettings,
   type GuardrailEffectiveInput,
-  type GuardrailTestInput,
   type GuardrailResourceDiscoveryInput,
 } from "@/lib/gateway/client"
 import {
@@ -30,7 +28,6 @@ import {
   zGuardrailPolicyInput,
   zGuardrailSettings,
   zGuardrailEffectiveInput,
-  zGuardrailTestInput,
   zGuardrailResourceDiscoveryInput,
 } from "@/lib/gateway/client/zod.gen"
 import { listGuardrailClientAccess } from "@/data/guardrail-client-access"
@@ -160,27 +157,6 @@ export async function resolveGuardrailsAction(
     headers: scope.workspaceId ? { "X-AgentZ-Workspace-ID": scope.workspaceId } : undefined,
   })
   if (result.error) return { error: result.error }
-  return { data: result.data }
-}
-
-export async function testGuardrailsAction(scope: GuardrailActionScope, body: GuardrailTestInput) {
-  const parsed = zGuardrailTestInput.safeParse(body)
-  if (!parsed.success)
-    return {
-      error: {
-        code: "INVALID_FORM",
-        message: parsed.error.issues[0]?.message ?? "Select a policy and enter test content",
-      },
-    }
-  const result = await testGuardrails({
-    body: parsed.data,
-    client: getGatewayServerClient(scope.workspaceId),
-    headers: scope.workspaceId ? { "X-AgentZ-Workspace-ID": scope.workspaceId } : undefined,
-  })
-  if (result.error) {
-    if ("error" in result.error) return { outcome: result.error.error.guardrail }
-    return { error: result.error }
-  }
   return { data: result.data }
 }
 

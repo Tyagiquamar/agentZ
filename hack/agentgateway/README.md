@@ -13,7 +13,6 @@ The version 1 object contains `version`, `retentionDays`, `request`, `response`,
 
 Detailed CEL `guardrails` entries include an `agentz` object with stable event/reference IDs, check identity, scopes, timing, retention and optional inspected text. Capture off does not collect inspected text. Findings mode discards passing content. Provider free-text reasons are removed from protected structured events. Configure full `guardrails` CEL export explicitly; upstream's built-in minimal `agw.ai.guardrails` projection does not include these details.
 
-Response transformations can read a snapshot of guardrails completed before response headers. Playground uses this existing CEL seam to expose a whitelist of check results and references in its internal test header. It excludes inspected/replacement content, provider assessments and raw reasons. Normal inference routes do not add that header. This header cannot report later checked-stream evaluations; buffered and whole-output checks finish before it is produced.
 
 Safe HTTP outcomes carry `x-agentz-guardrail-outcome: 1`. The proxy strips that header from actual model responses before translating them, so downstream code may use it to distinguish a runtime-produced envelope. External proxying must validate and reconstruct the safe outcome before removing the internal marker. SSE errors use the client's protocol envelope and preserve the typed `guardrail` object.
 

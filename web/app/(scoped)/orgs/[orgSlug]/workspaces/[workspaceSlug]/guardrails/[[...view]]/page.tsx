@@ -32,7 +32,6 @@ async function WorkspaceGuardrails({
       <GuardrailsPage
         basePath={`/orgs/${orgSlug}/workspaces/${workspaceSlug}/guardrails`}
         canAdminister={result.scope.organization.superadmin || capabilities.administer}
-        canReadSandboxes={capabilities.sandboxes.read}
         connectionCapabilities={capabilities.guardrail_connections}
         eventCapabilities={capabilities.guardrail_events}
         pageScope={{

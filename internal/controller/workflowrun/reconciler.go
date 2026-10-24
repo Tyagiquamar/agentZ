@@ -916,7 +916,7 @@ func assistantFailure(assistant gatewayapi.OpencodeAssistantMessage) (string, *a
 		if headers.Get("x-agentz-guardrail-outcome") != "1" {
 			return message, nil
 		}
-		var envelope gatewayapi.GuardrailErrorEnvelope
+		var envelope agentzv1alpha1.GuardrailErrorEnvelope
 		if err := json.Unmarshal([]byte(*failure.Data.ResponseBody), &envelope); err != nil {
 			return message, nil
 		}

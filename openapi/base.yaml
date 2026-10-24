@@ -5010,34 +5010,6 @@ paths:
                 $ref: '#/components/schemas/GuardrailEffective'
         default:
           $ref: '#/components/responses/InternalError'
-  /api/guardrails/test:
-    parameters:
-    - $ref: '#/components/parameters/WorkspaceIDHeader'
-    post:
-      operationId: testGuardrails
-      tags: [guardrails]
-      security:
-      - GatewayBearer: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/GuardrailTestInput'
-      responses:
-        '503':
-          description: Guardrail evaluator unavailable.
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/GuardrailErrorEnvelope'}
-        '200':
-          description: Test verdicts for the selected policy through the configured detector.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GuardrailTestResult'
-        default:
-          $ref: '#/components/responses/InternalError'
   /api/guardrails/events:
     parameters:
     - $ref: '#/components/parameters/WorkspaceIDHeader'
@@ -5899,28 +5871,11 @@ components:
         captureMode: {$ref: '#/components/schemas/GuardrailCaptureMode'}
         checks: {type: array, items: {$ref: '#/components/schemas/GuardrailEffectiveCheck'}}
       required: [revision, delivery, captureMode, checks]
-    GuardrailTestInput:
-      type: object
-      additionalProperties: false
-      properties:
-        policy: {$ref: '#/components/schemas/ResourceReference'}
-        assignment: {$ref: '#/components/schemas/GuardrailAssignment'}
-        sandbox: {type: string}
-        sandboxScope: {$ref: '#/components/schemas/ResourceScope'}
-        clientId: {type: string}
-        inlinePolicy: {$ref: '#/components/schemas/GuardrailPolicyInput'}
-        phase: {type: string, enum: [input, output]}
-        content: {type: string, minLength: 1, maxLength: 65536}
-      required: [phase, content]
-    GuardrailTestCheckResult:
-      type: object
-      additionalProperties: false
-      properties:
-        checkId: {type: string}
-        action: {type: string}
-        explanation: {type: string}
-      required: [checkId, action, explanation]
     GuardrailErrorEnvelope:
+      x-go-type: agentzv1alpha1.GuardrailErrorEnvelope
+      x-go-type-import:
+        name: agentzv1alpha1
+        path: github.com/accuknox/agentz/pkg/apis/agentz/v1alpha1
       type: object
       properties:
         error:
@@ -5932,20 +5887,6 @@ components:
             guardrail: {$ref: '#/components/schemas/GuardrailOutcome'}
           required: [type, code, message, guardrail]
       required: [error]
-    GuardrailTestResult:
-      type: object
-      additionalProperties: false
-      properties:
-        outcome:
-          $ref: '#/components/schemas/GuardrailOutcome'
-        action: {type: string, enum: [allow, deny, mask, error]}
-        content: {type: string}
-        referenceId: {type: string}
-        explanation: {type: string}
-        checks:
-          type: array
-          items: {$ref: '#/components/schemas/GuardrailTestCheckResult'}
-      required: [action, content, referenceId, explanation, checks]
     LensApp:
       type: object
       additionalProperties: false

@@ -458,9 +458,6 @@ import type {
   SuggestCodingTextData,
   SuggestCodingTextErrors,
   SuggestCodingTextResponses,
-  TestGuardrailsData,
-  TestGuardrailsErrors,
-  TestGuardrailsResponses,
   TransferAgentOwnerData,
   TransferAgentOwnerErrors,
   TransferAgentOwnerResponses,
@@ -3422,19 +3419,6 @@ export const getEffectiveGuardrails = <ThrowOnError extends boolean = false>(
   >({
     security: [{ scheme: "bearer", type: "http" }],
     url: "/api/guardrails/effective",
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...options.headers,
-    },
-  })
-
-export const testGuardrails = <ThrowOnError extends boolean = false>(
-  options: Options<TestGuardrailsData, ThrowOnError>
-) =>
-  (options.client ?? client).post<TestGuardrailsResponses, TestGuardrailsErrors, ThrowOnError>({
-    security: [{ scheme: "bearer", type: "http" }],
-    url: "/api/guardrails/test",
     ...options,
     headers: {
       "Content-Type": "application/json",

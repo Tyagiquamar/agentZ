@@ -4376,6 +4376,10 @@ components:
       required:
       - error
       type: object
+      x-go-type: agentzv1alpha1.GuardrailErrorEnvelope
+      x-go-type-import:
+        name: agentzv1alpha1
+        path: github.com/accuknox/agentz/pkg/apis/agentz/v1alpha1
     GuardrailEvaluationContext:
       additionalProperties: false
       properties:
@@ -4741,77 +4745,6 @@ components:
       - revision
       - message
       - observedGeneration
-      type: object
-    GuardrailTestCheckResult:
-      additionalProperties: false
-      properties:
-        action:
-          type: string
-        checkId:
-          type: string
-        explanation:
-          type: string
-      required:
-      - checkId
-      - action
-      - explanation
-      type: object
-    GuardrailTestInput:
-      additionalProperties: false
-      properties:
-        assignment:
-          $ref: '#/components/schemas/GuardrailAssignment'
-        clientId:
-          type: string
-        content:
-          maxLength: 65536
-          minLength: 1
-          type: string
-        inlinePolicy:
-          $ref: '#/components/schemas/GuardrailPolicyInput'
-        phase:
-          enum:
-          - input
-          - output
-          type: string
-        policy:
-          $ref: '#/components/schemas/ResourceReference'
-        sandbox:
-          type: string
-        sandboxScope:
-          $ref: '#/components/schemas/ResourceScope'
-      required:
-      - phase
-      - content
-      type: object
-    GuardrailTestResult:
-      additionalProperties: false
-      properties:
-        action:
-          enum:
-          - allow
-          - deny
-          - mask
-          - error
-          type: string
-        checks:
-          items:
-            $ref: '#/components/schemas/GuardrailTestCheckResult'
-          type: array
-        content:
-          type: string
-        explanation:
-          type: string
-        outcome:
-          $ref: '#/components/schemas/GuardrailOutcome'
-        referenceId:
-          type: string
-      required:
-      - action
-      - content
-      - referenceId
-      - explanation
-      - checks
       type: object
     ImmutableSkillImportPreviewItem:
       additionalProperties: false
@@ -30217,37 +30150,6 @@ paths:
       security:
       - GatewayBearer:
         - guardrail_policy.modify
-      tags:
-      - guardrails
-  /api/guardrails/test:
-    parameters:
-    - $ref: '#/components/parameters/WorkspaceIDHeader'
-    post:
-      operationId: testGuardrails
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/GuardrailTestInput'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GuardrailTestResult'
-          description: Test verdicts for the selected policy through the configured detector.
-        "503":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GuardrailErrorEnvelope'
-          description: Guardrail evaluator unavailable.
-        default:
-          $ref: '#/components/responses/InternalError'
-      security:
-      - GatewayBearer:
-        - guardrail_policy.read
       tags:
       - guardrails
   /api/inference/pool:

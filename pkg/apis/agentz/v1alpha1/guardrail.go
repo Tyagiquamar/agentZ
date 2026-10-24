@@ -200,6 +200,21 @@ func init() {
 	SchemeBuilder.Register(&GuardrailConnection{}, &GuardrailConnectionList{}, &GuardrailPolicy{}, &GuardrailPolicyList{})
 }
 
+// GuardrailErrorEnvelope carries a trusted runtime failure through inference clients.
+// +kubebuilder:object:generate=false
+type GuardrailErrorEnvelope struct {
+	Error GuardrailError `json:"error"`
+}
+
+// GuardrailError describes a content denial or an unavailable safeguard.
+// +kubebuilder:object:generate=false
+type GuardrailError struct {
+	Type      string           `json:"type"`
+	Code      string           `json:"code"`
+	Message   string           `json:"message"`
+	Guardrail GuardrailOutcome `json:"guardrail"`
+}
+
 // GuardrailOutcome is safe feedback shared by chat, workflows, and external clients.
 type GuardrailOutcome struct {
 	// Code distinguishes a content denial from unavailable safeguards.

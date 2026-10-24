@@ -160,7 +160,6 @@ import {
   statAgentFile,
   submitChatInput,
   suggestCodingText,
-  testGuardrails,
   transferAgentOwner,
   updateAgent,
   updateAgentTool,
@@ -631,9 +630,6 @@ import type {
   SuggestCodingTextData,
   SuggestCodingTextError,
   SuggestCodingTextResponse,
-  TestGuardrailsData,
-  TestGuardrailsError,
-  TestGuardrailsResponse,
   TransferAgentOwnerData,
   TransferAgentOwnerError,
   TransferAgentOwnerResponse,
@@ -5167,26 +5163,6 @@ export const getEffectiveGuardrailsMutation = (
   > = {
     mutationFn: async (fnOptions) => {
       const { data } = await getEffectiveGuardrails({
-        ...options,
-        ...fnOptions,
-        throwOnError: true,
-      })
-      return data
-    },
-  }
-  return mutationOptions
-}
-
-export const testGuardrailsMutation = (
-  options?: Partial<Options<TestGuardrailsData>>
-): UseMutationOptions<TestGuardrailsResponse, TestGuardrailsError, Options<TestGuardrailsData>> => {
-  const mutationOptions: UseMutationOptions<
-    TestGuardrailsResponse,
-    TestGuardrailsError,
-    Options<TestGuardrailsData>
-  > = {
-    mutationFn: async (fnOptions) => {
-      const { data } = await testGuardrails({
         ...options,
         ...fnOptions,
         throwOnError: true,

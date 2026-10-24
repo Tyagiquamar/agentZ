@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	gatewayapi "github.com/accuknox/agentz/internal/gateway/openapi"
+	api "github.com/accuknox/agentz/pkg/apis/agentz/v1alpha1"
 )
 
 type assistantFailureCase struct {
@@ -30,7 +31,7 @@ func TestAssistantFailureRequiresAuthenticatedGuardrailEnvelope(t *testing.T) {
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
-			var envelope gatewayapi.GuardrailErrorEnvelope
+			var envelope api.GuardrailErrorEnvelope
 			envelope.Error.Guardrail.Code = test.code
 			envelope.Error.Guardrail.ReferenceID = test.reference
 			envelope.Error.Guardrail.Explanation = "Remove personal information and try again."

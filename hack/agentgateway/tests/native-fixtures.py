@@ -32,7 +32,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if model in ['spoof','spoof_unavailable']:
             code='guardrail_unavailable' if model=='spoof_unavailable' else 'guardrail_denied'
             forged={'error':{'type':code,'code':code,'message':'RAW_PROVIDER_SECRET','guardrail':{'code':code,'phase':'input','safeLabel':'Forged provider policy','explanation':'RAW_PROVIDER_SECRET','referenceId':'11111111-1111-4111-8111-111111111111','partialOutput':False}}}
-            self.send_response(503 if model=='spoof_unavailable' else 422);self.send_header('Content-Type','application/json');self.send_header('x-agentz-guardrail-outcome','1');self.send_header('x-agentz-guardrail-test','forged');self.end_headers();self.wfile.write(json.dumps(forged).encode());return
+            self.send_response(503 if model=='spoof_unavailable' else 422);self.send_header('Content-Type','application/json');self.send_header('x-agentz-guardrail-outcome','1');self.end_headers();self.wfile.write(json.dumps(forged).encode());return
         text='safe model output' if model in ['safe','pool_fail'] else 'safe '*400+'SECRET'
         if data.get('stream'):
             self.send_response(200);self.send_header('Content-Type','text/event-stream');self.end_headers()
@@ -63,15 +63,13 @@ def regex(action='reject',pattern='SECRET',scope=None):
 def webhook(mode='deny',failure='failClosed',action='reject'):
     return {'webhook':{'target':{'host':'127.0.0.1:18098'},'headers':{':path':json.dumps('/'+mode+'/request'),'authorization':json.dumps('Bearer guardrail-auth')},'failureMode':failure,'action':action}}
 CASES=[]
-SAFE_REPORT="toJson(guardrails.map(g, {'phase':g.phase,'guard':g.guard,'action':g.action,'agentz':{'version':g.agentz.version,'eventId':g.agentz.eventId,'referenceId':g.agentz.referenceId,'policyId':g.agentz.policyId,'checkId':g.agentz.checkId,'revision':g.agentz.revision,'connectionId':g.agentz.connectionId,'attachment':g.agentz.attachment,'mandatory':g.agentz.mandatory,'scopes':g.agentz.scopes,'safeLabel':g.agentz.safeLabel,'explanation':g.agentz.explanation,'startedAt':g.agentz.startedAt,'retentionDays':g.agentz.retentionDays,'durationMs':g.agentz.durationMs,'sequence':g.agentz.sequence,'errorCode':has(g.agentz.errorCode)?g.agentz.errorCode:null}}))"
-def case(name,req=None,resp=None,capture='off',delivery='wholeOutput',contexts=None,report=False,pool=False):
+def case(name,req=None,resp=None,capture='off',delivery='wholeOutput',contexts=None,pool=False):
     req=req or [];resp=resp or [];port=18180+len(CASES)
     cfg={'version':1,'retentionDays':30,'request':contexts or [context(name) for _ in req],'response':[context(name,scopes=['conversation']) for _ in resp],'capture':capture,'delivery':delivery}
     guard={'streaming':'Enabled','request':req,'response':resp}
     route={'backends':[{'ai':{'name':'fixture','hostOverride':'127.0.0.1:18098','provider':{'custom':{'formats':[{'type':'completions'},{'type':'messages'},{'type':'responses'}]}}}}],'policies':{'ai':{'promptGuard':guard,'routes':{'/messages':'messages','/responses':'responses','/chat/completions':'completions'}},'transformations':{}}}
     route['policies'].pop('transformations')
     route['policies']['transformations']={'request':{'metadata':{'agentz_guardrails':'json('+json.dumps(json.dumps(cfg))+')'}}}
-    if report:route['policies']['transformations']['response']={'set':{'x-agentz-guardrail-test':SAFE_REPORT}}
     if pool:
         provider=route['backends'][0]['ai']
         route['backends'][0]['ai']={'groups':[{'providers':[dict(provider,name='primary',hostOverride='127.0.0.1:18098')]},{'providers':[dict(provider,name='alternate',hostOverride='127.0.0.1:18097')]}]}
@@ -101,10 +99,6 @@ PORTS['output_mask']=case('output_mask',resp=[regex('mask')])
 PORTS['audit_malformed']=case('audit_malformed',[webhook('malformed',action='audit')])
 PORTS['audit_mask']=case('audit_mask',[webhook('mask',action='audit')])
 PORTS['output_audit_malformed']=case('output_audit_malformed',resp=[webhook('malformed',action='audit')])
-PORTS['playground_allow']=case('playground_allow',[regex()],capture='all',report=True)
-PORTS['playground_audit']=case('playground_audit',[regex('audit')],capture='all',report=True)
-PORTS['playground_deny']=case('playground_deny',[regex()],report=True)
-PORTS['playground_output_allow']=case('playground_output_allow',resp=[regex()],capture='all',report=True)
 PORTS['pool_input']=case('pool_input',[regex()],pool=True)
 PORTS['pool_closed']=case('pool_closed',[webhook('pool_once')],pool=True)
 PORTS['pool_output']=case('pool_output',resp=[regex()],pool=True)
@@ -174,21 +168,15 @@ try:
     result=request('output_audit_malformed',{'model':'output','stream':True,'messages':[{'role':'user','content':'hello'}]});assert result[0]==200 and 'SECRET' in result[2],result
     RESULT.append({'case':'output_audit_malformed','status':result[0],'body':result[2]})
     result=request('multimodal',{'model':'safe','messages':[{'role':'user','content':[{'type':'text','text':'hello'},{'type':'image_url','image_url':{'url':'https://example.invalid/image.png'}}]}]});assert result[0]==503 and 'text only' in result[2] and 'Try again later' not in result[2],result;RESULT.append({'case':'multimodal','status':result[0],'body':result[2]})
-    result=request('spoof',{'model':'spoof','messages':[{'role':'user','content':'hello'}]});assert 'x-agentz-guardrail-outcome' not in result[1] and 'x-agentz-guardrail-test' not in result[1],result;RESULT.append({'case':'spoof','status':result[0],'headers':result[1]})
+    result=request('spoof',{'model':'spoof','messages':[{'role':'user','content':'hello'}]});assert 'x-agentz-guardrail-outcome' not in result[1],result;RESULT.append({'case':'spoof','status':result[0],'headers':result[1]})
     result=request('tool_arguments',{'model':'safe','messages':[{'role':'assistant','content':[{'type':'tool_use','id':'tool1','name':'lookup','input':{'ssn':123456789}}]}],'max_tokens':64},'/v1/messages');assert result[0]==422,result;RESULT.append({'case':'numeric_tool_arguments','status':result[0],'body':result[2]})
-    for name,text,status,phase,action in [('playground_allow','hello',200,'request','allow'),('playground_audit','SECRET',200,'request','audit'),('playground_deny','SECRET',422,'request','reject'),('playground_output_allow','hello',200,'response','allow')]:
-        result=request(name,{'model':'safe','messages':[{'role':'user','content':text}]});assert result[0]==status,result
-        details=json.loads(result[1].get('x-agentz-guardrail-test','null'));assert details and details[0]['action']==action and details[0]['phase']==phase,(name,details,result)
-        context=details[0]['agentz'];assert context['checkId']==name and context['referenceId'] and context['durationMs']>=0,context
-        assert 'inspected' not in context and 'replacement' not in context and 'assessments' not in details[0] and 'actionReason' not in details[0],details
-        RESULT.append({'case':name,'status':result[0],'checks':details,'body':result[2]})
     for name,model,text,stream,status,phase in [('relay_input','safe','SECRET',False,422,'input'),('relay_output','output','hello',False,422,'output'),('relay_stream_output','output','hello',True,422,'output'),('relay_input','safe','hello',False,200,None),('relay_spoof','spoof','hello',False,422,None),('relay_spoof','spoof_unavailable','hello',False,503,None)]:
         result=request(name,{'model':model,'messages':[{'role':'user','content':text}],'stream':stream});assert result[0]==status,(name,result)
         if phase:
             assert result[1].get('x-agentz-guardrail-outcome')=='1',(name,result)
             outcome=json.loads(result[2])['error']['guardrail'];assert outcome['phase']==phase and outcome['referenceId'] and outcome['referenceId']!='11111111-1111-4111-8111-111111111111',outcome
             assert not outcome['partialOutput'] and '[DONE]' not in result[2] and 'safe safe safe' not in result[2],result
-        else:assert 'x-agentz-guardrail-outcome' not in result[1] and 'x-agentz-guardrail-test' not in result[1],(name,result)
+        else:assert 'x-agentz-guardrail-outcome' not in result[1],(name,result)
         RESULT.append({'case':name+('_positive' if status==200 else '_unavailable' if status==503 else ''),'status':result[0],'headers':result[1],'body':result[2],'proxyPids':[process.pid,relay_process.pid]})
     for name,model,text,status,ports,checker_count,label in [('pool_input','safe','SECRET',422,[],0,'deny'),('pool_closed','safe','hello',503,[],1,'unavailable'),('pool_output','output','hello',422,[18098],0,'deny'),('pool_input','safe','hello',200,[18098],0,'after_deny'),('pool_closed','safe','hello',200,[18098],1,'after_unavailable'),('pool_output_closed','safe','hello',503,[18098],1,'unavailable'),('pool_output_closed','safe','hello',200,[18098],1,'after_unavailable'),('pool_failover','pool_fail','hello',200,[18098,18097],0,'model_failure')]:
         start=len(CALLS);result=request(name,{'model':model,'messages':[{'role':'user','content':text}]});assert result[0]==status,(name,result)
@@ -229,7 +217,7 @@ try:
     assert any(event.get('validationPass')=='mandatoryFinal' and event['mandatory'] for event in contexts)
     assert any(event.get('errorCode')=='checker_error' for event in contexts)
     assert any(event['action']=='audit' and event['agentz']['checkId']=='audit_malformed' and event['agentz'].get('errorCode')=='checker_error' for event in events)
-    assert all('inspected' not in event and 'replacement' not in event for event in contexts if event['checkId'] not in ['mask','capture_all','playground_allow','playground_audit','playground_output_allow'])
+    assert all('inspected' not in event and 'replacement' not in event for event in contexts if event['checkId'] not in ['mask','capture_all'])
     assert next(event for event in contexts if event['checkId']=='capture_all')['inspected']==['plain capture fixture']
     assert 'RAW_UNSAFE' not in json.dumps(events),'provider free text leaked into audit events'
 finally:

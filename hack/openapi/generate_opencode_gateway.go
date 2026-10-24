@@ -149,7 +149,7 @@ var baseOperationCapabilities = map[string][]string{
 	"guardrail_policy.create":     {"createGuardrailPolicy"},
 	"guardrail_policy.modify":     {"updateGuardrailPolicy", "updateGuardrailSettings"},
 	"guardrail_policy.delete":     {"deleteGuardrailPolicy"},
-	"guardrail_policy.read":       {"getGuardrailPolicy", "listGuardrailPolicies", "getGuardrailSettings", "getEffectiveGuardrails", "testGuardrails"},
+	"guardrail_policy.read":       {"getGuardrailPolicy", "listGuardrailPolicies", "getGuardrailSettings", "getEffectiveGuardrails"},
 	"guardrail_event.read":        {"listGuardrailEvents", "getGuardrailEvent"},
 	"inference_pool.create": {
 		"createInferencePool",

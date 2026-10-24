@@ -36,7 +36,6 @@ async function OrganizationGuardrails({
       <GuardrailsPage
         basePath={`/orgs/${orgSlug}/guardrails`}
         canAdminister={result.organization.superadmin}
-        canReadSandboxes={tenant.data.sandbox_capabilities.read}
         connectionCapabilities={tenant.data.guardrail_connection_capabilities}
         eventCapabilities={tenant.data.guardrail_event_capabilities}
         pageScope={{ kind: "organization", organizationName: result.organization.name }}

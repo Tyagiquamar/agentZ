@@ -833,7 +833,7 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 			if response.StatusCode >= http.StatusMultipleChoices {
 				var outcome *agentzv1alpha1.GuardrailOutcome
 				if !mcpRequest && guardrailResponse {
-					var envelope gatewayapi.GuardrailErrorEnvelope
+					var envelope agentzv1alpha1.GuardrailErrorEnvelope
 					err := json.NewDecoder(io.LimitReader(response.Body, 65536)).Decode(&envelope)
 					candidate := envelope.Error.Guardrail
 					denied := candidate.Code == "guardrail_denied" && response.StatusCode == http.StatusUnprocessableEntity

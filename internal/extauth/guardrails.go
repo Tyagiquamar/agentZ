@@ -13,7 +13,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	gatewayapi "github.com/accuknox/agentz/internal/gateway/openapi"
 	"github.com/accuknox/agentz/internal/guardrails"
 	api "github.com/accuknox/agentz/pkg/apis/agentz/v1alpha1"
 )
@@ -39,7 +38,7 @@ func (s *Service) evaluateGuardrailRevision(ctx context.Context, attrs *authv3.A
 			return allowDecision(injectedRequest{}), request
 		}
 	}
-	outcome := gatewayapi.GuardrailOutcome{
+	outcome := api.GuardrailOutcome{
 		Code:          "guardrail_unavailable",
 		Phase:         "input",
 		SafeLabel:     "Guardrail rollout",
@@ -47,7 +46,7 @@ func (s *Service) evaluateGuardrailRevision(ctx context.Context, attrs *authv3.A
 		ReferenceID:   uuid.NewString(),
 		PartialOutput: false,
 	}
-	var envelope gatewayapi.GuardrailErrorEnvelope
+	var envelope api.GuardrailErrorEnvelope
 	envelope.Error.Guardrail = outcome
 	envelope.Error.Type, envelope.Error.Code, envelope.Error.Message = outcome.Code, outcome.Code, outcome.Explanation
 	body, marshalErr := json.Marshal(envelope)

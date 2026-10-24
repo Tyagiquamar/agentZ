@@ -16,7 +16,6 @@ import {
   listGuardrailPoliciesQuery,
   getGuardrailSettingsQuery,
 } from "@/data/guardrail.queries"
-import { listSandboxesCachedQuery } from "@/data/sandbox.queries"
 import {
   getGuardrailEvent,
   listGuardrailEvents,
@@ -31,14 +30,12 @@ import {
   NewGuardrailConnectionButton,
 } from "./resource-list"
 import { PolicyEditor } from "./policy-editor"
-import { GuardrailPlayground } from "./playground"
 import { GuardrailOrganizationSettings } from "./settings"
 import { GuardrailEvents, GuardrailEventDetail } from "./events"
 
 export async function GuardrailsPage({
   basePath,
   canAdminister,
-  canReadSandboxes,
   connectionCapabilities,
   eventCapabilities,
   policyCapabilities,
@@ -49,7 +46,6 @@ export async function GuardrailsPage({
 }: {
   basePath: `/orgs/${string}/guardrails`
   canAdminister: boolean
-  canReadSandboxes: boolean
   connectionCapabilities: ResourceCapabilities
   eventCapabilities: ResourceCapabilities
   policyCapabilities: ResourceCapabilities
@@ -61,10 +57,7 @@ export async function GuardrailsPage({
   const section =
     view[0] ??
     (policyCapabilities.read ? "policies" : connectionCapabilities.read ? "connections" : "events")
-  if (
-    !["policies", "connections", "playground", "events", "settings"].includes(section) ||
-    view.length > 2
-  )
+  if (!["policies", "connections", "events", "settings"].includes(section) || view.length > 2)
     notFound()
   if (section !== "policies" && section !== "events" && view.length > 1) notFound()
   const tabs = [
@@ -73,9 +66,6 @@ export async function GuardrailsPage({
       : []),
     ...(connectionCapabilities.read
       ? [{ label: "Connections", href: `${basePath}/connections` as Route }]
-      : []),
-    ...(policyCapabilities.read
-      ? [{ label: "Playground", href: `${basePath}/playground` as Route }]
       : []),
     ...(eventCapabilities.read ? [{ label: "Events", href: `${basePath}/events` as Route }] : []),
     ...(!workspaceId && canAdminister && policyCapabilities.read
@@ -211,24 +201,7 @@ export async function GuardrailsPage({
           policies={policies}
         />
       )
-    if (section === "playground") {
-      const sandboxes = canReadSandboxes
-        ? await listSandboxesCachedQuery({ limit: 200 }, workspaceId)
-        : undefined
-      const selected = policies.find(
-        (item) =>
-          item.name === searchParams.policy &&
-          (!searchParams.scope || item.scope === searchParams.scope)
-      )
-      content = (
-        <GuardrailPlayground
-          initialPolicy={selected ? `${selected.scope}/${selected.name}` : undefined}
-          policies={policies}
-          sandboxes={sandboxes?.sandboxes ?? []}
-          scope={scope}
-        />
-      )
-    }
+
     content = (
       <>
         {workspaceId && settings && settings.mandatoryPolicies.length > 0 ? (
