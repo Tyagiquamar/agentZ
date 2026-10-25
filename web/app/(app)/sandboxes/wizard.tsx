@@ -23,7 +23,7 @@ import {
   Globe2,
   Layers3,
   ScrollText,
-  ShieldCheck,
+  BrickWallShield,
   PackageSearch as PackageSearchIcon,
   Plus,
   RefreshCw,
@@ -407,7 +407,7 @@ const steps = [
   {
     id: "guardrails",
     title: "Guardrails",
-    icon: ShieldCheck,
+    icon: BrickWallShield,
   },
   {
     id: "allowedHosts",

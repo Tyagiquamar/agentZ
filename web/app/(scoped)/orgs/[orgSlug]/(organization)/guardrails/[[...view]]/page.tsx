@@ -1,13 +1,11 @@
 import { Suspense } from "react"
 import { connection } from "next/server"
+import { RememberRoute } from "@/data/route-memory"
 import { AdministrationLoadingState, AdministrationState } from "@/components/administration"
 import { GuardrailsPage } from "@/app/(app)/guardrails/guardrails-page"
 import { activateOrganization, resolveOrganizationSlug } from "@/data/organizations"
-import { RememberRoute } from "@/data/route-memory"
 import { ensureTenant } from "@/lib/gateway/client"
 import { getGatewayServerClient } from "@/lib/gateway/server-client"
-
-export const metadata = { title: "Guardrails" }
 
 export default function OrganizationGuardrailsPage(
   props: PageProps<"/orgs/[orgSlug]/guardrails/[[...view]]">
@@ -38,7 +36,6 @@ async function OrganizationGuardrails({
         canAdminister={result.organization.superadmin}
         connectionCapabilities={tenant.data.guardrail_connection_capabilities}
         eventCapabilities={tenant.data.guardrail_event_capabilities}
-        pageScope={{ kind: "organization", organizationName: result.organization.name }}
         policyCapabilities={tenant.data.guardrail_policy_capabilities}
         searchParams={await searchParams}
         view={view ?? []}

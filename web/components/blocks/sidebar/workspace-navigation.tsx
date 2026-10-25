@@ -16,6 +16,7 @@ import {
   ScrollText,
   Settings2,
   ShieldCheck,
+  BrickWallShield,
   Workflow,
   Zap,
 } from "lucide-react"
@@ -77,7 +78,7 @@ export function WorkspaceNavigation({
     {
       href: `${root}/guardrails/${guardrailsView}`,
       label: "Guardrails",
-      icon: ShieldCheck,
+      icon: BrickWallShield,
       visible: canReadGuardrails,
       tour: "guardrails",
     },

@@ -2,22 +2,15 @@
 
 import { useId, useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowDown, ArrowUp, CircleAlert, Save } from "lucide-react"
+import { ArrowDown, ArrowUp, BrickWallShield, CircleAlert, Save } from "lucide-react"
 import { toast } from "sonner"
 import type { GuardrailPolicy, GuardrailSettings } from "@/lib/gateway/client"
 import { saveGuardrailSettingsAction } from "@/data/guardrail.actions"
 import { LoadingButton } from "@/components/interior/loading-button"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
-import {
-  Field,
-  FieldContent,
-  FieldDescription,
-  FieldLabel,
-  FieldLegend,
-  FieldSet,
-} from "@/components/ui/field"
+import { MultiSelectDropdown } from "@/components/ui/multi-select-dropdown"
+import { Field, FieldDescription, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 
 export function GuardrailOrganizationSettings({
@@ -62,33 +55,31 @@ export function GuardrailOrganizationSettings({
           Selected policies protect every managed request, including external applications and CLI
           agents. Workspaces cannot remove them.
         </FieldDescription>
-        {organizationPolicies.map((policy) => (
-          <Field key={policy.name} orientation="horizontal">
-            <Checkbox
-              checked={settings.mandatoryPolicies.includes(policy.name)}
-              disabled={!canModify || pending}
-              id={`${idPrefix}-required-${policy.name}`}
-              onCheckedChange={(value) =>
-                setSettings({
-                  ...settings,
-                  mandatoryPolicies:
-                    value === true
-                      ? [...settings.mandatoryPolicies, policy.name]
-                      : settings.mandatoryPolicies.filter((name) => name !== policy.name),
-                })
-              }
-            />
-            <FieldContent>
-              <FieldLabel htmlFor={`${idPrefix}-required-${policy.name}`}>
-                {policy.displayName}
-              </FieldLabel>
-              <FieldDescription>
-                {policy.description ||
-                  `${policy.checks.length} ${policy.checks.length === 1 ? "check" : "checks"}`}
-              </FieldDescription>
-            </FieldContent>
-          </Field>
-        ))}
+        <MultiSelectDropdown
+          aria-label="Organization baseline policies"
+          disabled={!canModify || pending}
+          emptyMessage="No organization policies found."
+          placeholder="Select baseline policies"
+          searchPlaceholder="Search policies..."
+          options={organizationPolicies.map((policy) => ({
+            icon: BrickWallShield,
+            label: policy.displayName,
+            value: policy.name,
+            badge: `${policy.checks.length} ${policy.checks.length === 1 ? "check" : "checks"}`,
+            description: policy.description || undefined,
+          }))}
+          value={settings.mandatoryPolicies}
+          onValueChangeAction={(selected) => {
+            // The shared picker sorts selections; baseline execution order must stay intact.
+            setSettings((current) => ({
+              ...current,
+              mandatoryPolicies: [
+                ...current.mandatoryPolicies.filter((name) => selected.includes(name)),
+                ...selected.filter((name) => !current.mandatoryPolicies.includes(name)),
+              ],
+            }))
+          }}
+        />
         {organizationPolicies.length === 0 ? (
           <FieldDescription>
             Create an organization policy before adding it to the required baseline.

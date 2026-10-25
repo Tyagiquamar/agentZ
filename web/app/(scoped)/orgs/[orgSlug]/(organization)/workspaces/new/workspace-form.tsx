@@ -8,7 +8,7 @@ import type { Route } from "next"
 import Link from "next/link"
 import { useRouter } from "@bprogress/next/app"
 import { startTransition, useActionState, useState } from "react"
-import { Box, CircleAlert, Code2, Layers, Plus, Wrench, ShieldCheck, Cable } from "lucide-react"
+import { Box, CircleAlert, Code2, Layers, Plus, Wrench, BrickWallShield, Cable } from "lucide-react"
 import { ProviderIcon } from "@/app/(app)/inference/providers/provider-shared"
 import { renderMcpServerIcon } from "@/app/(app)/mcps/catalog"
 import { createWorkspaceAction, type CreateWorkspaceFormState } from "@/app/(scoped)/orgs/actions"
@@ -118,7 +118,7 @@ export function WorkspaceForm({
       value: item.name,
     })),
     guardrail_policies: resources.guardrail_policies.map((item) => ({
-      icon: ShieldCheck,
+      icon: BrickWallShield,
       label: item.displayName,
       value: item.name,
     })),

@@ -16,10 +16,7 @@ export function GuardrailOutcome({ outcome, onEdit }: { outcome: Outcome; onEdit
   } = outcome
   const serviceError = outcome.code === "guardrail_unavailable"
   return (
-    <Alert
-      className="border-l-2 border-destructive/45 bg-destructive/5 px-4 py-3"
-      variant="destructive"
-    >
+    <Alert variant="destructive" className="rounded-lg bg-destructive/5 p-3">
       {serviceError ? <TriangleAlert aria-hidden /> : <ShieldAlert aria-hidden />}
       <AlertTitle>
         {serviceError ? "Guardrail service unavailable" : "Blocked by guardrail"}

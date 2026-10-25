@@ -4,8 +4,10 @@ import { useId, useState, useTransition } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { flushSync } from "react-dom"
 import { useRouter } from "next/navigation"
-import { Cable, ChevronDown, ChevronsUpDown, CircleAlert } from "lucide-react"
+import { Cable, ChevronDown, ChevronsUpDown, CircleAlert, Webhook } from "lucide-react"
 import { toast } from "sonner"
+import { GoogleCloud } from "@ridemountainpig/svgl-react"
+import { ProviderIcon } from "@/app/(app)/inference/providers/provider-shared"
 import type { GuardrailConnection, CreateGuardrailConnectionData } from "@/lib/gateway/client"
 import { saveGuardrailConnectionAction, type GuardrailActionScope } from "@/data/guardrail.actions"
 import { zGuardrailConnectionInputWritable } from "@/lib/gateway/client/zod.gen"
@@ -101,7 +103,6 @@ export function ConnectionSheet({
   )
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState("")
-  const [dirty, setDirty] = useState(false)
   const [connectionID, setConnectionID] = useState(connection?.name)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [region, setRegion] = useState(connection?.region || "us-east-1")
@@ -112,13 +113,12 @@ export function ConnectionSheet({
     <Sheet
       open
       onOpenChange={(open) => {
-        if (!open && !pending && (!dirty || window.confirm("Discard unsaved connection changes?")))
-          onClose()
+        if (!open && !pending) onClose()
       }}
     >
-      <SheetContent className="h-full w-full gap-0 overflow-hidden sm:max-w-3xl">
-        <SheetHeader className="border-b-0 px-6 py-5">
-          <SheetTitle className="flex items-center gap-2 text-lg font-medium tracking-tight">
+      <SheetContent size="lg" className="gap-0 overflow-hidden">
+        <SheetHeader>
+          <SheetTitle className="flex items-center gap-2">
             <Cable aria-hidden className="size-4 text-muted-foreground" />
             {readOnly
               ? "Guardrail connection"
@@ -132,7 +132,6 @@ export function ConnectionSheet({
         </SheetHeader>
         <form
           className="flex min-h-0 flex-1 flex-col"
-          onChange={() => setDirty(true)}
           onSubmit={(event) => {
             event.preventDefault()
             const formData = new FormData(event.currentTarget)
@@ -189,14 +188,13 @@ export function ConnectionSheet({
                 predicate: (query) => query.queryKey[0] === "guardrail-resources",
               })
               toast.success(connection ? "Connection saved" : "Connection created")
-              setDirty(false)
               onSaved?.(result.data)
               router.refresh()
               onClose()
             })
           }}
         >
-          <FieldGroup className="min-h-0 flex-1 gap-6 overflow-y-auto px-6 pt-2 pb-6">
+          <FieldGroup className="min-h-0 flex-1 overflow-y-auto p-4">
             {readOnly ? (
               <Badge variant="secondary" className="w-fit">
                 Read only
@@ -235,7 +233,6 @@ export function ConnectionSheet({
                     value === "Webhook"
                   ) {
                     setProvider(value)
-                    setDirty(true)
                   }
                 }}
               >
@@ -244,10 +241,22 @@ export function ConnectionSheet({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    <SelectItem value="OpenAI">OpenAI moderation</SelectItem>
-                    <SelectItem value="Bedrock">AWS Bedrock Guardrails</SelectItem>
-                    <SelectItem value="ModelArmor">Google Model Armor</SelectItem>
-                    <SelectItem value="Webhook">Custom guardrail webhook</SelectItem>
+                    <SelectItem value="OpenAI">
+                      <ProviderIcon provider="openai" className="size-4" />
+                      OpenAI moderation
+                    </SelectItem>
+                    <SelectItem value="Bedrock">
+                      <ProviderIcon provider="amazon-bedrock" className="size-4" />
+                      AWS Bedrock Guardrails
+                    </SelectItem>
+                    <SelectItem value="ModelArmor">
+                      <GoogleCloud aria-hidden />
+                      Google Model Armor
+                    </SelectItem>
+                    <SelectItem value="Webhook">
+                      <Webhook aria-hidden />
+                      Custom guardrail webhook
+                    </SelectItem>
                   </SelectGroup>
                 </SelectContent>
               </Select>
@@ -317,7 +326,6 @@ export function ConnectionSheet({
                               onSelect={() => {
                                 setRegion(value)
                                 setRegionOpen(false)
-                                setDirty(true)
                               }}
                               value={`${label} ${value}`}
                             >
@@ -459,7 +467,7 @@ export function ConnectionSheet({
               </FieldDescription>
             ) : null}
             <details
-              className="group/details border-t border-dotted border-border/80 pt-5"
+              className="group/details pt-4"
               open={detailsOpen}
               onInvalidCapture={() => flushSync(() => setDetailsOpen(true))}
               onToggle={(event) => setDetailsOpen(event.currentTarget.open)}
@@ -522,16 +530,9 @@ export function ConnectionSheet({
               </Alert>
             ) : null}
           </FieldGroup>
-          <SheetFooter className="shrink-0 border-t border-border/60 bg-muted/15 px-6 py-4">
+          <SheetFooter className="shrink-0 border-t">
             <div className="flex justify-end gap-2">
-              <Button
-                disabled={pending}
-                onClick={() => {
-                  if (!dirty || window.confirm("Discard unsaved connection changes?")) onClose()
-                }}
-                type="button"
-                variant="ghost"
-              >
+              <Button disabled={pending} onClick={onClose} type="button" variant="ghost">
                 {readOnly ? "Close" : "Cancel"}
               </Button>
               {!readOnly ? (

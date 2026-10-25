@@ -13,6 +13,7 @@ import {
   ScrollText,
   Settings2,
   ShieldCheck,
+  BrickWallShield,
   SlidersHorizontal,
   User2,
   UserRoundCheck,
@@ -425,7 +426,7 @@ function OrganizationNavigation({
                   label="Guardrails"
                   match={`${root}/guardrails`}
                 >
-                  <ShieldCheck aria-hidden="true" />
+                  <BrickWallShield aria-hidden="true" />
                 </SidebarNavigationLink>
               </SidebarMenuItem>
             ) : null}

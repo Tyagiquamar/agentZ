@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useId, useState, type ComponentProps } from "react"
+import type { ComponentProps } from "react"
 import { useRouter } from "next/navigation"
 import {
   ArrowLeft,
@@ -25,17 +25,8 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 import { Button } from "@/components/ui/button"
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { formatTimestamp } from "@/lib/format"
+import { GuardrailEventFilters } from "./event-filters"
 
 const column = createColumnHelper<GuardrailEvent>()
 const verdicts = {
@@ -61,14 +52,12 @@ export function GuardrailEvents({
 }: {
   data: ListGuardrailEventsResponse
   basePath: `/orgs/${string}/guardrails`
-  action?: string
+  action?: GuardrailEvent["evaluation"]["action"]
   referenceId?: string
 }) {
   "use no memo"
 
   const router = useRouter()
-  const idPrefix = useId()
-  const [filter, setFilter] = useState(action ?? "all")
   // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table is not React Compiler compatible yet.
   const table = useReactTable({
     data: data.events,
@@ -136,42 +125,7 @@ export function GuardrailEvents({
 
   return (
     <>
-      <form action={`${basePath}/events`} className="px-4 md:px-6">
-        <FieldGroup className="flex-row flex-wrap items-end">
-          <Field className="max-w-56">
-            <FieldLabel htmlFor={`${idPrefix}-guardrail-event-action`}>Outcome</FieldLabel>
-            <Select name="action" onValueChange={setFilter} value={filter}>
-              <SelectTrigger className="w-full" id={`${idPrefix}-guardrail-event-action`}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectItem value="all">All outcomes</SelectItem>
-                  <SelectItem value="reject">Blocked</SelectItem>
-                  <SelectItem value="mask">Masked</SelectItem>
-                  <SelectItem value="audit">Audit finding</SelectItem>
-                  <SelectItem value="failOpen">Allowed after checker error</SelectItem>
-                  <SelectItem value="allow">Allowed</SelectItem>
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field className="max-w-sm">
-            <FieldLabel htmlFor={`${idPrefix}-guardrail-event-reference`}>
-              Trace or reference
-            </FieldLabel>
-            <Input
-              defaultValue={referenceId}
-              id={`${idPrefix}-guardrail-event-reference`}
-              name="reference_id"
-              placeholder="Trace ID or event reference"
-            />
-          </Field>
-          <Button type="submit" variant="outline">
-            Apply filters
-          </Button>
-        </FieldGroup>
-      </form>
+      <GuardrailEventFilters action={action} referenceId={referenceId} />
       <AdminDataGrid
         ariaLabel="Guardrail evaluations"
         emptyState={

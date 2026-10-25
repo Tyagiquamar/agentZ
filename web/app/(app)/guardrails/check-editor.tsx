@@ -2,20 +2,15 @@
 
 import { useId, useState } from "react"
 import { flushSync } from "react-dom"
-import { ArrowDown, ArrowUp, ChevronDown, MoreHorizontal, Trash2 } from "lucide-react"
+import { useSortable } from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
+import { ArrowDown, ArrowUp, Cable, ChevronDown, GripVertical, Regex, Trash2 } from "lucide-react"
 import type { GuardrailCheck, GuardrailConnection } from "@/lib/gateway/client"
 import type { GuardrailActionScope } from "@/data/guardrail.actions"
 import { GuardrailProviderResources } from "./provider-resources"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import {
   Field,
   FieldDescription,
@@ -46,29 +41,29 @@ export function CheckEditor({
   check,
   connections,
   disabled,
+  reorderable,
   expanded,
   index,
-  count,
   scope,
   validationVisible,
   onChange,
   onExpandedChange,
-  onMove,
   onRemove,
 }: {
   check: GuardrailCheck
   connections: GuardrailConnection[]
   disabled: boolean
+  reorderable: boolean
   expanded: boolean
   index: number
-  count: number
   scope: GuardrailActionScope
   validationVisible: boolean
   onChange: (check: GuardrailCheck) => void
   onExpandedChange: (open: boolean) => void
-  onMove: (direction: -1 | 1) => void
   onRemove: () => void
 }) {
+  const { setNodeRef, setActivatorNodeRef, transform, transition, attributes, listeners } =
+    useSortable({ id: check.id, disabled: disabled || !reorderable })
   const [advanced, setAdvanced] = useState(false)
   const connection = connections.find(
     (item) => item.name === check.connection?.name && item.scope === check.connection.scope
@@ -81,7 +76,15 @@ export function CheckEditor({
   const id = useId()
 
   return (
-    <div className="relative border-b border-border/60 last:border-b-0">
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition: transition,
+      }}
+      data-expanded={expanded || undefined}
+      className="-mx-4 border-b px-4 transition-colors last:border-b-0 data-[expanded]:bg-primary/5 motion-reduce:transition-none"
+    >
       <details
         className="group/check"
         open={expanded}
@@ -90,15 +93,37 @@ export function CheckEditor({
           if (event.target === event.currentTarget) onExpandedChange(event.currentTarget.open)
         }}
       >
-        <summary className="-mx-2 flex cursor-pointer list-none items-center gap-3 rounded-md px-2 py-4 pr-10 transition-colors marker:hidden hover:bg-muted/35 focus-visible:outline-2 focus-visible:outline-ring motion-reduce:transition-none [&::-webkit-details-marker]:hidden">
-          <span
-            aria-hidden
-            className="w-4 shrink-0 text-center font-mono text-[11px] text-muted-foreground/70 tabular-nums"
-          >
-            {index + 1}
-          </span>
+        <summary className="group/summary flex cursor-pointer list-none items-center gap-3 py-3 transition-colors marker:hidden hover:bg-muted/35 focus-visible:outline-2 focus-visible:outline-ring motion-reduce:transition-none [&::-webkit-details-marker]:hidden">
+          {disabled || !reorderable ? (
+            <span
+              aria-hidden
+              className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary"
+            >
+              {check.regex ? <Regex className="size-4" /> : <Cable className="size-4" />}
+            </span>
+          ) : (
+            <Button
+              ref={setActivatorNodeRef}
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="group/grip relative size-8 shrink-0 cursor-grab touch-none bg-primary/10 text-primary active:cursor-grabbing"
+              aria-label={`Reorder check ${index + 1}`}
+              {...attributes}
+              {...listeners}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <span className="flex group-hover/summary:opacity-0 group-focus-visible/grip:opacity-0 group-aria-pressed/grip:opacity-0">
+                {check.regex ? <Regex /> : <Cable />}
+              </span>
+              <GripVertical className="absolute opacity-0 group-hover/summary:opacity-100 group-focus-visible/grip:opacity-100 group-aria-pressed/grip:opacity-100" />
+            </Button>
+          )}
           <span className="flex min-w-0 flex-1 flex-col gap-1">
-            <span className="truncate text-sm font-medium">{check.name || "New check"}</span>
+            <span className="truncate text-sm font-medium">
+              {check.name ||
+                (check.regex ? "Regex check" : connection?.displayName || "Provider check")}
+            </span>
             <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
               <span className="inline-flex shrink-0 items-center gap-1">
                 {check.phase === "input" ? (
@@ -106,7 +131,7 @@ export function CheckEditor({
                 ) : (
                   <ArrowUp aria-hidden className="size-3" />
                 )}
-                {check.phase === "input" ? "Input" : "Output"}
+                {check.phase === "input" ? "Model input" : "Model output"}
               </span>
               <span aria-hidden className="text-muted-foreground/50">
                 ·
@@ -116,6 +141,11 @@ export function CheckEditor({
                   ? "Regex"
                   : (connection?.displayName ?? check.connection?.name ?? "Checker")}
               </span>
+              {check.mode === "enforce" && check.action !== "mask" ? (
+                <Badge variant={check.regex ? "destructive" : "secondary"}>
+                  {check.regex ? "Block" : "Enforce"}
+                </Badge>
+              ) : null}
               {check.mode === "audit" ? (
                 <Badge className="text-[11px]" variant="secondary">
                   Audit
@@ -142,25 +172,157 @@ export function CheckEditor({
             aria-hidden
             className="size-3.5 shrink-0 text-muted-foreground/70 transition-transform duration-150 group-open/check:rotate-180 motion-reduce:transition-none"
           />
+          {!disabled ? (
+            <Button
+              aria-label={`Delete ${check.name || "check"}`}
+              size="icon-sm"
+              type="button"
+              variant="destructive"
+              onClick={(event) => {
+                event.stopPropagation()
+                onRemove()
+              }}
+            >
+              <Trash2 />
+            </Button>
+          ) : null}
         </summary>
-        <div className="pt-1 pb-6 motion-safe:group-open/check:animate-in motion-safe:group-open/check:duration-150 motion-safe:group-open/check:fade-in motion-safe:group-open/check:slide-in-from-top-1 sm:pl-7">
+        <div className="pt-1 pb-4 motion-safe:group-open/check:animate-in motion-safe:group-open/check:duration-150 motion-safe:group-open/check:fade-in motion-safe:group-open/check:slide-in-from-top-1">
           <FieldGroup className="[&_[data-slot=field-description]]:text-xs">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field>
-                <FieldLabel htmlFor={`${id}-name`} required>
-                  Label
-                </FieldLabel>
-                <Input
+            <Field>
+              <FieldLabel htmlFor={`${id}-name`} required>
+                Check name
+              </FieldLabel>
+              <Input
+                disabled={disabled}
+                id={`${id}-name`}
+                maxLength={128}
+                placeholder="e.g. Block sensitive identifiers"
+                onChange={(event) => onChange({ ...check, name: event.target.value })}
+                required
+                value={check.name}
+              />
+            </Field>
+            <FieldGroup>
+              {connections.length > 0 || check.connection ? (
+                <Field>
+                  <FieldLabel htmlFor={`${id}-detector`}>Detection method</FieldLabel>
+                  <Select
+                    disabled={disabled}
+                    onValueChange={(value) => {
+                      if (value === "regex") {
+                        onChange({
+                          ...check,
+                          connection: undefined,
+                          regex: { patterns: [""] },
+                          guardrailId: undefined,
+                          guardrailVersion: undefined,
+                          template: undefined,
+                        })
+                        return
+                      }
+                      const selected = connections.find(
+                        (item) => `${item.scope}/${item.name}` === value
+                      )
+                      if (selected)
+                        onChange({
+                          ...check,
+                          regex: undefined,
+                          connection: { scope: selected.scope, name: selected.name },
+                          action: "deny",
+                          guardrailId: undefined,
+                          guardrailVersion: undefined,
+                          template: undefined,
+                          phase: selected.provider === "OpenAI" ? "input" : check.phase,
+                          scopes:
+                            check.phase === "output" && selected.provider !== "OpenAI"
+                              ? ["conversation"]
+                              : ["instructions", "conversation"],
+                        })
+                    }}
+                    value={
+                      check.regex
+                        ? "regex"
+                        : check.connection
+                          ? `${check.connection.scope}/${check.connection.name}`
+                          : ""
+                    }
+                  >
+                    <SelectTrigger id={`${id}-detector`} className="w-full">
+                      <SelectValue placeholder="Select a checker connection" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectItem value="regex">Regular expression</SelectItem>
+                        {check.connection && !connection ? (
+                          <SelectItem value={`${check.connection.scope}/${check.connection.name}`}>
+                            {check.connection.scope} / {check.connection.name}
+                          </SelectItem>
+                        ) : null}
+                        {connections.map((item) => (
+                          <SelectItem
+                            key={`${item.scope}/${item.name}`}
+                            value={`${item.scope}/${item.name}`}
+                          >
+                            {item.displayName} · {item.provider}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </Field>
+              ) : null}
+              {check.regex ? (
+                <Field>
+                  <FieldLabel htmlFor={`${id}-patterns`} required>
+                    Patterns to match
+                  </FieldLabel>
+                  <Textarea
+                    className="min-h-24 font-mono text-sm"
+                    disabled={disabled}
+                    id={`${id}-patterns`}
+                    onChange={(event) =>
+                      onChange({
+                        ...check,
+                        regex: { ...check.regex, patterns: event.target.value.split("\n") },
+                      })
+                    }
+                    placeholder={"e.g. confidential\ninternal-only"}
+                    required
+                    value={check.regex.patterns.join("\n")}
+                  />
+                  <FieldDescription>One regular expression per line.</FieldDescription>
+                </Field>
+              ) : null}
+              {disabled && check.connection && !connection ? (
+                <FieldDescription>
+                  Referenced connection: {check.connection.scope} / {check.connection.name}.
+                  {check.guardrailId ? (
+                    <span className="block">Guardrail ID: {check.guardrailId}</span>
+                  ) : null}
+                  {check.guardrailVersion ? (
+                    <span className="block">Guardrail version: {check.guardrailVersion}</span>
+                  ) : null}
+                  {check.template ? (
+                    <span className="block">Template: {check.template}</span>
+                  ) : null}
+                </FieldDescription>
+              ) : null}
+              {connection ? (
+                <GuardrailProviderResources
+                  check={check}
+                  connection={connection}
                   disabled={disabled}
-                  id={`${id}-name`}
-                  maxLength={128}
-                  onChange={(event) => onChange({ ...check, name: event.target.value })}
-                  required
-                  value={check.name}
+                  key={`${connection.scope}/${connection.name}`}
+                  onChange={onChange}
+                  scope={scope}
+                  validationVisible={validationVisible}
                 />
-              </Field>
+              ) : null}
+            </FieldGroup>
+            <div className="grid items-start gap-4 sm:grid-cols-2">
               <Field>
-                <FieldLabel htmlFor={`${id}-phase`}>Phase</FieldLabel>
+                <FieldLabel htmlFor={`${id}-phase`}>Run on</FieldLabel>
                 <Select
                   disabled={disabled}
                   onValueChange={(value) => {
@@ -183,181 +345,72 @@ export function CheckEditor({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectGroup>
-                      <SelectItem value="input">Input</SelectItem>
+                      <SelectItem value="input">Model input</SelectItem>
                       <SelectItem disabled={connection?.provider === "OpenAI"} value="output">
-                        Output
+                        Model output
                       </SelectItem>
                     </SelectGroup>
                   </SelectContent>
                 </Select>
               </Field>
-            </div>
-            <Field>
-              <FieldLabel htmlFor={`${id}-detector`}>Checker</FieldLabel>
-              <Select
-                disabled={disabled}
-                onValueChange={(value) => {
-                  if (value === "regex") {
-                    onChange({
-                      ...check,
-                      connection: undefined,
-                      regex: { patterns: [""] },
-                      guardrailId: undefined,
-                      guardrailVersion: undefined,
-                      template: undefined,
-                    })
-                    return
-                  }
-                  const selected = connections.find(
-                    (item) => `${item.scope}/${item.name}` === value
-                  )
-                  if (selected)
-                    onChange({
-                      ...check,
-                      regex: undefined,
-                      connection: { scope: selected.scope, name: selected.name },
-                      phase: selected.provider === "OpenAI" ? "input" : check.phase,
-                      action: "deny",
-                      guardrailId: undefined,
-                      guardrailVersion: undefined,
-                      template: undefined,
-                      scopes:
-                        check.phase === "output" && selected.provider !== "OpenAI"
-                          ? ["conversation"]
-                          : ["instructions", "conversation"],
-                    })
-                }}
-                value={
-                  check.regex
-                    ? "regex"
-                    : check.connection
-                      ? `${check.connection.scope}/${check.connection.name}`
-                      : ""
-                }
-              >
-                <SelectTrigger id={`${id}-detector`} className="w-full">
-                  <SelectValue placeholder="Select a checker connection" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectItem value="regex">Regex · no connection required</SelectItem>
-                    {check.connection && !connection ? (
-                      <SelectItem value={`${check.connection.scope}/${check.connection.name}`}>
-                        {check.connection.scope} / {check.connection.name}
-                      </SelectItem>
-                    ) : null}
-                    {connections.map((item) => (
-                      <SelectItem
-                        key={`${item.scope}/${item.name}`}
-                        value={`${item.scope}/${item.name}`}
-                      >
-                        {item.displayName} · {item.provider}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </Field>
-            {check.regex ? (
-              <Field>
-                <FieldLabel htmlFor={`${id}-patterns`} required>
-                  Regex patterns
-                </FieldLabel>
-                <Textarea
-                  className="bg-muted/20 font-mono"
-                  disabled={disabled}
-                  id={`${id}-patterns`}
-                  onChange={(event) =>
-                    onChange({
-                      ...check,
-                      regex: { ...check.regex, patterns: event.target.value.split("\n") },
-                    })
-                  }
-                  placeholder="One pattern per line"
-                  required
-                  value={check.regex.patterns.join("\n")}
-                />
-                <FieldDescription>One pattern per line.</FieldDescription>
-              </Field>
-            ) : null}
-            {disabled && check.connection && !connection ? (
-              <FieldDescription>
-                Referenced connection: {check.connection.scope} / {check.connection.name}.
-                {check.guardrailId ? (
-                  <span className="block">Guardrail ID: {check.guardrailId}</span>
-                ) : null}
-                {check.guardrailVersion ? (
-                  <span className="block">Guardrail version: {check.guardrailVersion}</span>
-                ) : null}
-                {check.template ? <span className="block">Template: {check.template}</span> : null}
-              </FieldDescription>
-            ) : null}
-            {connection ? (
-              <GuardrailProviderResources
-                check={check}
-                connection={connection}
-                disabled={disabled}
-                key={`${connection.scope}/${connection.name}`}
-                onChange={onChange}
-                scope={scope}
-                validationVisible={validationVisible}
-              />
-            ) : null}
 
-            <Field>
-              <FieldLabel htmlFor={`${id}-action`}>Action</FieldLabel>
-              <Select
-                disabled={disabled}
-                onValueChange={(value) => {
-                  if (value === "audit") onChange({ ...check, mode: "audit" })
-                  if (value === "enforce") onChange({ ...check, mode: "enforce", action: "deny" })
-                }}
-                value={
-                  check.mode === "audit" ? "audit" : check.action === "mask" ? "mask" : "enforce"
-                }
-              >
-                <SelectTrigger id={`${id}-action`} className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectItem value="enforce">Enforce</SelectItem>
-                    {check.action === "mask" ? (
-                      <SelectItem disabled value="mask">
-                        Mask (existing configuration)
-                      </SelectItem>
-                    ) : null}
-                    <SelectItem value="audit">Audit only</SelectItem>
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-              {check.mode === "audit" ? (
-                <FieldDescription>
-                  Records findings without blocking or changing content.
-                </FieldDescription>
-              ) : check.regex && check.action === "mask" ? (
-                <FieldDescription>
-                  Matched text uses the gateway&apos;s standard redaction.
-                </FieldDescription>
-              ) : !check.regex ? (
-                <FieldDescription>
-                  The provider controls detection and may modify content as part of enforcement.
-                </FieldDescription>
-              ) : null}
-            </Field>
+              <Field>
+                <FieldLabel htmlFor={`${id}-action`}>
+                  {check.regex ? "On a match" : "On a finding"}
+                </FieldLabel>
+                <Select
+                  disabled={disabled}
+                  onValueChange={(value) => {
+                    if (value === "audit") onChange({ ...check, mode: "audit" })
+                    if (value === "enforce") onChange({ ...check, mode: "enforce", action: "deny" })
+                  }}
+                  value={
+                    check.mode === "audit" ? "audit" : check.action === "mask" ? "mask" : "enforce"
+                  }
+                >
+                  <SelectTrigger id={`${id}-action`} className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value="enforce">Enforce</SelectItem>
+                      {check.action === "mask" ? (
+                        <SelectItem disabled value="mask">
+                          Mask (existing configuration)
+                        </SelectItem>
+                      ) : null}
+                      <SelectItem value="audit">Audit only</SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                {check.mode === "audit" ? (
+                  <FieldDescription>
+                    Records findings without blocking or changing content.
+                  </FieldDescription>
+                ) : check.regex && check.action === "mask" ? (
+                  <FieldDescription>
+                    Matched text uses the gateway&apos;s standard redaction.
+                  </FieldDescription>
+                ) : !check.regex ? (
+                  <FieldDescription>
+                    The provider controls detection and may modify content as part of enforcement.
+                  </FieldDescription>
+                ) : null}
+              </Field>
+            </div>
             <details
-              className="group/advanced pt-1"
+              className="group/advanced"
               open={advanced}
               onInvalidCapture={() => flushSync(() => setAdvanced(true))}
               onToggle={(event) => {
                 if (event.target === event.currentTarget) setAdvanced(event.currentTarget.open)
               }}
             >
-              <summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-medium text-muted-foreground transition-colors marker:hidden hover:text-foreground motion-reduce:transition-none [&::-webkit-details-marker]:hidden">
+              <summary className="group/summary flex cursor-pointer list-none items-center gap-2 text-sm font-medium text-muted-foreground transition-colors marker:hidden hover:text-foreground motion-reduce:transition-none [&::-webkit-details-marker]:hidden">
                 <ChevronDown className="size-3.5 transition-transform group-open/advanced:rotate-180 motion-reduce:transition-none" />
-                Advanced
+                Advanced settings
               </summary>
-              <FieldGroup className="pt-5">
+              <FieldGroup className="pt-4">
                 <FieldSet>
                   <FieldLegend variant="label">Inspected content</FieldLegend>
                   {check.phase === "input" ? (
@@ -432,35 +485,6 @@ export function CheckEditor({
           </FieldGroup>
         </div>
       </details>
-      {!disabled ? (
-        <div className="absolute top-5 -right-1">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                aria-label={`Actions for ${check.name || "new check"}`}
-                size="icon-sm"
-                type="button"
-                variant="ghost"
-              >
-                <MoreHorizontal />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuGroup>
-                <DropdownMenuItem disabled={index === 0} onSelect={() => onMove(-1)}>
-                  <ArrowUp /> Move up
-                </DropdownMenuItem>
-                <DropdownMenuItem disabled={index === count - 1} onSelect={() => onMove(1)}>
-                  <ArrowDown /> Move down
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={onRemove} variant="destructive">
-                  <Trash2 /> Delete check
-                </DropdownMenuItem>
-              </DropdownMenuGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      ) : null}
     </div>
   )
 }

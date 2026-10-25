@@ -76,10 +76,7 @@ export function SubjectGuardrails({
         </FieldDescription>
         {mandatory.length ? (
           mandatory.map(({ name, policy }) => (
-            <div
-              className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 py-3 last:border-b-0"
-              key={name}
-            >
+            <div className="flex flex-wrap items-center justify-between gap-2 py-3" key={name}>
               <div className="flex min-w-0 flex-1 items-center gap-2">
                 <LockKeyhole aria-hidden className="size-4 shrink-0" />
                 <span className="min-w-0 break-words">{policy?.displayName ?? name}</span>
@@ -147,7 +144,7 @@ export function SubjectGuardrails({
             const checked = selectedIndex !== -1
             return (
               <Field
-                className="border-b border-border/40 py-3 last:border-b-0 data-[selected=true]:bg-muted/20"
+                className="py-3 data-[selected=true]:bg-muted/20"
                 data-selected={checked}
                 key={`${policy.scope}/${policy.name}`}
                 orientation="horizontal"
@@ -263,7 +260,7 @@ export function SubjectGuardrails({
         {pending ? "Resolving…" : "Preview effective checks"}
       </Button>
       {effective ? (
-        <div className="flex flex-col gap-3 border-t border-dotted pt-5" aria-live="polite">
+        <div className="flex flex-col gap-3 pt-5" aria-live="polite">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-sm font-medium">Effective checks</h3>
             <Badge variant="secondary">{effective.checks.length}</Badge>

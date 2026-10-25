@@ -2207,7 +2207,7 @@ function TimelineRowView({
               case "tool-group":
                 return (
                   <div className={spacing} key={group.key}>
-                    <div className="ml-1 max-w-full min-w-0 space-y-px overflow-hidden border-l border-border/60 py-0.5 pl-3">
+                    <div className="max-w-full min-w-0 space-y-px overflow-hidden py-0.5">
                       {group.entries.map((entry) => {
                         const toolEntry = entry.toolEntries[0]
                         if (!toolEntry) return null

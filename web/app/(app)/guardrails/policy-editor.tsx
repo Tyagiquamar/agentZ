@@ -2,8 +2,25 @@
 
 import { useId, useState, useTransition } from "react"
 import { flushSync } from "react-dom"
+import {
+  closestCenter,
+  DndContext,
+  KeyboardSensor,
+  MouseSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core"
+import { restrictToParentElement, restrictToVerticalAxis } from "@dnd-kit/modifiers"
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable"
 import { useRouter } from "next/navigation"
-import { Cable, ChevronDown, Plus, Regex, ShieldCheck } from "lucide-react"
+import { Cable, ChevronDown, Plus, Regex, BrickWallShield } from "lucide-react"
 import { toast } from "sonner"
 import type {
   GuardrailCheck,
@@ -66,14 +83,29 @@ export function PolicyEditor({
   const [connections, setConnections] = useState(initialConnections)
   const [addingConnection, setAddingConnection] = useState(false)
   const [editingCheck, setEditingCheck] = useState<string>()
-  const [dirty, setDirty] = useState(false)
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState("")
   const [validationVisible, setValidationVisible] = useState(false)
   const readOnly = policy !== undefined && !policy.canModify
 
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  )
+
+  function reorder({ active, over }: DragEndEvent) {
+    if (readOnly || pending || !over || active.id === over.id) return
+    setDraft((current) => {
+      const from = current.checks.findIndex((check) => check.id === active.id)
+      const to = current.checks.findIndex((check) => check.id === over.id)
+      if (from < 0 || to < 0) return current
+      return { ...current, checks: arrayMove(current.checks, from, to) }
+    })
+  }
+
   function close() {
-    if (pending || (dirty && !window.confirm("Discard unsaved policy changes?"))) return
+    if (pending) return
     if (onCancel) onCancel()
     else if (basePath) router.push(`${basePath}/policies`)
   }
@@ -94,7 +126,6 @@ export function PolicyEditor({
     }
     setDraft({ ...draft, checks: [...draft.checks, check] })
     setEditingCheck(check.id)
-    setDirty(true)
   }
 
   return (
@@ -104,17 +135,15 @@ export function PolicyEditor({
         if (!open) close()
       }}
     >
-      <SheetContent className="flex w-full flex-col gap-0 sm:max-w-3xl">
-        <SheetHeader className="gap-1.5 border-b-0 px-6 py-5 pr-12">
-          <SheetTitle className="flex items-center gap-2.5 text-lg tracking-tight">
-            <ShieldCheck aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+      <SheetContent size="lg" className="gap-0 overflow-hidden">
+        <SheetHeader>
+          <SheetTitle className="flex items-center gap-2">
+            <BrickWallShield aria-hidden className="size-4 shrink-0 text-muted-foreground" />
             <span className="min-w-0 truncate" title={policy?.displayName}>
               {policy?.displayName ?? "New policy"}
             </span>
           </SheetTitle>
-          <SheetDescription
-            className={policy?.mandatory || readOnly ? "pl-6.5 text-xs" : "sr-only"}
-          >
+          <SheetDescription className={policy?.mandatory || readOnly ? undefined : "sr-only"}>
             {readOnly
               ? "Read only."
               : policy?.mandatory
@@ -123,9 +152,8 @@ export function PolicyEditor({
           </SheetDescription>
         </SheetHeader>
         <form
-          className="flex min-h-0 min-w-0 flex-1 flex-col gap-7 overflow-y-auto px-6 pb-6"
+          className="flex min-h-0 min-w-0 flex-1 flex-col gap-5 overflow-y-auto p-4"
           id={`${id}-form`}
-          onChange={() => setDirty(true)}
           onSubmit={(event) => {
             event.preventDefault()
             setError("")
@@ -156,7 +184,6 @@ export function PolicyEditor({
                 setError(result.error.message)
                 return
               }
-              setDirty(false)
               toast.success("Policy saved")
               onSaved?.(result.data)
               if (basePath) router.push(`${basePath}/policies`)
@@ -238,59 +265,64 @@ export function PolicyEditor({
               ) : null}
             </div>
             {draft.checks.length ? (
-              <div>
-                {draft.checks.map((check, index) => (
-                  <CheckEditor
-                    check={check}
-                    connections={connections}
-                    count={draft.checks.length}
-                    disabled={readOnly || pending}
-                    expanded={editingCheck === check.id}
-                    index={index}
-                    scope={scope}
-                    validationVisible={validationVisible}
-                    key={check.id}
-                    onExpandedChange={(open) => {
-                      if (open) setEditingCheck(check.id)
-                      else
-                        setEditingCheck((current) => (current === check.id ? undefined : current))
-                    }}
-                    onChange={(value) => {
-                      setDraft({
-                        ...draft,
-                        checks: draft.checks.map((item) => (item.id === check.id ? value : item)),
-                      })
-                      setDirty(true)
-                    }}
-                    onMove={(direction) => {
-                      const checks = [...draft.checks]
-                      const next = index + direction
-                      const target = checks[next]
-                      if (!target) return
-                      checks[index] = target
-                      checks[next] = check
-                      setDraft({ ...draft, checks })
-                      setDirty(true)
-                    }}
-                    onRemove={() => {
-                      setDraft({
-                        ...draft,
-                        checks: draft.checks.filter((item) => item.id !== check.id),
-                      })
-                      setEditingCheck(undefined)
-                      setDirty(true)
-                    }}
-                  />
-                ))}
-              </div>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                modifiers={[restrictToVerticalAxis, restrictToParentElement]}
+                onDragStart={() => flushSync(() => setEditingCheck(undefined))}
+                onDragEnd={reorder}
+              >
+                <SortableContext
+                  items={draft.checks.map((check) => check.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <div>
+                    {draft.checks.map((check, index) => (
+                      <CheckEditor
+                        reorderable={draft.checks.length > 1}
+                        check={check}
+                        connections={connections}
+                        disabled={readOnly || pending}
+                        expanded={editingCheck === check.id}
+                        index={index}
+                        scope={scope}
+                        validationVisible={validationVisible}
+                        key={check.id}
+                        onExpandedChange={(open) => {
+                          if (open) setEditingCheck(check.id)
+                          else
+                            setEditingCheck((current) =>
+                              current === check.id ? undefined : current
+                            )
+                        }}
+                        onChange={(value) => {
+                          setDraft({
+                            ...draft,
+                            checks: draft.checks.map((item) =>
+                              item.id === check.id ? value : item
+                            ),
+                          })
+                        }}
+                        onRemove={() => {
+                          setDraft({
+                            ...draft,
+                            checks: draft.checks.filter((item) => item.id !== check.id),
+                          })
+                          setEditingCheck(undefined)
+                        }}
+                      />
+                    ))}
+                  </div>
+                </SortableContext>
+              </DndContext>
             ) : (
-              <p className="border-y border-dotted border-border/80 py-8 text-center text-sm text-muted-foreground">
+              <p className="rounded-lg border-2 border-dashed border-muted-foreground/50 p-4 text-center text-sm text-muted-foreground">
                 Add a check to get started.
               </p>
             )}
           </section>
           <details
-            className="group/details border-t border-dotted border-border/80 pt-4"
+            className="group/details"
             onInvalidCapture={(event) => {
               event.currentTarget.open = true
             }}
@@ -334,7 +366,7 @@ export function PolicyEditor({
           </details>
           {error ? <FieldError>{error}</FieldError> : null}
         </form>
-        <SheetFooter className="flex-row justify-end border-t border-border/60 bg-muted/15 px-6 py-4">
+        <SheetFooter className="shrink-0 flex-row justify-end border-t">
           <Button disabled={pending} onClick={close} type="button" variant="ghost">
             {readOnly ? "Close" : "Cancel"}
           </Button>

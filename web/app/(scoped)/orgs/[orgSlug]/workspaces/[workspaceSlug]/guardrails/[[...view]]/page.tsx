@@ -1,11 +1,9 @@
 import { Suspense } from "react"
 import { connection } from "next/server"
+import { RememberRoute } from "@/data/route-memory"
 import { AdministrationLoadingState, AdministrationState } from "@/components/administration"
 import { GuardrailsPage } from "@/app/(app)/guardrails/guardrails-page"
-import { RememberRoute } from "@/data/route-memory"
 import { getWorkspaceScope } from "@/data/workspaces"
-
-export const metadata = { title: "Guardrails" }
 
 export default function WorkspaceGuardrailsPage(
   props: PageProps<"/orgs/[orgSlug]/workspaces/[workspaceSlug]/guardrails/[[...view]]">
@@ -34,11 +32,6 @@ async function WorkspaceGuardrails({
         canAdminister={result.scope.organization.superadmin || capabilities.administer}
         connectionCapabilities={capabilities.guardrail_connections}
         eventCapabilities={capabilities.guardrail_events}
-        pageScope={{
-          kind: "workspace",
-          organizationName: result.scope.organization.name,
-          workspaceName: result.workspace.name,
-        }}
         policyCapabilities={capabilities.guardrail_policies}
         searchParams={await searchParams}
         view={view ?? []}

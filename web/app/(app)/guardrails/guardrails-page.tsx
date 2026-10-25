@@ -1,16 +1,7 @@
 import type { ReactNode } from "react"
-import type { Route } from "next"
-import Link from "next/link"
 import { notFound } from "next/navigation"
-import { Plus } from "lucide-react"
-import { Button } from "@/components/ui/button"
 import { z } from "zod"
-import {
-  AdministrationPageHeader,
-  AdministrationState,
-  type AdministrationPageScope,
-} from "@/components/administration"
-import { RouteTabs } from "@/components/route-tabs"
+import { AdministrationState } from "@/components/administration"
 import {
   listGuardrailConnectionsQuery,
   listGuardrailPoliciesQuery,
@@ -27,7 +18,6 @@ import {
   GuardrailPolicyList,
   GuardrailConnectionList,
   GuardrailRolloutRefresh,
-  NewGuardrailConnectionButton,
 } from "./resource-list"
 import { PolicyEditor } from "./policy-editor"
 import { GuardrailOrganizationSettings } from "./settings"
@@ -39,7 +29,6 @@ export async function GuardrailsPage({
   connectionCapabilities,
   eventCapabilities,
   policyCapabilities,
-  pageScope,
   view,
   searchParams,
   workspaceId,
@@ -49,7 +38,6 @@ export async function GuardrailsPage({
   connectionCapabilities: ResourceCapabilities
   eventCapabilities: ResourceCapabilities
   policyCapabilities: ResourceCapabilities
-  pageScope: AdministrationPageScope
   view: string[]
   searchParams: Record<string, string | string[] | undefined>
   workspaceId?: string
@@ -60,32 +48,8 @@ export async function GuardrailsPage({
   if (!["policies", "connections", "events", "settings"].includes(section) || view.length > 2)
     notFound()
   if (section !== "policies" && section !== "events" && view.length > 1) notFound()
-  const tabs = [
-    ...(policyCapabilities.read
-      ? [{ label: "Policies", href: `${basePath}/policies` as Route }]
-      : []),
-    ...(connectionCapabilities.read
-      ? [{ label: "Connections", href: `${basePath}/connections` as Route }]
-      : []),
-    ...(eventCapabilities.read ? [{ label: "Events", href: `${basePath}/events` as Route }] : []),
-    ...(!workspaceId && canAdminister && policyCapabilities.read
-      ? [{ label: "Settings", href: `${basePath}/settings` as Route }]
-      : []),
-  ]
   const scope = { workspaceId }
   let content: ReactNode
-  let actions: ReactNode
-  if (section === "connections" && connectionCapabilities.create)
-    actions = <NewGuardrailConnectionButton scope={scope} />
-  if (section === "policies" && view[1] === undefined && policyCapabilities.create)
-    actions = (
-      <Button asChild>
-        <Link href={`${basePath}/policies/new`}>
-          <Plus />
-          New policy
-        </Link>
-      </Button>
-    )
 
   if (section === "events") {
     if (!eventCapabilities.read) return <AdministrationState kind="forbidden" />
@@ -227,13 +191,5 @@ export async function GuardrailsPage({
     )
   }
 
-  return (
-    <main className="flex min-w-0 flex-1 flex-col gap-6">
-      <AdministrationPageHeader actions={actions} scope={pageScope} title="Guardrails" />
-      <div className="px-4 md:px-6">
-        <RouteTabs label="Guardrails" tabs={tabs} />
-      </div>
-      {content}
-    </main>
-  )
+  return content
 }

@@ -13,14 +13,21 @@ import {
   MoreHorizontal,
   Pencil,
   Plus,
-  ShieldCheck,
+  BrickWallShield,
   Trash2,
   XCircle,
   type LucideIcon,
 } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
-import type { GuardrailConnection, GuardrailPolicy, GuardrailStatus } from "@/lib/gateway/client"
+import {
+  listGuardrailConnections,
+  type GuardrailConnection,
+  type GuardrailPolicy,
+  type GuardrailStatus,
+} from "@/lib/gateway/client"
+import { LoadingButton } from "@/components/interior/loading-button"
+import { PolicyEditor } from "./policy-editor"
 import {
   deleteGuardrailConnectionAction,
   deleteGuardrailPolicyAction,
@@ -64,6 +71,57 @@ const statusMeta = {
   }
 >
 
+export function NewGuardrailPolicyButton({
+  scope,
+  canReadConnections,
+  canCreateConnection,
+}: {
+  scope: GuardrailActionScope
+  canReadConnections: boolean
+  canCreateConnection: boolean
+}) {
+  const [connections, setConnections] = useState<GuardrailConnection[]>()
+  const [pending, startTransition] = useTransition()
+
+  return (
+    <>
+      <LoadingButton
+        pending={pending}
+        type="button"
+        onClick={() =>
+          startTransition(async () => {
+            try {
+              const result = canReadConnections
+                ? await listGuardrailConnections({
+                    headers: scope.workspaceId
+                      ? { "X-AgentZ-Workspace-ID": scope.workspaceId }
+                      : undefined,
+                    throwOnError: true,
+                  })
+                : undefined
+              setConnections(result?.data.items ?? [])
+            } catch {
+              toast.error("Could not load guardrail connections")
+            }
+          })
+        }
+      >
+        <Plus />
+        New policy
+      </LoadingButton>
+      {connections ? (
+        <PolicyEditor
+          canCreateConnection={canCreateConnection}
+          connections={connections}
+          scope={scope}
+          onCancel={() => setConnections(undefined)}
+          onSaved={() => setConnections(undefined)}
+        />
+      ) : null}
+    </>
+  )
+}
+
 export function NewGuardrailConnectionButton({ scope }: { scope: GuardrailActionScope }) {
   const [open, setOpen] = useState(false)
   return (
@@ -98,7 +156,7 @@ export function GuardrailPolicyList({
         header: "Name",
         cell: ({ row }) => (
           <div className="flex min-w-0 items-center gap-3 py-1">
-            <ShieldCheck aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+            <BrickWallShield aria-hidden className="size-4 shrink-0 text-muted-foreground" />
             <div className="flex min-w-0 flex-col gap-1">
               <div className="flex min-w-0 items-center gap-2">
                 <span className="truncate font-medium">{row.original.displayName}</span>
