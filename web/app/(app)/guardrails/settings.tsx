@@ -8,7 +8,6 @@ import type { GuardrailPolicy, GuardrailSettings } from "@/lib/gateway/client"
 import { saveGuardrailSettingsAction } from "@/data/guardrail.actions"
 import { LoadingButton } from "@/components/interior/loading-button"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -138,23 +137,6 @@ export function GuardrailOrganizationSettings({
       ) : null}
       <FieldSet className="gap-5">
         <FieldLegend className="font-semibold">Event storage</FieldLegend>
-        <Field orientation="horizontal">
-          <FieldContent>
-            <FieldLabel htmlFor={`${idPrefix}-allow-guardrail-content`}>
-              Allow content capture
-            </FieldLabel>
-            <FieldDescription>
-              Sandboxes and external-client access must opt in separately. Event readers can view
-              captured content.
-            </FieldDescription>
-          </FieldContent>
-          <Switch
-            checked={settings.allowContentCapture}
-            disabled={!canModify || pending}
-            id={`${idPrefix}-allow-guardrail-content`}
-            onCheckedChange={(value) => setSettings({ ...settings, allowContentCapture: value })}
-          />
-        </Field>
         <Field>
           <FieldLabel htmlFor={`${idPrefix}-guardrail-retention`}>Retention in days</FieldLabel>
           <Input
@@ -169,8 +151,8 @@ export function GuardrailOrganizationSettings({
             type="number"
           />
           <FieldDescription>
-            Applies to metadata and captured content. Reducing retention deletes events older than
-            the new limit.
+            Applies to guardrail event metadata. Reducing retention deletes events older than the
+            new limit.
           </FieldDescription>
         </Field>
       </FieldSet>

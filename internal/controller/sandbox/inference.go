@@ -33,11 +33,11 @@ import (
 const sandboxNamespaceLabel = "agentz.accuknox.com/sandbox-namespace"
 
 func (r *Reconciler) reconcileInference(ctx context.Context, sandbox *agentzv1alpha1.Sandbox) (bool, error) {
-	bundle, err := guardrails.Resolve(ctx, r.Client, sandbox.Namespace, "sandbox/"+sandbox.Name, sandbox.Spec.Guardrails)
+	bundle, err := guardrails.Resolve(ctx, r.Client, sandbox.Namespace, sandbox.Spec.Guardrails)
 	if err != nil {
 		return false, fmt.Errorf("resolve guardrails: %w", err)
 	}
-	if err := bundle.ConfigureManagedDelivery(); err != nil {
+	if err := bundle.ValidateStreaming(); err != nil {
 		return false, err
 	}
 	providers := make(map[string]*agentzv1alpha1.InferenceProvider)
@@ -504,7 +504,7 @@ func (r *Reconciler) reconcileInferenceGateway(ctx context.Context, namespace st
 	}
 	egressTargets := make([]networkpolicy.Target, 0, len(providerKeys)+1)
 	for i := range owners {
-		bundle, err := guardrails.Resolve(ctx, r.Client, namespace, "sandbox/"+owners[i].Name, owners[i].Spec.Guardrails)
+		bundle, err := guardrails.Resolve(ctx, r.Client, namespace, owners[i].Spec.Guardrails)
 		if err != nil {
 			return err
 		}
@@ -665,6 +665,10 @@ func (r *Reconciler) inferenceTracing(namespace string) *agentgatewayv1alpha1.Tr
 				{
 					Name:       "agentz.guardrails",
 					Expression: "toJson(guardrails)",
+				},
+				{
+					Name:       "agentz.guardrail_revision",
+					Expression: `default(metadata.agentz_guardrail_revision, "")`,
 				},
 				{
 					Name:       "session.id",

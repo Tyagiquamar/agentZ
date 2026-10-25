@@ -2194,7 +2194,7 @@ function StepActions({ children }: { children: React.ReactNode }) {
 export function SandboxWizard({
   canCreateGuardrailPolicy,
   canCreateGuardrailConnection,
-  initialGuardrails = { policies: [], captureMode: "off" },
+  initialGuardrails = { policies: [] },
   guardrailConnections,
   guardrailPolicies,
   guardrailSettings,

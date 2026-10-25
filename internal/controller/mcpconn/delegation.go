@@ -300,7 +300,7 @@ func (r *ExtAuthRuntimeReconciler) reconcileDelegationTracing(ctx context.Contex
 	attrs := []agw.AttributeAdd{}
 	fields := []string{
 		"client_id", "app_name", "grant_id", "user_id", "organization_id", "workspace_id",
-		"resource_kind", "resource_namespace", "resource_name", "resource_uid", "target_id",
+		"resource_kind", "resource_namespace", "resource_name", "resource_uid", "target_id", "tenant_namespace",
 	}
 	for _, field := range fields {
 		attrs = append(attrs, agw.AttributeAdd{
@@ -316,6 +316,7 @@ func (r *ExtAuthRuntimeReconciler) reconcileDelegationTracing(ctx context.Contex
 	if gateway == inference.GatewayName {
 		attrs = append(attrs,
 			agw.AttributeAdd{Name: "agentz.guardrails", Expression: "toJson(guardrails)"},
+			agw.AttributeAdd{Name: "agentz.guardrail_revision", Expression: `default(metadata.agentz_guardrail_revision, "")`},
 			agw.AttributeAdd{
 				Name:       "session.id",
 				Expression: inferenceSessionExpression,

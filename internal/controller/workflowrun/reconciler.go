@@ -315,10 +315,11 @@ func (r *Reconciler) reconcileRunning(ctx context.Context, run *agentzv1alpha1.W
 		return ctrl.Result{RequeueAfter: runRequeueInterval}, nil
 	}
 
-	message, outcome, err := r.sessionTerminalMessage(ctx, run)
+	message, err := r.sessionTerminalMessage(ctx, run)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("inspect workflow session messages: %w", err)
 	}
+	failed := message != ""
 	if message == "" {
 		// on a fresh agent pod, OpenCode may briefly show no terminal message
 		// while the first async prompt is still starting up.
@@ -340,13 +341,9 @@ func (r *Reconciler) reconcileRunning(ctx context.Context, run *agentzv1alpha1.W
 			}
 			status.Phase = agentzv1alpha1.WorkflowRunPhaseUnacked
 			reason := agentzv1alpha1.WorkflowRunReasonUnacked
-			if outcome != nil {
+			if failed {
 				status.Phase = agentzv1alpha1.WorkflowRunPhaseFailed
-				status.GuardrailOutcome = outcome
-				reason = agentzv1alpha1.WorkflowRunReasonGuardrailDenied
-				if outcome.Code == "guardrail_unavailable" {
-					reason = agentzv1alpha1.WorkflowRunReasonGuardrailUnavailable
-				}
+				reason = agentzv1alpha1.WorkflowRunReasonFailed
 			}
 			status.Message = message
 			r.setTerminalStatus(
@@ -839,12 +836,12 @@ func (r *Reconciler) sessionIdle(ctx context.Context, run *agentzv1alpha1.Workfl
 	return err == nil && kind == "idle", nil
 }
 
-func (r *Reconciler) sessionTerminalMessage(ctx context.Context, run *agentzv1alpha1.WorkflowRun) (string, *agentzv1alpha1.GuardrailOutcome, error) {
+func (r *Reconciler) sessionTerminalMessage(ctx context.Context, run *agentzv1alpha1.WorkflowRun) (string, error) {
 	if run.Status.SessionID == "" {
-		return "", nil, nil
+		return "", nil
 	}
 	if r.GatewayClient == nil {
-		return "", nil, fmt.Errorf("gateway client is not configured")
+		return "", fmt.Errorf("gateway client is not configured")
 	}
 
 	limit := 20
@@ -858,10 +855,10 @@ func (r *Reconciler) sessionTerminalMessage(ctx context.Context, run *agentzv1al
 		gwreq.RequestEditor(r.TokenPath, run.Namespace),
 	)
 	if err != nil {
-		return "", nil, fmt.Errorf("list session messages: %w", err)
+		return "", fmt.Errorf("list session messages: %w", err)
 	}
 	if resp.JSON200 == nil {
-		return "", nil, nil
+		return "", nil
 	}
 
 	for _, msg := range slices.Backward(*resp.JSON200) {
@@ -878,65 +875,43 @@ func (r *Reconciler) sessionTerminalMessage(ctx context.Context, run *agentzv1al
 				continue
 			}
 			if *assistant.Finish == "tool-calls" || *assistant.Finish == "stop" {
-				return "", nil, nil
+				return "", nil
 			}
 		}
-		message, outcome := assistantFailure(assistant)
-		return message, outcome, nil
+		return assistantFailure(assistant), nil
 	}
-	return "", nil, nil
+	return "", nil
 }
 
-func assistantFailure(assistant gatewayapi.OpencodeAssistantMessage) (string, *agentzv1alpha1.GuardrailOutcome) {
+func assistantFailure(assistant gatewayapi.OpencodeAssistantMessage) string {
 	if assistant.Error == nil {
-		return "", nil
+		return ""
 	}
 	value, err := assistant.Error.ValueByDiscriminator()
 	if err != nil {
-		return "workflow session failed", nil
+		return "workflow session failed"
 	}
 	switch failure := value.(type) {
 	case gatewayapi.OpencodeProviderAuthError:
 		if failure.Data.ProviderID != "" {
-			return failure.Data.ProviderID + ": " + failure.Data.Message, nil
+			return failure.Data.ProviderID + ": " + failure.Data.Message
 		}
-		return failure.Data.Message, nil
+		return failure.Data.Message
 	case gatewayapi.OpencodeAPIError:
 		if failure.Data.StatusCode == nil {
-			return failure.Data.Message, nil
+			return failure.Data.Message
 		}
-		message := fmt.Sprintf("%s (status %d)", failure.Data.Message, *failure.Data.StatusCode)
-		if failure.Data.ResponseBody == nil || failure.Data.ResponseHeaders == nil {
-			return message, nil
-		}
-		headers := http.Header{}
-		for name, value := range *failure.Data.ResponseHeaders {
-			headers.Set(name, value)
-		}
-		if headers.Get("x-agentz-guardrail-outcome") != "1" {
-			return message, nil
-		}
-		var envelope agentzv1alpha1.GuardrailErrorEnvelope
-		if err := json.Unmarshal([]byte(*failure.Data.ResponseBody), &envelope); err != nil {
-			return message, nil
-		}
-		outcome := envelope.Error.Guardrail
-		validDenial := outcome.Code == "guardrail_denied" && *failure.Data.StatusCode == http.StatusUnprocessableEntity
-		validOutage := outcome.Code == "guardrail_unavailable" && *failure.Data.StatusCode == http.StatusServiceUnavailable
-		if (validDenial || validOutage) && outcome.ReferenceID != "" {
-			return outcome.Explanation, &outcome
-		}
-		return message, nil
+		return fmt.Sprintf("%s (status %d)", failure.Data.Message, *failure.Data.StatusCode)
 	case gatewayapi.OpencodeUnknownError:
-		return failure.Data.Message, nil
+		return failure.Data.Message
 	case gatewayapi.OpencodeMessageAbortedError:
-		return failure.Data.Message, nil
+		return failure.Data.Message
 	case gatewayapi.OpencodeContextOverflowError:
-		return failure.Data.Message, nil
+		return failure.Data.Message
 	case gatewayapi.OpencodeStructuredOutputError:
-		return failure.Data.Message, nil
+		return failure.Data.Message
 	case gatewayapi.OpencodeMessageOutputLengthError:
-		return "workflow response exceeded the output limit", nil
+		return "workflow response exceeded the output limit"
 	}
-	return "workflow session failed", nil
+	return "workflow session failed"
 }

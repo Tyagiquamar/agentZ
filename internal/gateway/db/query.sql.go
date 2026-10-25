@@ -2340,7 +2340,7 @@ func (q *Queries) GatewayGetExternalAgent(ctx context.Context, clientID string) 
 }
 
 const gatewayGetGuardrailClientAccess = `-- name: GatewayGetGuardrailClientAccess :one
-SELECT organization_id, workspace_id, client_id, policies, capture_mode, updated_at, updated_by FROM guardrail_client_access
+SELECT organization_id, workspace_id, client_id, policies, updated_at, updated_by FROM guardrail_client_access
 WHERE organization_id = $1
   AND workspace_id = $2
   AND client_id = $3
@@ -2360,7 +2360,6 @@ func (q *Queries) GatewayGetGuardrailClientAccess(ctx context.Context, arg Gatew
 		&i.WorkspaceID,
 		&i.ClientID,
 		&i.Policies,
-		&i.CaptureMode,
 		&i.UpdatedAt,
 		&i.UpdatedBy,
 	)
@@ -2368,7 +2367,7 @@ func (q *Queries) GatewayGetGuardrailClientAccess(ctx context.Context, arg Gatew
 }
 
 const gatewayGetGuardrailEvent = `-- name: GatewayGetGuardrailEvent :one
-SELECT id, organization_id, workspace_id, occurred_at, expires_at, sandbox_name, agent_name, client_id, session_id, model, trace_id, phase, action, policy_id, reference_id, evaluation, ingested_at FROM observer_guardrail_events
+SELECT id, organization_id, workspace_id, occurred_at, expires_at, sandbox_name, agent_name, client_id, session_id, model, trace_id, span_id, evaluation_index, revision, phase, action, policy_id, reference_id, evaluation, ingested_at FROM observer_guardrail_events
 WHERE id = $1
   AND organization_id = $2
   AND ($3::text = '' OR workspace_id = $3)
@@ -2396,6 +2395,9 @@ func (q *Queries) GatewayGetGuardrailEvent(ctx context.Context, arg GatewayGetGu
 		&i.SessionID,
 		&i.Model,
 		&i.TraceID,
+		&i.SpanID,
+		&i.EvaluationIndex,
+		&i.Revision,
 		&i.Phase,
 		&i.Action,
 		&i.PolicyID,
@@ -5212,7 +5214,7 @@ func (q *Queries) GatewayListFileEventsAggregated(ctx context.Context, arg Gatew
 }
 
 const gatewayListGuardrailClientAccess = `-- name: GatewayListGuardrailClientAccess :many
-SELECT organization_id, workspace_id, client_id, policies, capture_mode, updated_at, updated_by FROM guardrail_client_access
+SELECT organization_id, workspace_id, client_id, policies, updated_at, updated_by FROM guardrail_client_access
 WHERE organization_id = $1
   AND workspace_id = $2
 ORDER BY client_id
@@ -5237,7 +5239,6 @@ func (q *Queries) GatewayListGuardrailClientAccess(ctx context.Context, arg Gate
 			&i.WorkspaceID,
 			&i.ClientID,
 			&i.Policies,
-			&i.CaptureMode,
 			&i.UpdatedAt,
 			&i.UpdatedBy,
 		); err != nil {
@@ -5252,14 +5253,14 @@ func (q *Queries) GatewayListGuardrailClientAccess(ctx context.Context, arg Gate
 }
 
 const gatewayListGuardrailEvents = `-- name: GatewayListGuardrailEvents :many
-SELECT id, organization_id, workspace_id, occurred_at, expires_at, sandbox_name, agent_name, client_id, session_id, model, trace_id, phase, action, policy_id, reference_id, evaluation, ingested_at FROM observer_guardrail_events
+SELECT id, organization_id, workspace_id, occurred_at, expires_at, sandbox_name, agent_name, client_id, session_id, model, trace_id, span_id, evaluation_index, revision, phase, action, policy_id, reference_id, evaluation, ingested_at FROM observer_guardrail_events
 WHERE organization_id = $1
   AND ($2::text = '' OR workspace_id = $2)
   AND expires_at > now()
   AND ($3::text = '' OR action = $3)
   AND ($4::text = '' OR phase = $4)
   AND ($5::text = '' OR policy_id = $5)
-  AND ($6::text = '' OR reference_id = $6)
+  AND ($6::text = '' OR reference_id = $6 OR encode(trace_id, 'hex') = $6)
   AND ($7::text = '' OR session_id = $7)
   AND ($8::text = '' OR (occurred_at, id) < ($9, $8))
 ORDER BY occurred_at DESC, id DESC
@@ -5311,6 +5312,9 @@ func (q *Queries) GatewayListGuardrailEvents(ctx context.Context, arg GatewayLis
 			&i.SessionID,
 			&i.Model,
 			&i.TraceID,
+			&i.SpanID,
+			&i.EvaluationIndex,
+			&i.Revision,
 			&i.Phase,
 			&i.Action,
 			&i.PolicyID,
@@ -5606,7 +5610,7 @@ func (q *Queries) GatewayListNetworkEventsAggregated(ctx context.Context, arg Ga
 }
 
 const gatewayListOrganizationGuardrailClientAccess = `-- name: GatewayListOrganizationGuardrailClientAccess :many
-SELECT organization_id, workspace_id, client_id, policies, capture_mode, updated_at, updated_by FROM guardrail_client_access
+SELECT organization_id, workspace_id, client_id, policies, updated_at, updated_by FROM guardrail_client_access
 WHERE organization_id = $1
 ORDER BY workspace_id, client_id
 `
@@ -5625,7 +5629,6 @@ func (q *Queries) GatewayListOrganizationGuardrailClientAccess(ctx context.Conte
 			&i.WorkspaceID,
 			&i.ClientID,
 			&i.Policies,
-			&i.CaptureMode,
 			&i.UpdatedAt,
 			&i.UpdatedBy,
 		); err != nil {
@@ -8235,26 +8238,24 @@ func (q *Queries) GatewayUpsertChatSession(ctx context.Context, arg GatewayUpser
 
 const gatewayUpsertGuardrailClientAccess = `-- name: GatewayUpsertGuardrailClientAccess :one
 INSERT INTO guardrail_client_access (
-  organization_id, workspace_id, client_id, policies, capture_mode, updated_by
+  organization_id, workspace_id, client_id, policies, updated_by
 ) VALUES (
   $1, $2, $3,
-  $4, $5, $6
+  $4, $5
 )
 ON CONFLICT (organization_id, workspace_id, client_id) DO UPDATE
 SET policies = EXCLUDED.policies,
-    capture_mode = EXCLUDED.capture_mode,
     updated_at = now(),
     updated_by = EXCLUDED.updated_by
-RETURNING organization_id, workspace_id, client_id, policies, capture_mode, updated_at, updated_by
+RETURNING organization_id, workspace_id, client_id, policies, updated_at, updated_by
 `
 
 type GatewayUpsertGuardrailClientAccessParams struct {
-	OrganizationID string               `json:"organization_id"`
-	WorkspaceID    string               `json:"workspace_id"`
-	ClientID       string               `json:"client_id"`
-	Policies       []byte               `json:"policies"`
-	CaptureMode    GuardrailCaptureMode `json:"capture_mode"`
-	UpdatedBy      pgtype.Text          `json:"updated_by"`
+	OrganizationID string      `json:"organization_id"`
+	WorkspaceID    string      `json:"workspace_id"`
+	ClientID       string      `json:"client_id"`
+	Policies       []byte      `json:"policies"`
+	UpdatedBy      pgtype.Text `json:"updated_by"`
 }
 
 func (q *Queries) GatewayUpsertGuardrailClientAccess(ctx context.Context, arg GatewayUpsertGuardrailClientAccessParams) (GuardrailClientAccess, error) {
@@ -8263,7 +8264,6 @@ func (q *Queries) GatewayUpsertGuardrailClientAccess(ctx context.Context, arg Ga
 		arg.WorkspaceID,
 		arg.ClientID,
 		arg.Policies,
-		arg.CaptureMode,
 		arg.UpdatedBy,
 	)
 	var i GuardrailClientAccess
@@ -8272,7 +8272,6 @@ func (q *Queries) GatewayUpsertGuardrailClientAccess(ctx context.Context, arg Ga
 		&i.WorkspaceID,
 		&i.ClientID,
 		&i.Policies,
-		&i.CaptureMode,
 		&i.UpdatedAt,
 		&i.UpdatedBy,
 	)

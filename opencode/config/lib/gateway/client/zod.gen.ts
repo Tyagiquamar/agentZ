@@ -20,11 +20,8 @@ export const zGuardrailCredentials = z.object({
   googleCredentialsJson: z.string().optional(),
 })
 
-export const zGuardrailCaptureMode = z.enum(["off", "findings", "all"])
-
 export const zGuardrailSettings = z.object({
   mandatoryPolicies: z.array(z.string()),
-  allowContentCapture: z.boolean(),
   retentionDays: z.int().gte(1).lte(3650),
 })
 
@@ -71,15 +68,6 @@ export const zGuardrailResourceDiscovery = z.object({
   items: z.array(zGuardrailDiscoveredResource),
   nextPageToken: z.string().optional(),
   unreachable: z.array(z.string()).optional(),
-})
-
-export const zGuardrailErrorEnvelope = z.object({
-  error: z.object({
-    type: z.string(),
-    code: z.string(),
-    message: z.string(),
-    guardrail: zGuardrailOutcome,
-  }),
 })
 
 export const zAppSession = z.object({
@@ -735,7 +723,6 @@ export const zResourceReference = z.object({
 
 export const zGuardrailAssignment = z.object({
   policies: z.array(zResourceReference).optional(),
-  captureMode: zGuardrailCaptureMode.optional(),
 })
 
 export const zGuardrailCheck = z.object({
@@ -792,8 +779,6 @@ export const zGuardrailEffectiveCheck = z.object({
 
 export const zGuardrailEffective = z.object({
   revision: z.string(),
-  delivery: z.enum(["checkedStreaming", "wholeOutput"]),
-  captureMode: zGuardrailCaptureMode,
   checks: z.array(zGuardrailEffectiveCheck),
 })
 
@@ -3356,6 +3341,8 @@ export const zGuardrailEvent = z.object({
   session_id: z.string(),
   model: z.string(),
   trace_id: z.string(),
+  span_id: z.string(),
+  revision: z.string(),
   evaluation: zGuardrailRuntimeEvaluation,
 })
 

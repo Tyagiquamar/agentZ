@@ -4102,24 +4102,12 @@ components:
     GuardrailAssignment:
       additionalProperties: false
       properties:
-        captureMode:
-          $ref: '#/components/schemas/GuardrailCaptureMode'
         policies:
           items:
             $ref: '#/components/schemas/ResourceReference'
           type: array
       type: object
       x-go-type: agentzv1alpha1.GuardrailAssignment
-      x-go-type-import:
-        name: agentzv1alpha1
-        path: github.com/accuknox/agentz/pkg/apis/agentz/v1alpha1
-    GuardrailCaptureMode:
-      enum:
-      - "off"
-      - findings
-      - all
-      type: string
-      x-go-type: agentzv1alpha1.GuardrailCaptureMode
       x-go-type-import:
         name: agentzv1alpha1
         path: github.com/accuknox/agentz/pkg/apis/agentz/v1alpha1
@@ -4305,23 +4293,14 @@ components:
     GuardrailEffective:
       additionalProperties: false
       properties:
-        captureMode:
-          $ref: '#/components/schemas/GuardrailCaptureMode'
         checks:
           items:
             $ref: '#/components/schemas/GuardrailEffectiveCheck'
           type: array
-        delivery:
-          enum:
-          - checkedStreaming
-          - wholeOutput
-          type: string
         revision:
           type: string
       required:
       - revision
-      - delivery
-      - captureMode
       - checks
       type: object
     GuardrailEffectiveCheck:
@@ -4355,31 +4334,6 @@ components:
       required:
       - assignment
       type: object
-    GuardrailErrorEnvelope:
-      properties:
-        error:
-          properties:
-            code:
-              type: string
-            guardrail:
-              $ref: '#/components/schemas/GuardrailOutcome'
-            message:
-              type: string
-            type:
-              type: string
-          required:
-          - type
-          - code
-          - message
-          - guardrail
-          type: object
-      required:
-      - error
-      type: object
-      x-go-type: agentzv1alpha1.GuardrailErrorEnvelope
-      x-go-type-import:
-        name: agentzv1alpha1
-        path: github.com/accuknox/agentz/pkg/apis/agentz/v1alpha1
     GuardrailEvaluationContext:
       additionalProperties: false
       properties:
@@ -4476,9 +4430,13 @@ components:
           type: string
         organization_id:
           type: string
+        revision:
+          type: string
         sandbox_name:
           type: string
         session_id:
+          type: string
+        span_id:
           type: string
         trace_id:
           type: string
@@ -4496,6 +4454,8 @@ components:
       - session_id
       - model
       - trace_id
+      - span_id
+      - revision
       - evaluation
       type: object
     GuardrailOutcome:
@@ -4708,8 +4668,6 @@ components:
     GuardrailSettings:
       additionalProperties: false
       properties:
-        allowContentCapture:
-          type: boolean
         mandatoryPolicies:
           items:
             type: string
@@ -4721,7 +4679,6 @@ components:
           type: integer
       required:
       - mandatoryPolicies
-      - allowContentCapture
       - retentionDays
       type: object
     GuardrailStatus:

@@ -94,6 +94,8 @@ func (installed *installation) codex(ctx context.Context, command *cli.Command, 
 		name="AgentZ",
 		base_url=%s,
 		wire_api="responses",
+		request_max_retries=0,
+		stream_max_retries=0,
 		requires_openai_auth=false,
 		supports_websockets=false,
 		gateway_oauth={

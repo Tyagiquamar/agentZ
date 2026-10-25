@@ -1,7 +1,5 @@
 "use client"
 
-import { GuardrailOutcome } from "@/components/guardrails/guardrail-outcome"
-
 import styles from "./composer.module.css"
 import { LegendList, type LegendListRef } from "@legendapp/list/react"
 import { getImageProps } from "next/image"
@@ -2246,24 +2244,14 @@ function TimelineRowView({
     }
 
     case "assistant-error": {
-      if (row.guardrail)
-        return (
-          <GuardrailOutcome
-            outcome={row.guardrail}
-            onEdit={
-              row.userMessageID && !revertDisabled
-                ? () => {
-                    if (row.userMessageID) onRevert(row.userMessageID)
-                  }
-                : undefined
-            }
-          />
-        )
       return (
         <Alert className="mx-auto w-fit max-w-full" variant="destructive">
           <CircleAlert aria-hidden="true" />
           <AlertDescription>
-            <span className="font-medium">{row.label}:</span> {row.body}
+            <span>
+              <span className="font-medium">{row.label}:</span> {row.body}
+              {row.partialOutput ? " The response above is incomplete." : null}
+            </span>
           </AlertDescription>
         </Alert>
       )

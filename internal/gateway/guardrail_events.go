@@ -121,6 +121,6 @@ func guardrailEventView(row gatewaydb.ObserverGuardrailEvent) (gatewayapi.Guardr
 		Id: row.ID, OrganizationId: row.OrganizationID, WorkspaceId: row.WorkspaceID,
 		OccurredAt: row.OccurredAt, ExpiresAt: row.ExpiresAt,
 		SandboxName: row.SandboxName, AgentName: row.AgentName, ClientId: row.ClientID,
-		SessionId: row.SessionID, Model: row.Model, TraceId: hex.EncodeToString(row.TraceID), Evaluation: evaluation,
+		SessionId: row.SessionID, Model: row.Model, TraceId: hex.EncodeToString(row.TraceID), SpanId: hex.EncodeToString(row.SpanID), Revision: row.Revision, Evaluation: evaluation,
 	}, nil
 }

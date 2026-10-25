@@ -848,6 +848,29 @@ func TestDelegatedInferenceUsesPrivateGateway(t *testing.T) {
 	if unexpectedTarget {
 		t.Fatalf("inference bypassed the configured private gateway: %s", upstream.request.URL)
 	}
+	upstream.response = &http.Response{
+		StatusCode: http.StatusUnprocessableEntity,
+		Header:     http.Header{"X-Agentz-Guardrail-Outcome": {"1"}},
+		Body:       io.NopCloser(strings.NewReader(`{"error":{"guardrail":{"explanation":"private-credential"}}}`)),
+	}
+	request = httptest.NewRequest(http.MethodPost, "/api/inference/v1/chat/completions", strings.NewReader(body))
+	request.Header.Set("Authorization", "Bearer "+signed)
+	response = httptest.NewRecorder()
+	service.handleDelegatedRequest(response, request)
+	if response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("request rejection changed status: %d", response.Code)
+	}
+	var failure inferenceError
+	if err := json.Unmarshal(response.Body.Bytes(), &failure); err != nil {
+		t.Fatal(err)
+	}
+	if failure.Error.Code != "request_rejected" || !strings.Contains(failure.Error.Message, "Review your input") {
+		t.Fatalf("missing actionable rejection feedback: %+v", failure.Error)
+	}
+	if strings.Contains(response.Body.String(), "private-credential") || response.Header().Get("X-Agentz-Guardrail-Outcome") != "" {
+		t.Fatal("provider metadata became trusted rejection feedback")
+	}
+
 	route := &gwv1.HTTPRoute{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "d-grant-1-model-0",

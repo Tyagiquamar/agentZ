@@ -78,11 +78,10 @@ type openAIModels struct {
 }
 
 type inferenceErrorDetail struct {
-	Guardrail *agentzv1alpha1.GuardrailOutcome `json:"guardrail,omitempty"`
-	Message   string                           `json:"message"`
-	Type      string                           `json:"type"`
-	Param     *string                          `json:"param"`
-	Code      string                           `json:"code"`
+	Message string  `json:"message"`
+	Type    string  `json:"type"`
+	Param   *string `json:"param"`
+	Code    string  `json:"code"`
 }
 
 type inferenceError struct {
@@ -828,21 +827,7 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 			response.Header.Del("Set-Cookie")
 			// Intermediary compression must not buffer streamed inference or MCP events.
 			response.Header.Set("Cache-Control", "no-store, no-transform")
-			guardrailResponse := response.Header.Get("x-agentz-guardrail-outcome") == "1"
-			response.Header.Del("x-agentz-guardrail-outcome")
 			if response.StatusCode >= http.StatusMultipleChoices {
-				var outcome *agentzv1alpha1.GuardrailOutcome
-				if !mcpRequest && guardrailResponse {
-					var envelope agentzv1alpha1.GuardrailErrorEnvelope
-					err := json.NewDecoder(io.LimitReader(response.Body, 65536)).Decode(&envelope)
-					candidate := envelope.Error.Guardrail
-					denied := candidate.Code == "guardrail_denied" && response.StatusCode == http.StatusUnprocessableEntity
-					unavailable := candidate.Code == "guardrail_unavailable" && response.StatusCode == http.StatusServiceUnavailable
-					validPhase := candidate.Phase == "input" || candidate.Phase == "output"
-					if err == nil && validPhase && (denied || unavailable) && candidate.ReferenceID != "" {
-						outcome = &candidate
-					}
-				}
 				if err := response.Body.Close(); err != nil {
 					return err
 				}
@@ -861,18 +846,14 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 						Code:    "upstream_error",
 					},
 				}
-				if outcome != nil {
-					failure.Error.Guardrail = outcome
-					failure.Error.Code = outcome.Code
-					failure.Error.Type = outcome.Code
-					failure.Error.Message = outcome.Explanation
-				}
 				if strings.HasPrefix(r.URL.Path, "/api/inference/v1/messages") {
 					failure.Type = "error"
 					failure.Error.Type = "api_error"
-					if outcome != nil && outcome.Code == "guardrail_denied" {
-						failure.Error.Type = "invalid_request_error"
-					}
+				}
+				if !mcpRequest && response.StatusCode == http.StatusUnprocessableEntity {
+					failure.Error.Message = "The model gateway rejected this request. Review your input and assigned policies, then try again."
+					failure.Error.Type = "invalid_request_error"
+					failure.Error.Code = "request_rejected"
 				}
 				body, err := json.Marshal(failure)
 				if err != nil {

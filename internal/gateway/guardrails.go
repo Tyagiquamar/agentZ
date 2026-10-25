@@ -622,9 +622,8 @@ func (s *Service) serveGuardrailSettings(w http.ResponseWriter, r *http.Request)
 			}
 		}
 		tenant.Spec.Guardrails = api.GuardrailSettings{
-			MandatoryPolicies:   input.MandatoryPolicies,
-			AllowContentCapture: input.AllowContentCapture,
-			RetentionDays:       input.RetentionDays,
+			MandatoryPolicies: input.MandatoryPolicies,
+			RetentionDays:     input.RetentionDays,
 		}
 		_, err = s.queries.GatewayUpdateGuardrailRetention(r.Context(), gatewaydb.GatewayUpdateGuardrailRetentionParams{
 			OrganizationID: access.claims.OrganizationID,
@@ -640,9 +639,8 @@ func (s *Service) serveGuardrailSettings(w http.ResponseWriter, r *http.Request)
 		}
 	}
 	settings := gatewayapi.GuardrailSettings{
-		MandatoryPolicies:   tenant.Spec.Guardrails.MandatoryPolicies,
-		AllowContentCapture: tenant.Spec.Guardrails.AllowContentCapture,
-		RetentionDays:       tenant.Spec.Guardrails.RetentionDays,
+		MandatoryPolicies: tenant.Spec.Guardrails.MandatoryPolicies,
+		RetentionDays:     tenant.Spec.Guardrails.RetentionDays,
 	}
 	if settings.RetentionDays == 0 {
 		settings.RetentionDays = 30
@@ -669,7 +667,6 @@ func (s *Service) GetEffectiveGuardrails(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	assignment := input.Assignment
-	attachment := "preview"
 	contextNamespace := access.namespace
 	if input.Sandbox != nil && input.ClientId != nil {
 		apiutil.WriteError(w, r, apiutil.NewError(http.StatusBadRequest, "invalid_request", "select one Sandbox or external client context", errBadRequest))
@@ -696,7 +693,6 @@ func (s *Service) GetEffectiveGuardrails(w http.ResponseWriter, r *http.Request,
 			return
 		}
 		assignment = sandbox.Spec.Guardrails
-		attachment = "sandbox/" + sandbox.Name
 		contextNamespace = sandbox.Namespace
 	}
 	if input.ClientId != nil {
@@ -706,15 +702,14 @@ func (s *Service) GetEffectiveGuardrails(w http.ResponseWriter, r *http.Request,
 			apiutil.WriteInternalError(w, r, err)
 			return
 		}
-		attachment = "client/" + *input.ClientId
 	}
-	bundle, err := guardrails.Resolve(r.Context(), s.k8sClient, contextNamespace, attachment, assignment)
+	bundle, err := guardrails.Resolve(r.Context(), s.k8sClient, contextNamespace, assignment)
 	if err != nil {
 		apiutil.WriteError(w, r, apiutil.NewError(http.StatusBadRequest, "invalid_request", err.Error(), err))
 		return
 	}
-	if input.Sandbox != nil {
-		if err := bundle.ConfigureManagedDelivery(); err != nil {
+	if input.Sandbox != nil || input.ClientId != nil {
+		if err := bundle.ValidateStreaming(); err != nil {
 			apiutil.WriteError(w, r, apiutil.NewError(http.StatusBadRequest, "invalid_request", err.Error(), err))
 			return
 		}
@@ -729,10 +724,8 @@ func (s *Service) GetEffectiveGuardrails(w http.ResponseWriter, r *http.Request,
 		})
 	}
 	apiutil.WriteJSON(w, http.StatusOK, gatewayapi.GuardrailEffective{
-		Revision:    bundle.Revision,
-		Delivery:    gatewayapi.GuardrailEffectiveDelivery(bundle.Context.Delivery),
-		CaptureMode: bundle.Context.Capture,
-		Checks:      checks,
+		Revision: bundle.Revision,
+		Checks:   checks,
 	})
 }
 
@@ -754,7 +747,6 @@ func (s *Service) resolveGuardrailAssignment(ctx context.Context, organizationID
 		return api.GuardrailAssignment{}, err
 	}
 	return api.GuardrailAssignment{
-		Policies:    refs,
-		CaptureMode: api.GuardrailCaptureMode(row.CaptureMode),
+		Policies: refs,
 	}, nil
 }

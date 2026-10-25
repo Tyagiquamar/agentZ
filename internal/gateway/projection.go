@@ -92,8 +92,11 @@ func (s *Service) delegationReady(ctx context.Context, grant gatewaydb.Delegatio
 		if err != nil {
 			return err
 		}
-		bundle, err := guardrails.Resolve(ctx, s.k8sClient, agentzv1alpha1.ScopeNamespace(agentzv1alpha1.ResourceScopeWorkspace, workspaceID), "client/"+grant.ClientID, assignment)
+		bundle, err := guardrails.Resolve(ctx, s.k8sClient, agentzv1alpha1.ScopeNamespace(agentzv1alpha1.ResourceScopeWorkspace, workspaceID), assignment)
 		if err != nil {
+			return err
+		}
+		if err := bundle.ValidateStreaming(); err != nil {
 			return err
 		}
 		guardrailPolicy := &agw.AgentgatewayPolicy{}
@@ -235,8 +238,11 @@ func (s *Service) projectDelegation(ctx context.Context, grant gatewaydb.Delegat
 			return err
 		}
 		contextNamespace := agentzv1alpha1.ScopeNamespace(agentzv1alpha1.ResourceScopeWorkspace, selected.WorkspaceId)
-		bundle, err := guardrails.Resolve(ctx, s.k8sClient, contextNamespace, "client/"+grant.ClientID, assignment)
+		bundle, err := guardrails.Resolve(ctx, s.k8sClient, contextNamespace, assignment)
 		if err != nil {
+			return err
+		}
+		if err := bundle.ValidateStreaming(); err != nil {
 			return err
 		}
 		bundle.Rebind(selected.Namespace)
@@ -686,6 +692,7 @@ func delegationTelemetry(grant gatewaydb.DelegationGrant, appName, agentKind str
 		"workspace_id":       workspaceID,
 		"resource_kind":      kind,
 		"resource_namespace": route.Namespace,
+		"tenant_namespace":   agentzv1alpha1.ScopeNamespace(agentzv1alpha1.ResourceScopeWorkspace, workspaceID),
 		"resource_name":      resourceName,
 		"resource_uid":       uid,
 		"target_id":          targetID,

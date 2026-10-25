@@ -72,13 +72,6 @@ export function ApplicationGuardrailAccess({
               {row.original.guardrails.policies?.length ?? 0} additional{" "}
               {row.original.guardrails.policies?.length === 1 ? "policy" : "policies"}
             </Badge>
-            <Badge variant="secondary">
-              {row.original.guardrails.captureMode === "all"
-                ? "All content captured"
-                : row.original.guardrails.captureMode === "findings"
-                  ? "Findings captured"
-                  : "Content capture off"}
-            </Badge>
           </div>
         ),
       }),

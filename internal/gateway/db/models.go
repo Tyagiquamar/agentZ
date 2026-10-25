@@ -551,49 +551,6 @@ func (ns NullExternalAgentKind) Value() (driver.Value, error) {
 	return string(ns.ExternalAgentKind), nil
 }
 
-type GuardrailCaptureMode string
-
-const (
-	GuardrailCaptureModeOff      GuardrailCaptureMode = "off"
-	GuardrailCaptureModeFindings GuardrailCaptureMode = "findings"
-	GuardrailCaptureModeAll      GuardrailCaptureMode = "all"
-)
-
-func (e *GuardrailCaptureMode) Scan(src interface{}) error {
-	switch s := src.(type) {
-	case []byte:
-		*e = GuardrailCaptureMode(s)
-	case string:
-		*e = GuardrailCaptureMode(s)
-	default:
-		return fmt.Errorf("unsupported scan type for GuardrailCaptureMode: %T", src)
-	}
-	return nil
-}
-
-type NullGuardrailCaptureMode struct {
-	GuardrailCaptureMode GuardrailCaptureMode `json:"guardrail_capture_mode"`
-	Valid                bool                 `json:"valid"` // Valid is true if GuardrailCaptureMode is not NULL
-}
-
-// Scan implements the Scanner interface.
-func (ns *NullGuardrailCaptureMode) Scan(value interface{}) error {
-	if value == nil {
-		ns.GuardrailCaptureMode, ns.Valid = "", false
-		return nil
-	}
-	ns.Valid = true
-	return ns.GuardrailCaptureMode.Scan(value)
-}
-
-// Value implements the driver Valuer interface.
-func (ns NullGuardrailCaptureMode) Value() (driver.Value, error) {
-	if !ns.Valid {
-		return nil, nil
-	}
-	return string(ns.GuardrailCaptureMode), nil
-}
-
 type PermissionAction string
 
 const (
@@ -1186,13 +1143,12 @@ type GithubConnection struct {
 }
 
 type GuardrailClientAccess struct {
-	OrganizationID string               `json:"organization_id"`
-	WorkspaceID    string               `json:"workspace_id"`
-	ClientID       string               `json:"client_id"`
-	Policies       []byte               `json:"policies"`
-	CaptureMode    GuardrailCaptureMode `json:"capture_mode"`
-	UpdatedAt      pgtype.Timestamptz   `json:"updated_at"`
-	UpdatedBy      pgtype.Text          `json:"updated_by"`
+	OrganizationID string             `json:"organization_id"`
+	WorkspaceID    string             `json:"workspace_id"`
+	ClientID       string             `json:"client_id"`
+	Policies       []byte             `json:"policies"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	UpdatedBy      pgtype.Text        `json:"updated_by"`
 }
 
 type Invitation struct {
@@ -1516,23 +1472,26 @@ type ObserverFileEvent struct {
 }
 
 type ObserverGuardrailEvent struct {
-	ID             string    `json:"id"`
-	OrganizationID string    `json:"organization_id"`
-	WorkspaceID    string    `json:"workspace_id"`
-	OccurredAt     time.Time `json:"occurred_at"`
-	ExpiresAt      time.Time `json:"expires_at"`
-	SandboxName    string    `json:"sandbox_name"`
-	AgentName      string    `json:"agent_name"`
-	ClientID       string    `json:"client_id"`
-	SessionID      string    `json:"session_id"`
-	Model          string    `json:"model"`
-	TraceID        []byte    `json:"trace_id"`
-	Phase          string    `json:"phase"`
-	Action         string    `json:"action"`
-	PolicyID       string    `json:"policy_id"`
-	ReferenceID    string    `json:"reference_id"`
-	Evaluation     []byte    `json:"evaluation"`
-	IngestedAt     time.Time `json:"ingested_at"`
+	ID              string    `json:"id"`
+	OrganizationID  string    `json:"organization_id"`
+	WorkspaceID     string    `json:"workspace_id"`
+	OccurredAt      time.Time `json:"occurred_at"`
+	ExpiresAt       time.Time `json:"expires_at"`
+	SandboxName     string    `json:"sandbox_name"`
+	AgentName       string    `json:"agent_name"`
+	ClientID        string    `json:"client_id"`
+	SessionID       string    `json:"session_id"`
+	Model           string    `json:"model"`
+	TraceID         []byte    `json:"trace_id"`
+	SpanID          []byte    `json:"span_id"`
+	EvaluationIndex int32     `json:"evaluation_index"`
+	Revision        string    `json:"revision"`
+	Phase           string    `json:"phase"`
+	Action          string    `json:"action"`
+	PolicyID        string    `json:"policy_id"`
+	ReferenceID     string    `json:"reference_id"`
+	Evaluation      []byte    `json:"evaluation"`
+	IngestedAt      time.Time `json:"ingested_at"`
 }
 
 type ObserverMcpToolInvocation struct {

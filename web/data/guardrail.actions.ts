@@ -167,7 +167,7 @@ export async function saveGuardrailClientAccessAction(
   input: GuardrailAssignment
 ) {
   const parsed = zGuardrailAssignment.safeParse(input)
-  if (!parsed.success) return { error: "Check policy assignments and content capture settings." }
+  if (!parsed.success) return { error: "Check policy assignments." }
   const [access, session] = await Promise.all([
     listGuardrailClientAccess(orgSlug, workspaceSlug),
     getAuthSession(),
@@ -180,18 +180,7 @@ export async function saveGuardrailClientAccessAction(
     body: { assignment: parsed.data },
   })
   if (validated.error) return { error: validated.error.message }
-  if (
-    parsed.data.captureMode &&
-    parsed.data.captureMode !== "off" &&
-    validated.data.captureMode === "off"
-  ) {
-    return {
-      error:
-        "Your organization has not permitted inspected-content capture. Turn content capture off before saving.",
-    }
-  }
   const policies = parsed.data.policies ?? []
-  const captureMode = parsed.data.captureMode ?? "off"
   await getDB().transaction(async (tx) => {
     await tx
       .insert(schema.guardrailClientAccess)
@@ -200,7 +189,6 @@ export async function saveGuardrailClientAccessAction(
         workspaceId: access.workspace.id,
         clientId,
         policies,
-        captureMode,
         updatedBy: session.session.user.id,
       })
       .onConflictDoUpdate({
@@ -209,7 +197,7 @@ export async function saveGuardrailClientAccessAction(
           schema.guardrailClientAccess.workspaceId,
           schema.guardrailClientAccess.clientId,
         ],
-        set: { policies, captureMode, updatedBy: session.session.user.id, updatedAt: new Date() },
+        set: { policies, updatedBy: session.session.user.id, updatedAt: new Date() },
       })
     await tx.insert(schema.eventTrailEvents).values({
       id: `event-trail-${randomUUID()}`,

@@ -113,12 +113,12 @@ func TestMandatoryPolicyCannotBeReorderedOrWeakenedByAssignments(t *testing.T) {
 			{Scope: api.ResourceScopeOrganisation, Name: "baseline"},
 		},
 	}
-	bundle, err := Resolve(t.Context(), reader, workspace, "sandbox/test", assignment)
+	bundle, err := Resolve(t.Context(), reader, workspace, assignment)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(bundle.Checks) != 2 || bundle.Checks[0].Check.ID != "mandatory" || !bundle.Checks[0].Mandatory {
-		t.Fatalf("mandatory baseline lost precedence after optional policy promotion: %#v", bundle.Context.Request)
+		t.Fatalf("mandatory baseline lost precedence after optional policy promotion: %#v", bundle.Checks)
 	}
 	if bundle.Checks[0].Check.Mode != "enforce" || bundle.Checks[0].Check.FailureMode != "closed" {
 		t.Fatal("workspace policy weakened organization enforcement")
@@ -126,9 +126,7 @@ func TestMandatoryPolicyCannotBeReorderedOrWeakenedByAssignments(t *testing.T) {
 	if *bundle.Guard.Request[0].Regex.Action != agw.REJECT || *bundle.Guard.Request[1].Regex.Action != agw.AUDIT {
 		t.Fatal("baseline and workspace enforcement modes were combined incorrectly")
 	}
-	if bundle.Context.Request[0].PolicyID != "baseline-id" || bundle.Context.Request[1].Mandatory {
-		t.Fatal("runtime provenance lost the mandatory policy identity")
-	}
+
 }
 
 func TestOptionalOrganizationPoliciesRequireExplicitSelection(t *testing.T) {
@@ -148,17 +146,17 @@ func TestOptionalOrganizationPoliciesRequireExplicitSelection(t *testing.T) {
 			{Scope: api.ResourceScopeOrganisation, Name: "unselected"},
 		},
 	}
-	if _, err := Resolve(t.Context(), reader, workspace, "sandbox/test", assignment); err == nil || !strings.Contains(err.Error(), "not selected") {
+	if _, err := Resolve(t.Context(), reader, workspace, assignment); err == nil || !strings.Contains(err.Error(), "not selected") {
 		t.Fatalf("unselected organization policy was available: %v", err)
 	}
-	if _, err := Resolve(t.Context(), reader, workspace, "sandbox/test", api.GuardrailAssignment{}); err != nil {
+	if _, err := Resolve(t.Context(), reader, workspace, api.GuardrailAssignment{}); err != nil {
 		t.Fatalf("mandatory baseline incorrectly required optional selection: %v", err)
 	}
 }
 
 func TestRevisionExcludesStatusAndPreservesInflightSnapshot(t *testing.T) {
 	reader, org, workspace := guardrailFixture(t)
-	first, err := Resolve(t.Context(), reader, workspace, "sandbox/test", api.GuardrailAssignment{})
+	first, err := Resolve(t.Context(), reader, workspace, api.GuardrailAssignment{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -171,7 +169,7 @@ func TestRevisionExcludesStatusAndPreservesInflightSnapshot(t *testing.T) {
 	if err := reader.Update(t.Context(), policy); err != nil {
 		t.Fatal(err)
 	}
-	statusOnly, err := Resolve(t.Context(), reader, workspace, "sandbox/test", api.GuardrailAssignment{})
+	statusOnly, err := Resolve(t.Context(), reader, workspace, api.GuardrailAssignment{})
 	if err != nil || statusOnly.Revision != first.Revision {
 		t.Fatalf("observed status changed desired policy revision: %v", err)
 	}
@@ -180,33 +178,12 @@ func TestRevisionExcludesStatusAndPreservesInflightSnapshot(t *testing.T) {
 	if err := reader.Update(t.Context(), policy); err != nil {
 		t.Fatal(err)
 	}
-	updated, err := Resolve(t.Context(), reader, workspace, "sandbox/test", api.GuardrailAssignment{})
+	updated, err := Resolve(t.Context(), reader, workspace, api.GuardrailAssignment{})
 	if err != nil || updated.Revision == first.Revision {
 		t.Fatalf("policy edit failed to change effective revision: %v", err)
 	}
-	if first.Guard.Request[0].Regex.Matches[0] != "forbidden" || first.Context.Request[0].Revision != first.Revision {
+	if first.Guard.Request[0].Regex.Matches[0] != "forbidden" {
 		t.Fatal("resolving a later request mutated an inflight policy snapshot")
-	}
-}
-
-func TestCapturePermissionCannotBeEnabledByWorkspaceAssignment(t *testing.T) {
-	reader, org, workspace := guardrailFixture(t)
-	assignment := api.GuardrailAssignment{CaptureMode: "all"}
-	bundle, err := Resolve(t.Context(), reader, workspace, "sandbox/test", assignment)
-	if err != nil || bundle.Context.Capture != "off" {
-		t.Fatalf("workspace bypassed organization capture permission: %v", err)
-	}
-	tenant := &api.Tenant{}
-	if err := reader.Get(t.Context(), client.ObjectKey{Name: org}, tenant); err != nil {
-		t.Fatal(err)
-	}
-	tenant.Spec.Guardrails.AllowContentCapture = true
-	if err := reader.Update(t.Context(), tenant); err != nil {
-		t.Fatal(err)
-	}
-	bundle, err = Resolve(t.Context(), reader, workspace, "sandbox/test", assignment)
-	if err != nil || bundle.Context.Capture != "all" || bundle.Context.RetentionDays != 30 {
-		t.Fatalf("authorized capture or shared retention was lost: %v", err)
 	}
 }
 
@@ -229,69 +206,8 @@ func TestCombinedPolicyLimitFailsWithoutDroppingMandatoryChecks(t *testing.T) {
 	assignment := api.GuardrailAssignment{
 		Policies: []api.ResourceReference{{Scope: api.ResourceScopeWorkspace, Name: "addition"}},
 	}
-	if _, err := Resolve(t.Context(), reader, workspace, "sandbox/test", assignment); err == nil || !strings.Contains(err.Error(), "eight checks") {
+	if _, err := Resolve(t.Context(), reader, workspace, assignment); err == nil || !strings.Contains(err.Error(), "eight checks") {
 		t.Fatalf("over-limit composition silently omitted safeguards: %v", err)
-	}
-}
-
-func TestStreamingDeliveryRejectsUnsupportedGuarantees(t *testing.T) {
-	reader, _, workspace := guardrailFixture(t)
-	policy := &api.GuardrailPolicy{
-		ObjectMeta: metav1.ObjectMeta{Name: "output", Namespace: workspace},
-		Spec: api.GuardrailPolicySpec{
-			DisplayName: "Output",
-			Checks: []api.GuardrailCheck{
-				{
-					ID:          "output",
-					Name:        "Output",
-					Phase:       "output",
-					Scopes:      []string{"conversation"},
-					Mode:        "enforce",
-					FailureMode: "closed",
-					Action:      "deny",
-					Regex:       &api.GuardrailRegex{Patterns: []string{"forbidden"}},
-				},
-			},
-		},
-	}
-	bundle, err := CompilePolicy(t.Context(), reader, workspace, policy)
-	if err != nil || bundle.Context.Delivery != "checkedStreaming" {
-		t.Fatalf("bounded literal could not use checked streaming: %v", err)
-	}
-	originalRevision := bundle.Revision
-	if err := bundle.ConfigureManagedDelivery(); err != nil {
-		t.Fatal(err)
-	}
-	managedRevision := bundle.Revision
-	if bundle.Context.Delivery != "wholeOutput" || managedRevision == originalRevision {
-		t.Fatal("managed enforced output must hold content and use a distinct effective revision")
-	}
-	if len(bundle.Context.Response) != 1 || bundle.Context.Response[0].Revision != managedRevision {
-		t.Fatal("runtime audit context did not receive the managed delivery revision")
-	}
-	if err := bundle.ConfigureManagedDelivery(); err != nil || bundle.Revision != managedRevision {
-		t.Fatal("managed delivery configuration must be stable across readiness checks")
-	}
-	policy.Spec.Checks[0].Regex.Patterns = []string{"forbidden.*later"}
-	bundle, err = CompilePolicy(t.Context(), reader, workspace, policy)
-	if err != nil || bundle.Context.Delivery != "wholeOutput" {
-		t.Fatalf("unbounded check was incorrectly treated as a window check: %v", err)
-	}
-	policy.Spec.Checks[0].Action = "mask"
-	bundle, err = CompilePolicy(t.Context(), reader, workspace, policy)
-	if err != nil {
-		t.Fatalf("non-streaming masking policy was rejected: %v", err)
-	}
-	if err := bundle.ConfigureManagedDelivery(); err == nil {
-		t.Fatal("unsupported managed streaming transformation was accepted")
-	}
-	policy.Spec.Checks[0].Mode = "audit"
-	bundle, err = CompilePolicy(t.Context(), reader, workspace, policy)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := bundle.ConfigureManagedDelivery(); err != nil {
-		t.Fatalf("non-mutating audit-only evaluation was rejected: %v", err)
 	}
 }
 
@@ -311,59 +227,6 @@ func TestRemoteProviderMaskingCannotBeOverriddenByAnUnusedAction(t *testing.T) {
 	policy.Checks[0].Action = "deny"
 	if err := ValidatePolicy(policy); err != nil {
 		t.Fatalf("normal native-provider enforcement was rejected: %v", err)
-	}
-}
-
-func TestInputChecksDoNotChangeOutputDelivery(t *testing.T) {
-	for _, provider := range []api.GuardrailProvider{"Regex", "Webhook", "Bedrock", "ModelArmor"} {
-		for _, phase := range []string{"input", "output"} {
-			for _, mode := range []string{"enforce", "audit"} {
-				t.Run(string(provider)+"/"+phase+"/"+mode, func(t *testing.T) {
-					policy := &api.GuardrailPolicy{
-						ObjectMeta: metav1.ObjectMeta{Name: "delivery", Namespace: "test", UID: "delivery"},
-					}
-					check := api.GuardrailCheck{
-						ID: "detector", Name: "Detector", Phase: phase,
-						Scopes: []string{"instructions", "conversation"}, Mode: mode,
-						FailureMode: "closed", Action: "deny",
-						GuardrailID: "guardrail", GuardrailVersion: "1",
-						Template: "projects/project/locations/region/templates/template",
-					}
-					if phase == "output" {
-						check.Scopes = []string{"conversation"}
-					}
-					resolved := ResolvedCheck{Policy: policy, Check: check}
-					if provider == "Regex" {
-						resolved.Check.Action = "mask"
-						resolved.Check.Regex = &api.GuardrailRegex{Patterns: []string{"bounded"}}
-					} else {
-						resolved.Connection = &api.GuardrailConnection{
-							ObjectMeta: metav1.ObjectMeta{Name: "connection", Namespace: "test"},
-							Spec:       api.GuardrailConnectionSpec{Provider: provider, Region: "region"},
-						}
-					}
-					output := ResolvedCheck{Policy: policy, Check: api.GuardrailCheck{
-						ID: "output", Name: "Output", Phase: "output", Scopes: []string{"conversation"},
-						Mode: "audit", FailureMode: "closed", Action: "deny",
-						Regex: &api.GuardrailRegex{Patterns: []string{"bounded"}},
-					}}
-					bundle := &Bundle{
-						Context: RuntimeContext{Delivery: "checkedStreaming"},
-						Checks:  []ResolvedCheck{resolved, output},
-					}
-					if err := bundle.compile("test", "test"); err != nil {
-						t.Fatal(err)
-					}
-					want := "checkedStreaming"
-					if phase == "output" && (provider != "Regex" || mode == "enforce") {
-						want = "wholeOutput"
-					}
-					if bundle.Context.Delivery != want {
-						t.Fatalf("input requirements or audit-only masking changed output delivery: got %s, want %s", bundle.Context.Delivery, want)
-					}
-				})
-			}
-		}
 	}
 }
 
@@ -405,5 +268,104 @@ func TestCompilePolicySharesConnectionsAndRejectsTermination(t *testing.T) {
 	_, err = CompilePolicy(t.Context(), reader, namespace, policy)
 	if err == nil || !strings.Contains(err.Error(), "terminating") {
 		t.Fatalf("terminating detector was accepted: %v", err)
+	}
+}
+
+func TestNativeRejectionAndRevisionMetadata(t *testing.T) {
+	reader, _, workspace := guardrailFixture(t)
+	bundle, err := Resolve(t.Context(), reader, workspace, api.GuardrailAssignment{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rejection := bundle.Guard.Request[0].CustomResponse
+	if rejection.StatusCode != 422 || rejection.Message == nil || !strings.Contains(*rejection.Message, "Mandatory detector") {
+		t.Fatalf("native rejection lost safe feedback or non-retryable status: %#v", rejection)
+	}
+	policy := &agw.AgentgatewayPolicy{}
+	if err := bundle.Apply(policy); err != nil {
+		t.Fatal(err)
+	}
+	metadata := policy.Spec.Traffic.Transformation.Request.Metadata
+	if _, exists := metadata["agentz_guardrails"]; exists {
+		t.Fatal("native configuration still includes private runtime instructions")
+	}
+	if string(metadata["agentz_guardrail_revision"]) != `"`+bundle.Revision+`"` {
+		t.Fatal("telemetry lost the effective configuration revision")
+	}
+}
+
+func TestMandatoryChecksRejectOptionalMutations(t *testing.T) {
+	for _, provider := range []api.GuardrailProvider{"Regex", "Webhook", "Bedrock", "ModelArmor"} {
+		for _, mode := range []string{"enforce", "audit"} {
+			for _, phase := range []string{"input", "output"} {
+				t.Run(string(provider)+"/"+mode+"/"+phase, func(t *testing.T) {
+					mandatory := ResolvedCheck{Mandatory: true, Check: api.GuardrailCheck{
+						ID: "mandatory", Name: "Mandatory", Phase: "input", Mode: "enforce", Action: "deny",
+						Scopes: []string{"instructions", "conversation"}, Regex: &api.GuardrailRegex{Patterns: []string{"secret"}},
+					}}
+					optional := ResolvedCheck{Check: api.GuardrailCheck{
+						ID: "optional", Name: "Optional", Phase: phase, Mode: mode, Action: "deny",
+						Scopes: []string{"instructions", "conversation"}, GuardrailID: "id", GuardrailVersion: "1",
+						Template: "projects/project/locations/region/templates/template",
+					}}
+					if phase == "output" {
+						optional.Check.Scopes = []string{"conversation"}
+					}
+					if provider == "Regex" {
+						optional.Check.Action = "mask"
+						optional.Check.Regex = &api.GuardrailRegex{Patterns: []string{"secret"}}
+					} else {
+						optional.Connection = &api.GuardrailConnection{Spec: api.GuardrailConnectionSpec{Provider: provider, Region: "region"}}
+					}
+					bundle := &Bundle{Checks: []ResolvedCheck{mandatory, optional}}
+					err := bundle.compile("namespace")
+					wantError := phase == "input" && mode == "enforce" && provider != "ModelArmor"
+					if (err != nil) != wantError {
+						t.Fatalf("optional mutation validation = %v, want error %v", err, wantError)
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestStreamingRejectsEnforcedMutations(t *testing.T) {
+	for _, provider := range []api.GuardrailProvider{"Regex", "Webhook", "Bedrock", "ModelArmor"} {
+		for _, phase := range []string{"input", "output"} {
+			for _, mode := range []string{"enforce", "audit"} {
+				t.Run(string(provider)+"/"+phase+"/"+mode, func(t *testing.T) {
+					resolved := ResolvedCheck{Check: api.GuardrailCheck{
+						ID: "check", Phase: phase, Mode: mode, Action: "deny",
+					}}
+					if provider == "Regex" {
+						resolved.Check.Action = "mask"
+					} else {
+						resolved.Connection = &api.GuardrailConnection{Spec: api.GuardrailConnectionSpec{Provider: provider}}
+					}
+					bundle := &Bundle{Checks: []ResolvedCheck{resolved}}
+					wantError := phase == "output" && mode == "enforce" && provider != "ModelArmor"
+					if err := bundle.ValidateStreaming(); (err != nil) != wantError {
+						t.Fatalf("streaming validation = %v, want error %v", err, wantError)
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestStreamingRegexNeedsBoundedContext(t *testing.T) {
+	for _, pattern := range []string{"SECRET", "[0-9]{3}", "^SECRET", "SECRET$", "a+", "a{257}", `\bsecret\b`} {
+		t.Run(pattern, func(t *testing.T) {
+			check := api.GuardrailCheck{ID: "check", Phase: "output", Mode: "enforce", Action: "deny", Regex: &api.GuardrailRegex{Patterns: []string{pattern}}}
+			bundle := &Bundle{Checks: []ResolvedCheck{{Check: check}}}
+			wantError := pattern != "SECRET" && pattern != "[0-9]{3}"
+			if err := bundle.ValidateStreaming(); (err != nil) != wantError {
+				t.Fatalf("stream validation = %v, want error %v", err, wantError)
+			}
+			bundle.Checks[0].Check.Mode = "audit"
+			if err := bundle.ValidateStreaming(); err != nil {
+				t.Fatalf("audit check rejected: %v", err)
+			}
+		})
 	}
 }

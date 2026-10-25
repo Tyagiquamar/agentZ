@@ -5695,11 +5695,6 @@ components:
         sessionToken: {type: string, writeOnly: true}
         token: {type: string, writeOnly: true}
         googleCredentialsJson: {type: string, writeOnly: true, description: ADC-compatible Google credential JSON.}
-    GuardrailCaptureMode:
-      type: string
-      enum: ["off", findings, all]
-      x-go-type: agentzv1alpha1.GuardrailCaptureMode
-      x-go-type-import: {path: github.com/accuknox/agentz/pkg/apis/agentz/v1alpha1, name: agentzv1alpha1}
     GuardrailAssignment:
       type: object
       additionalProperties: false
@@ -5709,15 +5704,13 @@ components:
         policies:
           type: array
           items: {$ref: '#/components/schemas/ResourceReference'}
-        captureMode: {$ref: '#/components/schemas/GuardrailCaptureMode'}
     GuardrailSettings:
       type: object
       additionalProperties: false
       properties:
         mandatoryPolicies: {type: array, items: {type: string}}
-        allowContentCapture: {type: boolean}
         retentionDays: {type: integer, format: int32, minimum: 1, maximum: 3650}
-      required: [mandatoryPolicies, allowContentCapture, retentionDays]
+      required: [mandatoryPolicies, retentionDays]
     GuardrailRegex:
       type: object
       additionalProperties: false
@@ -5867,26 +5860,8 @@ components:
       additionalProperties: false
       properties:
         revision: {type: string}
-        delivery: {type: string, enum: [checkedStreaming, wholeOutput]}
-        captureMode: {$ref: '#/components/schemas/GuardrailCaptureMode'}
         checks: {type: array, items: {$ref: '#/components/schemas/GuardrailEffectiveCheck'}}
-      required: [revision, delivery, captureMode, checks]
-    GuardrailErrorEnvelope:
-      x-go-type: agentzv1alpha1.GuardrailErrorEnvelope
-      x-go-type-import:
-        name: agentzv1alpha1
-        path: github.com/accuknox/agentz/pkg/apis/agentz/v1alpha1
-      type: object
-      properties:
-        error:
-          type: object
-          properties:
-            type: {type: string}
-            code: {type: string}
-            message: {type: string}
-            guardrail: {$ref: '#/components/schemas/GuardrailOutcome'}
-          required: [type, code, message, guardrail]
-      required: [error]
+      required: [revision, checks]
     LensApp:
       type: object
       additionalProperties: false
@@ -12083,8 +12058,10 @@ components:
         session_id: {type: string}
         model: {type: string}
         trace_id: {type: string}
+        span_id: {type: string}
+        revision: {type: string}
         evaluation: {$ref: '#/components/schemas/GuardrailRuntimeEvaluation'}
-      required: [id, organization_id, workspace_id, occurred_at, expires_at, sandbox_name, agent_name, client_id, session_id, model, trace_id, evaluation]
+      required: [id, organization_id, workspace_id, occurred_at, expires_at, sandbox_name, agent_name, client_id, session_id, model, trace_id, span_id, revision, evaluation]
     ListGuardrailEventsResponse:
       type: object
       additionalProperties: false

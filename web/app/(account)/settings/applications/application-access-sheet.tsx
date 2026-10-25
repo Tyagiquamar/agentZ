@@ -145,7 +145,7 @@ export function ApplicationAccessDetails({
         <p className="px-4 text-sm text-muted-foreground">
           Model requests follow required organization guardrails and any policies assigned to this
           application&apos;s authorized workspace access. Workspace administrators manage these
-          policies and any explicitly enabled audit content capture.
+          policies.
         </p>
       ) : null}
       <Separator />

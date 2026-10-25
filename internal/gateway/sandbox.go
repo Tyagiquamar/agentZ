@@ -1514,16 +1514,12 @@ func (s *Service) validateSandboxMCPConnections(ctx context.Context, current str
 }
 
 func (s *Service) validateSandboxDependencies(ctx context.Context, access resourceAccess, sandbox *agentzv1alpha1.Sandbox) ([]gatewayapi.FieldError, error) {
-	bundle, err := guardrails.Resolve(ctx, s.k8sClient, access.namespace, "sandbox/"+sandbox.Name, sandbox.Spec.Guardrails)
+	bundle, err := guardrails.Resolve(ctx, s.k8sClient, access.namespace, sandbox.Spec.Guardrails)
 	if err != nil {
 		return []gatewayapi.FieldError{{Field: "guardrails", Message: err.Error()}}, nil
 	}
-	if err := bundle.ConfigureManagedDelivery(); err != nil {
+	if err := bundle.ValidateStreaming(); err != nil {
 		return []gatewayapi.FieldError{{Field: "guardrails", Message: err.Error()}}, nil
-	}
-	requestedCapture := sandbox.Spec.Guardrails.CaptureMode
-	if requestedCapture != "" && requestedCapture != "off" && bundle.Context.Capture == "off" {
-		return []gatewayapi.FieldError{{Field: "guardrails.captureMode", Message: "organization administrators must permit content capture before it can be enabled"}}, nil
 	}
 	fields := []gatewayapi.FieldError{}
 	workspaceScope := authorization.Scope{

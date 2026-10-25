@@ -75,7 +75,7 @@ export function GuardrailEvents({
     getCoreRowModel: getCoreRowModel(),
     columns: [
       column.accessor("occurred_at", {
-        header: "Time",
+        header: "Request time",
         cell: ({ row, getValue }) => (
           <Link
             className="hover:underline"
@@ -115,34 +115,16 @@ export function GuardrailEvents({
         cell: ({ getValue }) => (getValue().phase === "request" ? "Input" : "Output"),
       }),
       column.accessor("evaluation", {
-        id: "policy",
-        header: "Check",
-        cell: ({ getValue }) => (
-          <div className="flex flex-col gap-1">
-            <span>{getValue().agentz?.safeLabel || getValue().guard}</span>
-            {getValue().agentz?.errorCode ? (
-              <span className="text-xs text-muted-foreground">Checker error</span>
-            ) : null}
-          </div>
-        ),
+        id: "guard",
+        header: "Checker",
+        cell: ({ getValue }) => getValue().guard,
       }),
-      column.accessor("evaluation", {
-        id: "reference",
-        header: "Reference",
-        cell: ({ row, getValue }) => (
-          <Link
-            className="font-mono text-xs hover:underline"
-            onClick={(event) => event.stopPropagation()}
-            onKeyDown={(event) => event.stopPropagation()}
-            href={`${basePath}/events/${encodeURIComponent(row.original.id)}`}
-          >
-            <span
-              className="block max-w-36 truncate"
-              title={getValue().agentz?.referenceId || row.original.id}
-            >
-              {getValue().agentz?.referenceId || row.original.id}
-            </span>
-          </Link>
+      column.accessor("trace_id", {
+        header: "Trace",
+        cell: ({ getValue }) => (
+          <span className="block max-w-36 truncate font-mono text-xs" title={getValue()}>
+            {getValue() || "Unavailable"}
+          </span>
         ),
       }),
     ],
@@ -175,12 +157,14 @@ export function GuardrailEvents({
             </Select>
           </Field>
           <Field className="max-w-sm">
-            <FieldLabel htmlFor={`${idPrefix}-guardrail-event-reference`}>Reference ID</FieldLabel>
+            <FieldLabel htmlFor={`${idPrefix}-guardrail-event-reference`}>
+              Trace or reference
+            </FieldLabel>
             <Input
               defaultValue={referenceId}
               id={`${idPrefix}-guardrail-event-reference`}
               name="reference_id"
-              placeholder="Find a reported block"
+              placeholder="Trace ID or event reference"
             />
           </Field>
           <Button type="submit" variant="outline">
@@ -202,8 +186,8 @@ export function GuardrailEvents({
           subject: { minWidth: 160 },
           outcome: { minWidth: 120 },
           phase: { minWidth: 80 },
-          policy: { minWidth: 200 },
-          reference: { minWidth: 200 },
+          guard: { minWidth: 160 },
+          trace_id: { minWidth: 200 },
         }}
         pagination={
           data.next_cursor ? (
@@ -232,21 +216,19 @@ export function GuardrailEventDetail({
   event: GuardrailEvent
   basePath: `/orgs/${string}/guardrails`
 }) {
-  const context = event.evaluation.agentz
-  const reference = context?.referenceId || event.id
-  const explanation = context?.errorCode
-    ? event.evaluation.action === "reject"
-      ? "The checker could not complete. The request was blocked."
-      : "The checker could not complete. The request was allowed under the configured audit or failure handling."
-    : event.evaluation.action === "allow"
-      ? "The check allowed this content."
-      : context?.explanation ||
-        event.evaluation.actionReason ||
-        "No additional explanation was recorded."
   const verdict = verdicts[event.evaluation.action]
   const subject = event.agent_name || event.client_id || event.sandbox_name
+  const legacy = event.evaluation.agentz
   const metadata = [
     ["Event ID", event.id],
+    ["Record format", legacy ? "Historical" : "Native"],
+    ["Policy", legacy?.policyId],
+    ["Check", legacy?.checkId],
+    ["Reference", legacy?.referenceId],
+    ["Explanation", legacy?.explanation],
+    ["Checker error", legacy?.errorCode],
+    ["Historical label", legacy?.safeLabel],
+    ["Historical provider reason", legacy ? event.evaluation.actionReason : undefined],
     ["Expires", formatTimestamp(event.expires_at)],
     ["Organization ID", event.organization_id],
     ["Workspace ID", event.workspace_id],
@@ -255,18 +237,11 @@ export function GuardrailEventDetail({
     ["Sandbox", event.sandbox_name],
     ["Session", event.session_id],
     ["Trace", event.trace_id],
-    ["Policy ID", context?.policyId],
-    ["Check ID", context?.checkId],
-    ["Revision", context?.revision],
-    ["Connection ID", context?.connectionId],
-    ["Attachment", context?.attachment],
-    ["Required", context ? (context.mandatory ? "Yes" : "No") : undefined],
+    ["Span", event.span_id],
+    ["Applied revision", event.revision],
     ["Detector", event.evaluation.guard],
     ["Provider guardrail ID", event.evaluation.guardrailId],
     ["Provider version", event.evaluation.guardrailVersion],
-    ["Inspected scopes", context?.scopes.join(", ")],
-    ["Duration", context ? `${context.durationMs.toFixed(2)} ms` : "Unavailable"],
-    ["Checker error", context?.errorCode],
   ]
   return (
     <div className="flex w-full max-w-4xl flex-col gap-5 px-4 pb-6 md:px-6">
@@ -285,17 +260,8 @@ export function GuardrailEventDetail({
           <Badge variant="outline">
             {event.evaluation.phase === "request" ? "Input" : "Output"}
           </Badge>
-          {context?.mandatory ? <Badge variant="secondary">Required policy</Badge> : null}
-          {context?.validationPass === "mandatoryFinal" ? (
-            <Badge variant="secondary">Rechecked after masking</Badge>
-          ) : null}
         </div>
-        <div className="flex flex-col gap-1.5">
-          <h2 className="text-lg font-medium break-words">
-            {context?.safeLabel || event.evaluation.guard}
-          </h2>
-          <p className="text-sm text-muted-foreground">{explanation}</p>
-        </div>
+        <h2 className="text-lg font-medium break-words">{event.evaluation.guard}</h2>
         <dl className="flex flex-wrap gap-x-8 gap-y-3 text-sm">
           {subject ? (
             <div>
@@ -310,57 +276,33 @@ export function GuardrailEventDetail({
             </div>
           ) : null}
           <div>
-            <dt className="text-xs text-muted-foreground">Evaluated</dt>
+            <dt className="text-xs text-muted-foreground">Request time</dt>
             <dd className="mt-1">{formatTimestamp(event.occurred_at)}</dd>
           </div>
         </dl>
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="text-xs text-muted-foreground">Reference</span>
-          <code className="truncate text-xs" title={reference}>
-            {reference}
-          </code>
-          <CopyButton content={reference} label="Copy reference ID" />
-        </div>
-      </section>
-      <section className="flex flex-col gap-3 border-t border-dotted pt-5">
-        <div className="flex flex-col gap-1.5">
-          <h3 className="text-sm font-medium">Captured content</h3>
-          <p className="text-sm text-muted-foreground">
-            {context?.inspected?.length
-              ? "Content retained with this evaluation under the configured capture permissions."
-              : "No inspected content was captured for this evaluation."}
-          </p>
-        </div>
-        {context?.inspected?.length || context?.replacement?.length ? (
-          <Accordion type="multiple">
-            {[
-              { key: "inspected", label: "Inspected content", content: context.inspected },
-              { key: "replacement", label: "Replacement content", content: context.replacement },
-            ].map(({ key, label, content }) =>
-              content?.length ? (
-                <AccordionItem key={key} value={key}>
-                  <AccordionTrigger>
-                    {label} ({content.length})
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    <div className="flex flex-col gap-3">
-                      {content.map((text, index) => (
-                        <pre
-                          className="max-h-96 overflow-auto rounded-sm bg-muted/30 p-3 text-xs whitespace-pre-wrap"
-                          key={index}
-                        >
-                          {text}
-                        </pre>
-                      ))}
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-              ) : null
-            )}
-          </Accordion>
+        {event.trace_id ? (
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="text-xs text-muted-foreground">Trace</span>
+            <code className="truncate text-xs" title={event.trace_id}>
+              {event.trace_id}
+            </code>
+            <CopyButton content={event.trace_id} label="Copy trace ID" />
+          </div>
         ) : null}
       </section>
       <Accordion type="multiple">
+        {legacy?.inspected?.length ? (
+          <AccordionItem value="historical-content">
+            <AccordionTrigger>Historical inspected content</AccordionTrigger>
+            <AccordionContent>
+              {legacy.inspected.map((content, index) => (
+                <pre className="mb-3 text-xs break-words whitespace-pre-wrap" key={index}>
+                  {content}
+                </pre>
+              ))}
+            </AccordionContent>
+          </AccordionItem>
+        ) : null}
         <AccordionItem value="technical">
           <AccordionTrigger>Technical details</AccordionTrigger>
           <AccordionContent>
@@ -379,16 +321,6 @@ export function GuardrailEventDetail({
             </dl>
           </AccordionContent>
         </AccordionItem>
-        {event.evaluation.assessments?.length ? (
-          <AccordionItem value="assessment">
-            <AccordionTrigger>Provider assessment</AccordionTrigger>
-            <AccordionContent>
-              <pre className="max-h-96 overflow-auto rounded-sm bg-muted/30 p-3 text-xs whitespace-pre-wrap">
-                {JSON.stringify(event.evaluation.assessments, null, 2)}
-              </pre>
-            </AccordionContent>
-          </AccordionItem>
-        ) : null}
       </Accordion>
     </div>
   )

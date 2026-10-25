@@ -543,6 +543,9 @@ CREATE TABLE observer_guardrail_events (
   session_id TEXT NOT NULL DEFAULT '',
   model TEXT NOT NULL DEFAULT '',
   trace_id BYTEA NOT NULL,
+  span_id BYTEA NOT NULL DEFAULT ''::bytea,
+  evaluation_index INTEGER NOT NULL DEFAULT -1,
+  revision TEXT NOT NULL DEFAULT '',
   phase TEXT NOT NULL CHECK (phase IN ('request', 'response')),
   action TEXT NOT NULL CHECK (action IN ('allow', 'failOpen', 'audit', 'mask', 'reject')),
   policy_id TEXT NOT NULL,
@@ -556,3 +559,7 @@ CREATE INDEX observer_guardrail_events_scope_time_idx
 CREATE INDEX observer_guardrail_events_reference_idx
   ON observer_guardrail_events (organization_id, reference_id);
 CREATE INDEX observer_guardrail_events_expiry_idx ON observer_guardrail_events (expires_at);
+
+CREATE UNIQUE INDEX observer_guardrail_events_span_evaluation_idx
+  ON observer_guardrail_events (trace_id, span_id, evaluation_index)
+  WHERE octet_length(span_id) = 8;

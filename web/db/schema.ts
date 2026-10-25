@@ -266,8 +266,6 @@ export const externalAgents = pgTable(
   ]
 )
 
-export const guardrailCaptureMode = pgEnum("guardrail_capture_mode", ["off", "findings", "all"])
-
 export const guardrailClientAccess = pgTable(
   "guardrail_client_access",
   {
@@ -279,7 +277,6 @@ export const guardrailClientAccess = pgTable(
       .notNull()
       .references(() => oauthClients.clientId, { onDelete: "cascade" }),
     policies: jsonb("policies").$type<ResourceReference[]>().default([]).notNull(),
-    captureMode: guardrailCaptureMode("capture_mode").default("off").notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
     updatedBy: text("updated_by").references(() => users.id, { onDelete: "set null" }),
   },

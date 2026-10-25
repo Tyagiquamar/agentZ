@@ -14,9 +14,10 @@ type Querier interface {
 	DeleteExpiredGuardrailEvents(ctx context.Context) (int64, error)
 	// ScopeNamespace hashes the typed scope and stable ID, separated by a NUL byte.
 	GetGuardrailSubjectScope(ctx context.Context, namespace string) (GetGuardrailSubjectScopeRow, error)
+	GuardrailEventChanged(ctx context.Context, arg GuardrailEventChangedParams) (bool, error)
 	InsertAppOperation(ctx context.Context, arg []InsertAppOperationParams) *InsertAppOperationBatchResults
 	InsertFileEvents(ctx context.Context, arg []InsertFileEventsParams) (int64, error)
-	InsertGuardrailEvent(ctx context.Context, arg InsertGuardrailEventParams) error
+	InsertGuardrailEvent(ctx context.Context, arg InsertGuardrailEventParams) (int64, error)
 	InsertMCPToolInvocation(ctx context.Context, arg []InsertMCPToolInvocationParams) *InsertMCPToolInvocationBatchResults
 	InsertNetworkEvents(ctx context.Context, arg []InsertNetworkEventsParams) (int64, error)
 	InsertProcessEvents(ctx context.Context, arg []InsertProcessEventsParams) (int64, error)

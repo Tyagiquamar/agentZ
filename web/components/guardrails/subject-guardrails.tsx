@@ -23,14 +23,6 @@ import {
   FieldLegend,
   FieldSet,
 } from "@/components/ui/field"
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 
 export function SubjectGuardrails({
   assignment,
@@ -247,70 +239,9 @@ export function SubjectGuardrails({
         )}
       </FieldSet>
       <FieldDescription>
-        Managed agents hold responses until enforced output checks finish.
+        Guardrail events retain metadata for {settings.retentionDays} days. Conversation storage is
+        managed separately.
       </FieldDescription>
-      <FieldSet>
-        <FieldLegend>Content capture</FieldLegend>
-        <FieldDescription>
-          Event metadata is always recorded and kept for {settings.retentionDays} days. Content
-          capture is optional.
-        </FieldDescription>
-        <Field orientation="horizontal">
-          <Checkbox
-            checked={assignment.captureMode !== undefined && assignment.captureMode !== "off"}
-            disabled={
-              disabled ||
-              pending ||
-              (!settings.allowContentCapture &&
-                (!assignment.captureMode || assignment.captureMode === "off"))
-            }
-            id={`${idPrefix}-guardrail-capture-enabled`}
-            onCheckedChange={(value) => {
-              onChange({ ...assignment, captureMode: value === true ? "findings" : "off" })
-              setEffective(undefined)
-            }}
-          />
-          <FieldContent>
-            <FieldLabel htmlFor={`${idPrefix}-guardrail-capture-enabled`}>
-              Store inspected content
-            </FieldLabel>
-            <FieldDescription>
-              {settings.allowContentCapture
-                ? "May include sensitive messages and tool data. Event readers can view captured content; it expires with the event."
-                : "Your organization has not permitted content capture. Metadata remains available."}
-            </FieldDescription>
-          </FieldContent>
-        </Field>
-        {assignment.captureMode && assignment.captureMode !== "off" ? (
-          <Field>
-            <FieldLabel htmlFor={`${idPrefix}-guardrail-capture-mode`}>Capture</FieldLabel>
-            <Select
-              disabled={disabled || pending || !settings.allowContentCapture}
-              onValueChange={(value) => {
-                if (value === "findings" || value === "all") {
-                  onChange({ ...assignment, captureMode: value })
-                  setEffective(undefined)
-                }
-              }}
-              value={assignment.captureMode}
-            >
-              <SelectTrigger id={`${idPrefix}-guardrail-capture-mode`} className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectItem value="findings">Findings and errors only</SelectItem>
-                  <SelectItem value="all">All evaluated traffic</SelectItem>
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-            <FieldDescription>
-              Findings include blocks, masking, audit detections, and checker errors. Checkers
-              receive content even when capture is off.
-            </FieldDescription>
-          </Field>
-        ) : null}
-      </FieldSet>
       <Button
         className="self-start"
         disabled={pending}
@@ -354,12 +285,7 @@ export function SubjectGuardrails({
           ) : (
             <p className="text-sm text-muted-foreground">No checks apply.</p>
           )}
-          <p className="text-xs text-muted-foreground">
-            {effective.delivery === "wholeOutput"
-              ? "Responses are held until output checks finish."
-              : "Compatible clients can use checked streaming."}{" "}
-            Save to apply this selection.
-          </p>
+          <p className="text-xs text-muted-foreground">Save to apply this selection.</p>
         </div>
       ) : null}
       {error ? <FieldError>{error}</FieldError> : null}

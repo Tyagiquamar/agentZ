@@ -25,16 +25,12 @@ export type GuardrailCredentials = {
   googleCredentialsJson?: string
 }
 
-export type GuardrailCaptureMode = "off" | "findings" | "all"
-
 export type GuardrailAssignment = {
   policies?: Array<ResourceReference>
-  captureMode?: GuardrailCaptureMode
 }
 
 export type GuardrailSettings = {
   mandatoryPolicies: Array<string>
-  allowContentCapture: boolean
   retentionDays: number
 }
 
@@ -149,18 +145,7 @@ export type GuardrailEffectiveCheck = {
 
 export type GuardrailEffective = {
   revision: string
-  delivery: "checkedStreaming" | "wholeOutput"
-  captureMode: GuardrailCaptureMode
   checks: Array<GuardrailEffectiveCheck>
-}
-
-export type GuardrailErrorEnvelope = {
-  error: {
-    type: string
-    code: string
-    message: string
-    guardrail: GuardrailOutcome
-  }
 }
 
 export type LensApp = {
@@ -3036,6 +3021,8 @@ export type GuardrailEvent = {
   session_id: string
   model: string
   trace_id: string
+  span_id: string
+  revision: string
   evaluation: GuardrailRuntimeEvaluation
 }
 

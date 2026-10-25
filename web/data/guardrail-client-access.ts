@@ -72,7 +72,6 @@ export async function listGuardrailClientAccess(orgSlug: string, workspaceSlug: 
         models: [],
         guardrails: {
           policies: assignment?.policies ?? [],
-          captureMode: assignment?.captureMode ?? "off",
         },
         updatedAt: assignment?.updatedAt.toISOString(),
       }

@@ -73,7 +73,6 @@ export function CheckEditor({
   const connection = connections.find(
     (item) => item.name === check.connection?.name && item.scope === check.connection.scope
   )
-  const detector = check.regex ? "regex" : (connection?.provider ?? "connection")
   const defaultScopes =
     check.phase === "output" || check.regex ? ["conversation"] : ["instructions", "conversation"]
   const customScopes =
@@ -172,7 +171,7 @@ export function CheckEditor({
                         scopes:
                           value === "output"
                             ? ["conversation"]
-                            : !check.regex && detector !== "Bedrock"
+                            : !check.regex
                               ? ["instructions", "conversation"]
                               : check.scopes,
                       })
@@ -185,7 +184,7 @@ export function CheckEditor({
                   <SelectContent>
                     <SelectGroup>
                       <SelectItem value="input">Input</SelectItem>
-                      <SelectItem disabled={detector === "OpenAI"} value="output">
+                      <SelectItem disabled={connection?.provider === "OpenAI"} value="output">
                         Output
                       </SelectItem>
                     </SelectGroup>
@@ -217,17 +216,15 @@ export function CheckEditor({
                       ...check,
                       regex: undefined,
                       connection: { scope: selected.scope, name: selected.name },
+                      phase: selected.provider === "OpenAI" ? "input" : check.phase,
                       action: "deny",
                       guardrailId: undefined,
                       guardrailVersion: undefined,
                       template: undefined,
-                      phase: selected.provider === "OpenAI" ? "input" : check.phase,
                       scopes:
                         check.phase === "output" && selected.provider !== "OpenAI"
                           ? ["conversation"]
-                          : selected.provider === "Bedrock"
-                            ? check.scopes
-                            : ["instructions", "conversation"],
+                          : ["instructions", "conversation"],
                     })
                 }}
                 value={
@@ -313,22 +310,21 @@ export function CheckEditor({
                 disabled={disabled}
                 onValueChange={(value) => {
                   if (value === "audit") onChange({ ...check, mode: "audit" })
-                  if (value === "deny" || value === "mask")
-                    onChange({ ...check, mode: "enforce", action: value })
+                  if (value === "enforce") onChange({ ...check, mode: "enforce", action: "deny" })
                 }}
-                value={check.mode === "audit" ? "audit" : check.action}
+                value={
+                  check.mode === "audit" ? "audit" : check.action === "mask" ? "mask" : "enforce"
+                }
               >
                 <SelectTrigger id={`${id}-action`} className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    <SelectItem value="deny">
-                      {check.regex ? "Block" : "Enforce provider verdict"}
-                    </SelectItem>
-                    {check.regex ? (
-                      <SelectItem disabled={check.scopes.includes("toolArguments")} value="mask">
-                        Mask
+                    <SelectItem value="enforce">Enforce</SelectItem>
+                    {check.action === "mask" ? (
+                      <SelectItem disabled value="mask">
+                        Mask (existing configuration)
                       </SelectItem>
                     ) : null}
                     <SelectItem value="audit">Audit only</SelectItem>
@@ -345,7 +341,7 @@ export function CheckEditor({
                 </FieldDescription>
               ) : !check.regex ? (
                 <FieldDescription>
-                  The provider controls detection and redaction rules.
+                  The provider controls detection and may modify content as part of enforcement.
                 </FieldDescription>
               ) : null}
             </Field>
@@ -364,14 +360,14 @@ export function CheckEditor({
               <FieldGroup className="pt-5">
                 <FieldSet>
                   <FieldLegend variant="label">Inspected content</FieldLegend>
-                  {check.phase === "input" && (check.regex || detector === "Bedrock") ? (
+                  {check.phase === "input" ? (
                     <div className="grid gap-3 sm:grid-cols-2">
                       {contentScopes.map(([scope, label]) => (
                         <Field key={scope} orientation="horizontal">
                           <Checkbox
                             checked={check.scopes.includes(scope)}
                             disabled={
-                              disabled || (check.action === "mask" && scope === "toolArguments")
+                              disabled || (!check.regex && connection?.provider !== "Bedrock")
                             }
                             id={`${id}-${scope}`}
                             onCheckedChange={(selected) =>
@@ -389,20 +385,13 @@ export function CheckEditor({
                       ))}
                     </div>
                   ) : (
-                    <FieldDescription>
-                      {check.phase === "output"
-                        ? "Response text."
-                        : contentScopes
-                            .filter(([scope]) => check.scopes.includes(scope))
-                            .map(([, label]) => label)
-                            .join(", ")}
-                    </FieldDescription>
+                    <FieldDescription>Response text.</FieldDescription>
                   )}
                 </FieldSet>
                 <Field>
                   <FieldLabel htmlFor={`${id}-failure`}>If the checker fails</FieldLabel>
                   <Select
-                    disabled={disabled || check.mode === "audit"}
+                    disabled={disabled}
                     onValueChange={(value) => {
                       if (value === "closed" || value === "open")
                         onChange({ ...check, failureMode: value })
@@ -420,9 +409,8 @@ export function CheckEditor({
                     </SelectContent>
                   </Select>
                   <FieldDescription>
-                    {check.mode === "audit"
-                      ? "Audit records checker errors and continues. This choice applies when enforcing."
-                      : "Applies to checker errors and timeouts. Content denials still block."}
+                    Applies to checker errors and timeouts, including audit checks. Audit findings
+                    do not block requests.
                   </FieldDescription>
                 </Field>
                 <Field>

@@ -2,7 +2,6 @@ import type { AssistantMessage, Message, Part, ToolPart, UserMessage } from "@op
 import { attachmentFromPart, type ChatAttachment } from "@/components/blocks/chat/attachments"
 import { describeMessageError } from "@/components/blocks/chat/errors"
 import { z } from "zod"
-import type { GuardrailOutcome } from "@/lib/gateway/client"
 
 const messageActorSchema = z
   .object({
@@ -44,8 +43,7 @@ export type TimelineRow =
       key: string
       label: string
       type: "assistant-error"
-      guardrail?: GuardrailOutcome
-      userMessageID?: string
+      partialOutput: boolean
     }
 
 const contextToolNames = new Set(["read", "list", "glob", "grep"])
@@ -217,7 +215,7 @@ function projectTurn(input: {
 
     if (assistant.error && assistant.error.name !== "MessageAbortedError") {
       const outcome = describeMessageError(assistant.error)
-      if (!error || outcome.guardrail) error = outcome
+      error ??= outcome
     }
   }
 
@@ -237,9 +235,7 @@ function projectTurn(input: {
       key: `assistant-error:${assistants.at(-1)?.id ?? "x"}`,
       label: error.label,
       type: "assistant-error",
-      ...(error.guardrail
-        ? { guardrail: error.guardrail, userMessageID: input.userMessageID }
-        : {}),
+      partialOutput: entries.some((entry) => entry.type === "text"),
     })
   }
 }

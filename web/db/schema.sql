@@ -7,7 +7,6 @@ CREATE TYPE "public"."event_trail_actor" AS ENUM('user', 'api_key', 'system');
 CREATE TYPE "public"."event_trail_result" AS ENUM('succeeded', 'denied', 'failed');
 CREATE TYPE "public"."event_trail_target" AS ENUM('organization', 'organization_membership', 'team', 'mcp_connection', 'inference_provider', 'inference_pool', 'role', 'sandbox', 'skill', 'agent', 'api_key', 'workspace_access', 'workspace', 'guardrail_connection', 'guardrail_policy', 'guardrail_settings', 'external_access_guardrails');
 CREATE TYPE "public"."external_agent_kind" AS ENUM('claude', 'codex');
-CREATE TYPE "public"."guardrail_capture_mode" AS ENUM('off', 'findings', 'all');
 CREATE TYPE "public"."permission_action" AS ENUM('read', 'create', 'modify', 'delete', 'delegate', 'author', 'share_authored', 'share_non_authored', 'use_shared', 'read_shared_secret', 'write_shared_secret', 'delete_shared_secret');
 CREATE TYPE "public"."permission_resource" AS ENUM('mcp_connection', 'skill', 'sandbox', 'inference_provider', 'inference_pool', 'agent', 'api_key', 'observability', 'guardrail_connection', 'guardrail_policy', 'guardrail_event');
 CREATE TYPE "public"."system_role" AS ENUM('superadmin', 'workspace_admin');
@@ -217,7 +216,6 @@ CREATE TABLE "guardrail_client_access" (
 	"workspace_id" text NOT NULL,
 	"client_id" text NOT NULL,
 	"policies" jsonb DEFAULT '[]'::jsonb NOT NULL,
-	"capture_mode" "guardrail_capture_mode" DEFAULT 'off' NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_by" text,
 	CONSTRAINT "guardrail_client_access_organization_id_workspace_id_client_id_pk" PRIMARY KEY("organization_id","workspace_id","client_id")

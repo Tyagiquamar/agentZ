@@ -45,7 +45,8 @@ spec:
                   description: GuardrailCheck is one ordered input or output evaluation.
                   properties:
                     action:
-                      description: Action selects denial or supported masking.
+                      description: Action selects a regex action. Remote checks enforce
+                        their provider-native verdict.
                       enum:
                       - deny
                       - mask
@@ -73,8 +74,8 @@ spec:
                       - scope
                       type: object
                     failureMode:
-                      description: FailureMode controls checker outages and invalid
-                        verdicts.
+                      description: FailureMode controls checker errors; webhook providers
+                        must implement the native verdict contract.
                       enum:
                       - closed
                       - open

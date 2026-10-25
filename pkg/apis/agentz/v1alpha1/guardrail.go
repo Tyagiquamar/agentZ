@@ -9,19 +9,11 @@ const GuardrailConnectionFinalizer = "agentz.accuknox.com/guardrail-connection"
 // +kubebuilder:validation:Enum=OpenAI;Bedrock;ModelArmor;Webhook
 type GuardrailProvider string
 
-// GuardrailCaptureMode controls exact inspected-content audit storage.
-// +kubebuilder:validation:Enum=off;findings;all
-type GuardrailCaptureMode string
-
 // GuardrailAssignment selects additions after the mandatory organization baseline.
 type GuardrailAssignment struct {
 	// Policies is the ordered set of optional policy references.
 	// +optional
 	Policies []ResourceReference `json:"policies,omitempty"`
-	// CaptureMode defaults to off and requires organization permission.
-	// +kubebuilder:default=off
-	// +optional
-	CaptureMode GuardrailCaptureMode `json:"captureMode,omitempty"`
 }
 
 // GuardrailSettings is owned exclusively by organization administrators.
@@ -29,10 +21,7 @@ type GuardrailSettings struct {
 	// MandatoryPolicies is the ordered organization policy baseline.
 	// +optional
 	MandatoryPolicies []string `json:"mandatoryPolicies,omitempty"`
-	// AllowContentCapture permits resource owners to opt into inspected-content storage.
-	// +optional
-	AllowContentCapture bool `json:"allowContentCapture,omitempty"`
-	// RetentionDays expires metadata and captured content together.
+	// RetentionDays expires guardrail event metadata.
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=3650
 	// +kubebuilder:default=30
@@ -110,10 +99,10 @@ type GuardrailCheck struct {
 	// Mode controls enforcement independently of operational failure handling.
 	// +kubebuilder:validation:Enum=enforce;audit
 	Mode string `json:"mode"`
-	// FailureMode controls checker outages and invalid verdicts.
+	// FailureMode controls checker errors; webhook providers must implement the native verdict contract.
 	// +kubebuilder:validation:Enum=closed;open
 	FailureMode string `json:"failureMode"`
-	// Action selects denial or supported masking.
+	// Action selects a regex action. Remote checks enforce their provider-native verdict.
 	// +kubebuilder:validation:Enum=deny;mask
 	Action string `json:"action"`
 	// Connection selects a reusable detector; absent for regex checks.
@@ -200,22 +189,7 @@ func init() {
 	SchemeBuilder.Register(&GuardrailConnection{}, &GuardrailConnectionList{}, &GuardrailPolicy{}, &GuardrailPolicyList{})
 }
 
-// GuardrailErrorEnvelope carries a trusted runtime failure through inference clients.
-// +kubebuilder:object:generate=false
-type GuardrailErrorEnvelope struct {
-	Error GuardrailError `json:"error"`
-}
-
-// GuardrailError describes a content denial or an unavailable safeguard.
-// +kubebuilder:object:generate=false
-type GuardrailError struct {
-	Type      string           `json:"type"`
-	Code      string           `json:"code"`
-	Message   string           `json:"message"`
-	Guardrail GuardrailOutcome `json:"guardrail"`
-}
-
-// GuardrailOutcome is safe feedback shared by chat, workflows, and external clients.
+// GuardrailOutcome preserves feedback on previously completed workflow runs.
 type GuardrailOutcome struct {
 	// Code distinguishes a content denial from unavailable safeguards.
 	Code string `json:"code"`

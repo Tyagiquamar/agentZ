@@ -4,17 +4,23 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 
 	observerdb "github.com/accuknox/agentz/internal/observer/db"
+	api "github.com/accuknox/agentz/pkg/apis/agentz/v1alpha1"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tidwall/gjson"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type dbStore struct {
-	pool *pgxpool.Pool
+	pool   *pgxpool.Pool
+	client ctrlclient.Reader
 }
 
 func (s *dbStore) insertBatch(ctx context.Context, b batch) error {
@@ -108,27 +114,73 @@ func (s *dbStore) insertBatch(ctx context.Context, b batch) error {
 		}
 	}
 	guardrailScopes := make(map[string]observerdb.GetGuardrailSubjectScopeRow)
+	retentions := make(map[string]int32)
+	duplicateChanged := false
 	for _, ev := range b.guardrails {
 		row := ev.row
-		if row.OrganizationID == "" {
-			scope, ok := guardrailScopes[ev.namespace]
-			if !ok {
-				scope, err = q.GetGuardrailSubjectScope(ctx, ev.namespace)
-				if err != nil {
-					return fmt.Errorf("resolve guardrail event scope: %w", err)
-				}
-				guardrailScopes[ev.namespace] = scope
+		scope, ok := guardrailScopes[ev.namespace]
+		if !ok {
+			scope, err = q.GetGuardrailSubjectScope(ctx, ev.namespace)
+			if errors.Is(err, pgx.ErrNoRows) {
+				slog.WarnContext(ctx, "discard guardrail event for deleted scope")
+				continue
 			}
-			row.OrganizationID = scope.OrganizationID
-			row.WorkspaceID = scope.WorkspaceID
+			if err != nil {
+				return fmt.Errorf("resolve guardrail event scope: %w", err)
+			}
+			guardrailScopes[ev.namespace] = scope
 		}
-		if err := q.InsertGuardrailEvent(ctx, row); err != nil {
+		wrongOrganization := row.OrganizationID != "" && row.OrganizationID != scope.OrganizationID
+		wrongWorkspace := row.WorkspaceID != "" && row.WorkspaceID != scope.WorkspaceID
+		if wrongOrganization || wrongWorkspace {
+			slog.WarnContext(ctx, "discard guardrail event with mismatched scope")
+			continue
+		}
+		row.OrganizationID = scope.OrganizationID
+		row.WorkspaceID = scope.WorkspaceID
+		retention, ok := retentions[row.OrganizationID]
+		if !ok {
+			tenant := &api.Tenant{}
+			err := s.client.Get(ctx, ctrlclient.ObjectKey{Name: api.ScopeNamespace(api.ResourceScopeOrganisation, row.OrganizationID)}, tenant)
+			if apierrors.IsNotFound(err) {
+				slog.WarnContext(ctx, "discard guardrail event for deleted tenant")
+				continue
+			}
+			if err != nil {
+				return fmt.Errorf("get guardrail retention: %w", err)
+			}
+			if tenant.Spec.OrganizationID != row.OrganizationID {
+				slog.WarnContext(ctx, "discard guardrail event with mismatched tenant")
+				continue
+			}
+			retention = tenant.Spec.Guardrails.RetentionDays
+			if retention == 0 {
+				retention = 30
+			}
+			if retention < 1 || retention > 3650 {
+				slog.WarnContext(ctx, "discard guardrail event with invalid retention")
+				continue
+			}
+			retentions[row.OrganizationID] = retention
+		}
+		row.ExpiresAt = row.OccurredAt.AddDate(0, 0, int(retention))
+		inserted, err := q.InsertGuardrailEvent(ctx, row)
+		if err != nil {
 			return fmt.Errorf("insert guardrail event: %w", err)
+		}
+		if inserted == 0 && !duplicateChanged {
+			duplicateChanged, err = q.GuardrailEventChanged(ctx, observerdb.GuardrailEventChangedParams{ID: row.ID, Evaluation: row.Evaluation, Revision: row.Revision})
+			if err != nil {
+				return fmt.Errorf("compare duplicate guardrail event: %w", err)
+			}
 		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit tx: %w", err)
+	}
+	if duplicateChanged {
+		slog.WarnContext(ctx, "guardrail replay changed existing evidence")
 	}
 	return nil
 }

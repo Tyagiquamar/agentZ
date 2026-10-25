@@ -77,15 +77,6 @@ spec:
                 description: Guardrails adds policies after the mandatory organization
                   baseline.
                 properties:
-                  captureMode:
-                    default: "off"
-                    description: CaptureMode defaults to off and requires organization
-                      permission.
-                    enum:
-                    - "off"
-                    - findings
-                    - all
-                    type: string
                   policies:
                     description: Policies is the ordered set of optional policy references.
                     items:

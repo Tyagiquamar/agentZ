@@ -54,7 +54,7 @@ func TestOrganizationSettingsRequireAdministratorAndUseMappedBearerScope(t *test
 		gatewayapi.HandlerWithOptions(service, gatewayapi.ChiServerOptions{
 			BaseRouter: router, Middlewares: []gatewayapi.MiddlewareFunc{sandboxTestAuth},
 		})
-		body := `{"mandatoryPolicies":[],"allowContentCapture":false,"retentionDays":30}`
+		body := `{"mandatoryPolicies":[],"retentionDays":30}`
 		request := httptest.NewRequest(http.MethodPut, "/api/guardrails/settings", strings.NewReader(body))
 		request.Header.Set("Content-Type", "application/json")
 		response := httptest.NewRecorder()
@@ -74,7 +74,7 @@ func TestGuardrailHTTPHandlersUseAuthorizedClaimsForSettingsAndAudit(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	assignment := map[string]any{"policies": []any{}, "captureMode": "off"}
+	assignment := map[string]any{"policies": []any{}}
 	if err := spec.Components.Schemas["GuardrailAssignment"].Value.VisitJSON(assignment); err != nil {
 		t.Fatalf("the deployed API schema must accept explicit disabled content capture: %v", err)
 	}

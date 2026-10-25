@@ -23,29 +23,6 @@ import (
 	api "github.com/accuknox/agentz/pkg/apis/agentz/v1alpha1"
 )
 
-// CheckContext binds an upstream evaluation to its immutable AgentZ policy snapshot.
-type CheckContext struct {
-	PolicyID        string   `json:"policyId"`
-	CheckID         string   `json:"checkId"`
-	Revision        string   `json:"revision"`
-	ConnectionID    string   `json:"connectionId"`
-	Attachment      string   `json:"attachment"`
-	Mandatory       bool     `json:"mandatory"`
-	SafeLabel       string   `json:"safeLabel"`
-	SafeExplanation string   `json:"safeExplanation"`
-	Scopes          []string `json:"scopes"`
-}
-
-// RuntimeContext is injected by the controller, never accepted from request headers.
-type RuntimeContext struct {
-	Version       int                      `json:"version"`
-	RetentionDays int32                    `json:"retentionDays"`
-	Request       []CheckContext           `json:"request"`
-	Response      []CheckContext           `json:"response"`
-	Capture       api.GuardrailCaptureMode `json:"capture"`
-	Delivery      string                   `json:"delivery"`
-}
-
 // ResolvedCheck identifies one check and its immutable connection configuration.
 type ResolvedCheck struct {
 	Policy     *api.GuardrailPolicy
@@ -54,11 +31,10 @@ type ResolvedCheck struct {
 	Mandatory  bool
 }
 
-// Bundle contains the complete ordered native checks and their trusted provenance.
+// Bundle contains the complete ordered native checks and their effective configuration revision.
 type Bundle struct {
 	Checks      []ResolvedCheck
 	Guard       *agw.AIPromptGuard
-	Context     RuntimeContext
 	Revision    string
 	Connections []*api.GuardrailConnection
 }
@@ -166,7 +142,7 @@ func ValidatePolicy(spec api.GuardrailPolicySpec) error {
 }
 
 // Resolve loads the mandatory baseline and optional additions using trusted namespace identity.
-func Resolve(ctx context.Context, reader client.Reader, namespace, attachment string, assignment api.GuardrailAssignment) (*Bundle, error) {
+func Resolve(ctx context.Context, reader client.Reader, namespace string, assignment api.GuardrailAssignment) (*Bundle, error) {
 	orgNamespace, err := scope.Namespace(ctx, reader, namespace, api.ResourceScopeOrganisation)
 	if err != nil {
 		return nil, err
@@ -175,30 +151,7 @@ func Resolve(ctx context.Context, reader client.Reader, namespace, attachment st
 	if err := reader.Get(ctx, client.ObjectKey{Name: orgNamespace}, tenant); err != nil {
 		return nil, fmt.Errorf("get organization guardrail settings: %w", err)
 	}
-	capture := assignment.CaptureMode
-	if capture == "" {
-		capture = "off"
-	}
-	if capture != "off" && capture != "findings" && capture != "all" {
-		return nil, errors.New("invalid guardrail content capture mode")
-	}
-	if !tenant.Spec.Guardrails.AllowContentCapture {
-		capture = "off"
-	}
-	retention := tenant.Spec.Guardrails.RetentionDays
-	if retention == 0 {
-		retention = 30
-	}
-	bundle := &Bundle{
-		Context: RuntimeContext{
-			Version:       1,
-			RetentionDays: retention,
-			Request:       []CheckContext{},
-			Response:      []CheckContext{},
-			Capture:       capture,
-			Delivery:      "checkedStreaming",
-		},
-	}
+	bundle := &Bundle{}
 	refs := make([]api.ResourceReference, 0, len(tenant.Spec.Guardrails.MandatoryPolicies)+len(assignment.Policies))
 	for _, name := range tenant.Spec.Guardrails.MandatoryPolicies {
 		refs = append(refs, api.ResourceReference{Scope: api.ResourceScopeOrganisation, Name: name})
@@ -254,11 +207,11 @@ func Resolve(ctx context.Context, reader client.Reader, namespace, attachment st
 			bundle.Checks = append(bundle.Checks, resolved)
 		}
 	}
-	bundle.Revision, err = configurationRevision(tenant.Spec.Guardrails, bundle.Checks, capture)
+	bundle.Revision, err = configurationRevision(tenant.Spec.Guardrails, bundle.Checks)
 	if err != nil {
 		return nil, err
 	}
-	if err := bundle.compile(namespace, attachment); err != nil {
+	if err := bundle.compile(namespace); err != nil {
 		return nil, err
 	}
 	return bundle, nil
@@ -270,7 +223,13 @@ func ConnectionRuntimeName(connection *api.GuardrailConnection) string {
 	return "guardrail-" + hex.EncodeToString(sum[:8])
 }
 
-func (b *Bundle) compile(namespace, attachment string) error {
+func (b *Bundle) compile(namespace string) error {
+	mandatoryPhases := make(map[string]bool, 2)
+	for _, resolved := range b.Checks {
+		if resolved.Mandatory {
+			mandatoryPhases[resolved.Check.Phase] = true
+		}
+	}
 	guard := &agw.AIPromptGuard{Streaming: agw.PromptGuardStreamingModeEnabled}
 	for _, resolved := range b.Checks {
 		check := resolved.Check
@@ -278,9 +237,6 @@ func (b *Bundle) compile(namespace, attachment string) error {
 		rejectAction := agw.RejectAuditReject
 		if check.Action == "mask" {
 			action = agw.MASK
-			if check.Phase == "output" && check.Mode == "enforce" {
-				b.Context.Delivery = "wholeOutput"
-			}
 		}
 		if check.Mode == "audit" {
 			action = agw.AUDIT
@@ -290,8 +246,19 @@ func (b *Bundle) compile(namespace, attachment string) error {
 		if check.FailureMode == "open" {
 			failure = "FailOpen"
 		}
-		request := agw.PromptguardRequest{CustomResponse: &agw.CustomResponse{StatusCode: 422}}
-		response := agw.PromptguardResponse{CustomResponse: &agw.CustomResponse{StatusCode: 422}}
+		if !resolved.Mandatory && mandatoryPhases[check.Phase] && check.Mode == "enforce" {
+			mutates := check.Action == "mask" || resolved.Connection != nil && (resolved.Connection.Spec.Provider == "Bedrock" || resolved.Connection.Spec.Provider == "Webhook")
+			if mutates {
+				return fmt.Errorf("check %q can modify content after mandatory organization checks; use audit mode or a non-mutating detector", check.ID)
+			}
+		}
+		explanation := check.SafeExplanation
+		if explanation == "" {
+			explanation = "Edit your request to comply with this policy and try again."
+		}
+		message := check.Name + ": " + explanation
+		request := agw.PromptguardRequest{CustomResponse: &agw.CustomResponse{StatusCode: 422, Message: &message}}
+		response := agw.PromptguardResponse{CustomResponse: &agw.CustomResponse{StatusCode: 422, Message: &message}}
 		for _, value := range check.Scopes {
 			switch value {
 			case "instructions":
@@ -304,45 +271,13 @@ func (b *Bundle) compile(namespace, attachment string) error {
 				request.Scope = append(request.Scope, agw.ContentScopeToolInput)
 			}
 		}
-		context := CheckContext{
-			PolicyID:        string(resolved.Policy.UID),
-			CheckID:         check.ID,
-			Revision:        b.Revision,
-			Attachment:      attachment,
-			Mandatory:       resolved.Mandatory,
-			SafeLabel:       check.Name,
-			SafeExplanation: check.SafeExplanation,
-			Scopes:          slices.Clone(check.Scopes),
-		}
-		if context.PolicyID == "" {
-			context.PolicyID = resolved.Policy.Namespace + "/" + resolved.Policy.Name
-		}
-		if context.SafeExplanation == "" {
-			context.SafeExplanation = "Edit your request to comply with this policy and try again."
-		}
 		if check.Regex != nil {
-			if check.Phase == "output" {
-				for _, pattern := range check.Regex.Patterns {
-					parsed, err := syntax.Parse(pattern, syntax.Perl)
-					if err != nil {
-						return err
-					}
-					width, compatible := boundedPatternWidth(parsed)
-					if !compatible || width > 256 {
-						b.Context.Delivery = "wholeOutput"
-					}
-				}
-			}
 			regex := &agw.Regex{Matches: check.Regex.Patterns, Action: &action}
 			request.Regex = regex
 			response.Regex = regex
 		}
 		if resolved.Connection != nil {
 			connection := resolved.Connection
-			context.ConnectionID = string(connection.UID)
-			if context.ConnectionID == "" {
-				context.ConnectionID = connection.Namespace + "/" + connection.Name
-			}
 			name := ConnectionRuntimeName(connection)
 			secret := &agw.LocalSecretKeyRef{Name: gwv1.ObjectName(name), Key: new("token")}
 			defaultScopes := len(check.Scopes) == 2 && slices.Contains(check.Scopes, "instructions") && slices.Contains(check.Scopes, "conversation")
@@ -410,16 +345,11 @@ func (b *Bundle) compile(namespace, attachment string) error {
 				request.Webhook = webhook
 				response.Webhook = webhook
 			}
-			if check.Phase == "output" {
-				b.Context.Delivery = "wholeOutput"
-			}
 		}
 		if check.Phase == "input" {
 			guard.Request = append(guard.Request, request)
-			b.Context.Request = append(b.Context.Request, context)
 		} else {
 			guard.Response = append(guard.Response, response)
-			b.Context.Response = append(b.Context.Response, context)
 		}
 	}
 	if len(guard.Request) > 8 || len(guard.Response) > 8 {
@@ -456,15 +386,11 @@ func (b *Bundle) Apply(policy *agw.AgentgatewayPolicy) error {
 	if request.Metadata == nil {
 		request.Metadata = map[string]agw.CELExpression{}
 	}
-	encoded, err := json.Marshal(b.Context)
+	encoded, err := json.Marshal(b.Revision)
 	if err != nil {
 		return err
 	}
-	literal, err := json.Marshal(string(encoded))
-	if err != nil {
-		return err
-	}
-	request.Metadata["agentz_guardrails"] = agw.CELExpression("json(" + string(literal) + ")")
+	request.Metadata["agentz_guardrail_revision"] = agw.CELExpression(encoded)
 	if policy.Annotations == nil {
 		policy.Annotations = map[string]string{}
 	}
@@ -472,29 +398,31 @@ func (b *Bundle) Apply(policy *agw.AgentgatewayPolicy) error {
 	return nil
 }
 
-// ConfigureManagedDelivery validates transformations and preserves typed failures
-// through the managed client's current streaming adapter.
-func (b *Bundle) ConfigureManagedDelivery() error {
-	wholeOutput := false
+// ValidateStreaming rejects mutations that native checked streaming cannot apply.
+// Checks inspect overlapping windows, not the complete response.
+func (b *Bundle) ValidateStreaming() error {
 	for _, resolved := range b.Checks {
 		check := resolved.Check
-		if check.Phase == "output" && check.Mode == "enforce" && check.Action == "mask" {
-			return fmt.Errorf("check %q masks output, which is unsupported for managed streaming clients; use denial or audit-only", check.ID)
+		if check.Phase != "output" || check.Mode != "enforce" {
+			continue
 		}
-		if check.Phase == "output" && check.Mode == "enforce" {
-			wholeOutput = true
+		if check.Regex != nil {
+			for _, pattern := range check.Regex.Patterns {
+				parsed, err := syntax.Parse(pattern, syntax.Perl)
+				if err != nil {
+					return fmt.Errorf("check %q has an invalid regex: %w", check.ID, err)
+				}
+				width, compatible := boundedPatternWidth(parsed)
+				if !compatible || width > 256 {
+					return fmt.Errorf("check %q requires whole-output regex context; use a bounded pattern without anchors or audit mode", check.ID)
+				}
+			}
 		}
-	}
-	if wholeOutput && b.Context.Delivery != "wholeOutput" {
-		b.Context.Delivery = "wholeOutput"
-		// Delivery is part of the request snapshot, including its audit revision.
-		sum := sha256.Sum256([]byte(b.Revision + "\x00managed-whole-output"))
-		b.Revision = hex.EncodeToString(sum[:])
-		for i := range b.Context.Request {
-			b.Context.Request[i].Revision = b.Revision
+		if check.Action == "mask" {
+			return fmt.Errorf("check %q masks output, which native checked streaming cannot apply; use audit mode or denial", check.ID)
 		}
-		for i := range b.Context.Response {
-			b.Context.Response[i].Revision = b.Revision
+		if resolved.Connection != nil && (resolved.Connection.Spec.Provider == "Bedrock" || resolved.Connection.Spec.Provider == "Webhook") {
+			return fmt.Errorf("check %q uses a provider that can modify output, which native checked streaming cannot apply; use audit mode or a non-mutating detector", check.ID)
 		}
 	}
 	return nil
@@ -505,16 +433,7 @@ func CompilePolicy(ctx context.Context, reader client.Reader, namespace string, 
 	if err := ValidatePolicy(policy.Spec); err != nil {
 		return nil, err
 	}
-	bundle := &Bundle{
-		Context: RuntimeContext{
-			Version:       1,
-			RetentionDays: 30,
-			Request:       []CheckContext{},
-			Response:      []CheckContext{},
-			Capture:       "off",
-			Delivery:      "checkedStreaming",
-		},
-	}
+	bundle := &Bundle{}
 	for _, check := range policy.Spec.Checks {
 		resolved := ResolvedCheck{Policy: policy, Check: check}
 		if check.Connection != nil {
@@ -527,11 +446,11 @@ func CompilePolicy(ctx context.Context, reader client.Reader, namespace string, 
 		bundle.Checks = append(bundle.Checks, resolved)
 	}
 	var err error
-	bundle.Revision, err = configurationRevision(api.GuardrailSettings{}, bundle.Checks, "off")
+	bundle.Revision, err = configurationRevision(api.GuardrailSettings{}, bundle.Checks)
 	if err != nil {
 		return nil, err
 	}
-	if err := bundle.compile(namespace, "policy/"+policy.Name); err != nil {
+	if err := bundle.compile(namespace); err != nil {
 		return nil, err
 	}
 	return bundle, nil
@@ -599,14 +518,12 @@ type checkRevision struct {
 
 type effectiveRevision struct {
 	Settings api.GuardrailSettings
-	Capture  api.GuardrailCaptureMode
 	Checks   []checkRevision
 }
 
-func configurationRevision(settings api.GuardrailSettings, checks []ResolvedCheck, capture api.GuardrailCaptureMode) (string, error) {
+func configurationRevision(settings api.GuardrailSettings, checks []ResolvedCheck) (string, error) {
 	snapshot := effectiveRevision{
 		Settings: settings,
-		Capture:  capture,
 		Checks:   make([]checkRevision, 0, len(checks)),
 	}
 	for _, check := range checks {

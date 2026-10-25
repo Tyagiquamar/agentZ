@@ -170,8 +170,8 @@ func TestDelegatedGuardrailProjectionTargetsItsRouteAndGatesReadiness(t *testing
 		t.Fatal(err)
 	}
 	metadata := telemetry.Spec.Traffic.Transformation.Request.Metadata
-	if metadata["agentz_guardrails"] == "" || metadata["agentz_observability"] == "" {
-		t.Fatal("one route transformation must retain both guardrail provenance and audit attribution")
+	if metadata["agentz_guardrail_revision"] == "" || metadata["agentz_observability"] == "" {
+		t.Fatal("one route transformation must retain both guardrail revision and audit attribution")
 	}
 	conditions := []metav1.Condition{
 		{Type: "Accepted", Status: metav1.ConditionTrue},

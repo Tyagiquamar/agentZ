@@ -73,6 +73,24 @@ func (q *Queries) GetGuardrailSubjectScope(ctx context.Context, namespace string
 	return i, err
 }
 
+const guardrailEventChanged = `-- name: GuardrailEventChanged :one
+SELECT COALESCE(evaluation <> $1::jsonb OR revision <> $2::text, false)::boolean AS changed
+FROM observer_guardrail_events WHERE id = $3
+`
+
+type GuardrailEventChangedParams struct {
+	Evaluation []byte `json:"evaluation"`
+	Revision   string `json:"revision"`
+	ID         string `json:"id"`
+}
+
+func (q *Queries) GuardrailEventChanged(ctx context.Context, arg GuardrailEventChangedParams) (bool, error) {
+	row := q.db.QueryRow(ctx, guardrailEventChanged, arg.Evaluation, arg.Revision, arg.ID)
+	var changed bool
+	err := row.Scan(&changed)
+	return changed, err
+}
+
 type InsertFileEventsParams struct {
 	TenantNamespace   string    `json:"tenant_namespace"`
 	AgentName         string    `json:"agent_name"`
@@ -86,40 +104,44 @@ type InsertFileEventsParams struct {
 	Source            string    `json:"source"`
 }
 
-const insertGuardrailEvent = `-- name: InsertGuardrailEvent :exec
+const insertGuardrailEvent = `-- name: InsertGuardrailEvent :execrows
 INSERT INTO observer_guardrail_events (
   id, organization_id, workspace_id, occurred_at, expires_at, sandbox_name, agent_name,
-  client_id, session_id, model, trace_id, phase, action, policy_id, reference_id, evaluation
+  client_id, session_id, model, trace_id, span_id, evaluation_index, revision, phase, action, policy_id, reference_id, evaluation
 ) VALUES (
   $1, $2, $3, $4,
   $5, $6, $7, $8,
-  $9, $10, $11, $12, $13,
-  $14, $15, $16
+  $9, $10, $11, $12,
+  $13, $14, $15, $16,
+  $17, $18, $19
 )
 ON CONFLICT (id) DO NOTHING
 `
 
 type InsertGuardrailEventParams struct {
-	ID             string    `json:"id"`
-	OrganizationID string    `json:"organization_id"`
-	WorkspaceID    string    `json:"workspace_id"`
-	OccurredAt     time.Time `json:"occurred_at"`
-	ExpiresAt      time.Time `json:"expires_at"`
-	SandboxName    string    `json:"sandbox_name"`
-	AgentName      string    `json:"agent_name"`
-	ClientID       string    `json:"client_id"`
-	SessionID      string    `json:"session_id"`
-	Model          string    `json:"model"`
-	TraceID        []byte    `json:"trace_id"`
-	Phase          string    `json:"phase"`
-	Action         string    `json:"action"`
-	PolicyID       string    `json:"policy_id"`
-	ReferenceID    string    `json:"reference_id"`
-	Evaluation     []byte    `json:"evaluation"`
+	ID              string    `json:"id"`
+	OrganizationID  string    `json:"organization_id"`
+	WorkspaceID     string    `json:"workspace_id"`
+	OccurredAt      time.Time `json:"occurred_at"`
+	ExpiresAt       time.Time `json:"expires_at"`
+	SandboxName     string    `json:"sandbox_name"`
+	AgentName       string    `json:"agent_name"`
+	ClientID        string    `json:"client_id"`
+	SessionID       string    `json:"session_id"`
+	Model           string    `json:"model"`
+	TraceID         []byte    `json:"trace_id"`
+	SpanID          []byte    `json:"span_id"`
+	EvaluationIndex int32     `json:"evaluation_index"`
+	Revision        string    `json:"revision"`
+	Phase           string    `json:"phase"`
+	Action          string    `json:"action"`
+	PolicyID        string    `json:"policy_id"`
+	ReferenceID     string    `json:"reference_id"`
+	Evaluation      []byte    `json:"evaluation"`
 }
 
-func (q *Queries) InsertGuardrailEvent(ctx context.Context, arg InsertGuardrailEventParams) error {
-	_, err := q.db.Exec(ctx, insertGuardrailEvent,
+func (q *Queries) InsertGuardrailEvent(ctx context.Context, arg InsertGuardrailEventParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertGuardrailEvent,
 		arg.ID,
 		arg.OrganizationID,
 		arg.WorkspaceID,
@@ -131,13 +153,19 @@ func (q *Queries) InsertGuardrailEvent(ctx context.Context, arg InsertGuardrailE
 		arg.SessionID,
 		arg.Model,
 		arg.TraceID,
+		arg.SpanID,
+		arg.EvaluationIndex,
+		arg.Revision,
 		arg.Phase,
 		arg.Action,
 		arg.PolicyID,
 		arg.ReferenceID,
 		arg.Evaluation,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 type InsertNetworkEventsParams struct {

@@ -14,7 +14,7 @@ WHERE organization_id = sqlc.arg(organization_id)
   AND (sqlc.arg(action)::text = '' OR action = sqlc.arg(action))
   AND (sqlc.arg(phase)::text = '' OR phase = sqlc.arg(phase))
   AND (sqlc.arg(policy_id)::text = '' OR policy_id = sqlc.arg(policy_id))
-  AND (sqlc.arg(reference_id)::text = '' OR reference_id = sqlc.arg(reference_id))
+  AND (sqlc.arg(reference_id)::text = '' OR reference_id = sqlc.arg(reference_id) OR encode(trace_id, 'hex') = sqlc.arg(reference_id))
   AND (sqlc.arg(session_id)::text = '' OR session_id = sqlc.arg(session_id))
   AND (sqlc.arg(cursor_id)::text = '' OR (occurred_at, id) < (sqlc.arg(cursor_at), sqlc.arg(cursor_id)))
 ORDER BY occurred_at DESC, id DESC
@@ -52,14 +52,13 @@ ORDER BY workspace_id, client_id;
 
 -- name: GatewayUpsertGuardrailClientAccess :one
 INSERT INTO guardrail_client_access (
-  organization_id, workspace_id, client_id, policies, capture_mode, updated_by
+  organization_id, workspace_id, client_id, policies, updated_by
 ) VALUES (
   sqlc.arg(organization_id), sqlc.arg(workspace_id), sqlc.arg(client_id),
-  sqlc.arg(policies), sqlc.arg(capture_mode), sqlc.narg(updated_by)
+  sqlc.arg(policies), sqlc.narg(updated_by)
 )
 ON CONFLICT (organization_id, workspace_id, client_id) DO UPDATE
 SET policies = EXCLUDED.policies,
-    capture_mode = EXCLUDED.capture_mode,
     updated_at = now(),
     updated_by = EXCLUDED.updated_by
 RETURNING *;

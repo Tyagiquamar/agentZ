@@ -269,9 +269,6 @@ spec:
               guardrails:
                 description: Guardrails configures the mandatory organization baseline and audit controls.
                 properties:
-                  allowContentCapture:
-                    description: AllowContentCapture permits resource owners to opt into inspected-content storage.
-                    type: boolean
                   mandatoryPolicies:
                     description: MandatoryPolicies is the ordered organization policy baseline.
                     items:
@@ -279,7 +276,7 @@ spec:
                     type: array
                   retentionDays:
                     default: 30
-                    description: RetentionDays expires metadata and captured content together.
+                    description: RetentionDays expires guardrail event metadata.
                     format: int32
                     maximum: 3650
                     minimum: 1

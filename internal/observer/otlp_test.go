@@ -37,12 +37,13 @@ func TestGuardrailEvidenceHasSeparateRetentionAndTrustBoundary(t *testing.T) {
 		t.Fatal("gateway listener did not retain both evaluation and app operation")
 	}
 	row := events[0].guardrail.row
-	if row.ReferenceID != "reference-1" || !row.ExpiresAt.Equal(row.OccurredAt.AddDate(0, 0, 30)) {
-		t.Fatal("evaluation lost its correlation or shared retention deadline")
+	if row.ReferenceID != "" || row.PolicyID != "" || !row.ExpiresAt.IsZero() {
+		t.Fatal("native evaluation invented provenance or trusted exporter retention")
 	}
-	if bytes.Contains(row.Evaluation, []byte("private detector response")) || !bytes.Contains(row.Evaluation, []byte("private inspected message")) {
-		t.Fatal("provider reason was retained or explicitly captured evidence was lost")
+	if bytes.Contains(row.Evaluation, []byte("private")) || bytes.Contains(row.Evaluation, []byte("agentz")) {
+		t.Fatal("native evaluation retained arbitrary provider text or legacy captured content")
 	}
+
 	_, attrs := extractSpanPayload(spanClassLLM, attrsMap(span.Attributes))
 	stored, err := json.Marshal(attrs)
 	if err != nil {
@@ -310,6 +311,78 @@ func TestReceiverAttributionBoundary(t *testing.T) {
 			got := <-events
 			if (got.app != nil) != test.app || (got.trace != nil) == test.app {
 				t.Fatal("receiver routed telemetry to the wrong storage path")
+			}
+		})
+	}
+}
+
+func TestNativeGuardrailIdentityAndMetadata(t *testing.T) {
+	t.Parallel()
+	span := appSpanFixture(0)
+	span.Attributes = append(span.Attributes, &commonpb.KeyValue{
+		Key:   attrGuardrailEvaluations,
+		Value: &commonpb.AnyValue{Value: &commonpb.AnyValue_StringValue{StringValue: `[{"phase":"request","guard":"bedrockGuardrails","action":"mask","guardrailId":"resource","guardrailVersion":"3","actionReason":"secret","assessments":[{"text":"secret"}]},{"phase":"request","guard":"bedrockGuardrails","action":"mask","guardrailId":"resource","guardrailVersion":"3"}]`}},
+	})
+	events, err := guardrailEventsFromSpan(span, nil)
+	if err != nil || len(events) != 2 {
+		t.Fatalf("native evaluations: %v, %d events", err, len(events))
+	}
+	replayed, err := guardrailEventsFromSpan(span, nil)
+	if err != nil || events[0].row.ID != replayed[0].row.ID || events[0].row.ID == events[1].row.ID {
+		t.Fatalf("evaluation identity did not preserve replay and repeated checks: %v", err)
+	}
+	if events[0].row.EvaluationIndex != 0 || events[1].row.EvaluationIndex != 1 || !bytes.Equal(events[0].row.SpanID, span.SpanId) {
+		t.Fatal("native span identity was lost")
+	}
+	var metadata map[string]string
+	if err := json.Unmarshal(events[0].row.Evaluation, &metadata); err != nil {
+		t.Fatal(err)
+	}
+	if len(metadata) != 5 || metadata["phase"] != "request" || metadata["guard"] != "bedrockGuardrails" || metadata["action"] != "mask" || metadata["guardrailId"] != "resource" || metadata["guardrailVersion"] != "3" {
+		t.Fatalf("metadata allowlist changed: %s", events[0].row.Evaluation)
+	}
+	span.SpanId = bytes.Repeat([]byte{3}, 8)
+	other, err := guardrailEventsFromSpan(span, nil)
+	if err != nil || other[0].row.ID == events[0].row.ID {
+		t.Fatal("two spans in the same trace shared an evaluation identity")
+	}
+}
+
+type nativeGuardrailEvidenceCase struct {
+	name   string
+	change func(*tracepb.Span)
+}
+
+func TestNativeGuardrailInvalidEvidence(t *testing.T) {
+	t.Parallel()
+	cases := []nativeGuardrailEvidenceCase{
+		{name: "zero trace", change: func(sp *tracepb.Span) { sp.TraceId = make([]byte, 16) }},
+		{name: "short span", change: func(sp *tracepb.Span) { sp.SpanId = []byte{1} }},
+		{name: "zero span", change: func(sp *tracepb.Span) { sp.SpanId = make([]byte, 8) }},
+		{name: "missing occurrence", change: func(sp *tracepb.Span) { sp.StartTimeUnixNano = 0 }},
+		{name: "future occurrence", change: func(sp *tracepb.Span) { sp.StartTimeUnixNano = uint64(time.Now().Add(time.Hour).UnixNano()) }},
+		{name: "invalid phase", change: func(sp *tracepb.Span) {
+			sp.Attributes[len(sp.Attributes)-1].Value = &commonpb.AnyValue{Value: &commonpb.AnyValue_StringValue{StringValue: `[{"phase":"unknown","guard":"regex","action":"reject"}]`}}
+		}},
+		{name: "invalid verdict", change: func(sp *tracepb.Span) {
+			sp.Attributes[len(sp.Attributes)-1].Value = &commonpb.AnyValue{Value: &commonpb.AnyValue_StringValue{StringValue: `[{"phase":"request","guard":"regex","action":"unknown"}]`}}
+		}},
+		{name: "missing namespace", change: func(sp *tracepb.Span) {
+			for _, attr := range sp.Attributes {
+				if attr.Key == "agentz.resource_namespace" {
+					attr.Value = nil
+				}
+			}
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			span := appSpanFixture(0)
+			span.Attributes = append(span.Attributes, &commonpb.KeyValue{Key: attrGuardrailEvaluations, Value: &commonpb.AnyValue{Value: &commonpb.AnyValue_StringValue{StringValue: `[{"phase":"request","guard":"regex","action":"reject"}]`}}})
+			tc.change(span)
+			if _, err := guardrailEventsFromSpan(span, nil); err == nil {
+				t.Fatal("invalid native evidence was accepted")
 			}
 		})
 	}
