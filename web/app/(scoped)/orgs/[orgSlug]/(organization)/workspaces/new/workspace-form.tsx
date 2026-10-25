@@ -39,34 +39,25 @@ import {
   MultiSelectDropdown,
   type MultiSelectDropdownOption,
 } from "@/components/ui/multi-select-dropdown"
-import type {
-  InferenceProvider,
-  McpConnectionSummary,
-  SelectedOrganizationResources,
-  WorkspaceMemberCandidate,
-} from "@/lib/gateway/client"
+import type { SelectedOrganizationResources, WorkspaceMemberCandidate } from "@/lib/gateway/client"
 import { zCreateWorkspaceRequest } from "@/lib/gateway/client/zod.gen"
+import type { getWorkspaceCreation } from "@/data/workspaces"
 import { workspaceNameSchema } from "@/data/schema"
 import { toast } from "sonner"
 
-type WorkspaceCreationResources = {
-  guardrail_connections: { name: string; displayName: string }[]
-  guardrail_policies: { name: string; displayName: string }[]
-  skills: SelectedOrganizationResources["skills"]
-  sandboxes: SelectedOrganizationResources["sandboxes"]
-  mcp_connections: Pick<McpConnectionSummary, "endpoint_url" | "name">[]
-  inference_providers: Pick<InferenceProvider, "catalog_provider" | "display_name" | "id">[]
-}
+type WorkspaceCreationResources = NonNullable<
+  Awaited<ReturnType<typeof getWorkspaceCreation>>["resources"]
+>
 
-export function WorkspaceForm({
-  candidates,
-  orgSlug,
-  resources,
-}: {
+type WorkspaceFormProps = {
   candidates: WorkspaceMemberCandidate[]
   orgSlug: string
   resources: WorkspaceCreationResources
-}) {
+}
+
+export function WorkspaceForm(props: WorkspaceFormProps) {
+  const { candidates, orgSlug, resources } = props
+
   const router = useRouter()
   const [confirmationOpen, setConfirmationOpen] = useState(false)
   const form = useForm<z.infer<typeof zCreateWorkspaceRequest>>({

@@ -14,16 +14,7 @@ import (
 )
 
 func (s *Service) handleRouteError(w http.ResponseWriter, r *http.Request, err error) {
-	apiutil.WriteError(
-		w,
-		r,
-		apiutil.NewError(
-			http.StatusBadRequest,
-			"invalid_request",
-			"request is invalid",
-			err,
-		),
-	)
+	apiutil.WriteError(w, r, apiutil.NewError(http.StatusBadRequest, "invalid_request", "request is invalid", err))
 }
 
 func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any, allowEmpty bool) bool {
@@ -96,25 +87,13 @@ func mapKubeHTTPError(action string, err error) *apiutil.APIError {
 			if cause.Field == "" {
 				continue
 			}
-			fields = append(
-				fields,
-				gatewayapi.FieldError{
-					Field:   cause.Field,
-					Message: cause.Message,
-				},
-			)
+			fields = append(fields, gatewayapi.FieldError{Field: cause.Field, Message: cause.Message})
 		}
 		if len(fields) == 0 {
 			return apiutil.NewError(http.StatusBadRequest, "invalid_request", action+" is invalid", err)
 		}
 
-		return apiutil.NewError(
-			http.StatusBadRequest,
-			"invalid_request",
-			"request validation failed",
-			err,
-			fields...,
-		)
+		return apiutil.NewError(http.StatusBadRequest, "invalid_request", "request validation failed", err, fields...)
 	}
 
 	return apiutil.NewError(http.StatusInternalServerError, "internal_error", "request failed", err)

@@ -24,15 +24,10 @@ import {
   FieldSet,
 } from "@/components/ui/field"
 
-export function SubjectGuardrails({
-  assignment,
-  disabled = false,
-  policies,
-  settings,
-  scope,
-  onChange,
-  onCreatePolicy,
-}: {
+const statusVariants = { Ready: "success", Error: "destructive", Pending: "pending" } as const
+const statusLabels = { Ready: "Configured", Error: "Error", Pending: "Applying" }
+
+type SubjectGuardrailsProps = {
   assignment: GuardrailAssignment
   disabled?: boolean
   policies: GuardrailPolicy[]
@@ -40,7 +35,19 @@ export function SubjectGuardrails({
   scope: GuardrailActionScope
   onChange: (assignment: GuardrailAssignment) => void
   onCreatePolicy?: () => void
-}) {
+}
+
+export function SubjectGuardrails(props: SubjectGuardrailsProps) {
+  const {
+    assignment,
+    disabled = false,
+    policies,
+    settings,
+    scope,
+    onChange,
+    onCreatePolicy,
+  } = props
+
   const idPrefix = useId()
   const [effective, setEffective] = useState<GuardrailEffective>()
   const [error, setError] = useState("")
@@ -178,20 +185,8 @@ export function SubjectGuardrails({
                     {policy.scope === "Organisation" ? " · Organization" : ""}
                   </FieldDescription>
                 </FieldContent>
-                <Badge
-                  variant={
-                    policy.status.state === "Ready"
-                      ? "success"
-                      : policy.status.state === "Error"
-                        ? "destructive"
-                        : "pending"
-                  }
-                >
-                  {policy.status.state === "Pending"
-                    ? "Applying"
-                    : policy.status.state === "Ready"
-                      ? "Configured"
-                      : "Error"}
+                <Badge variant={statusVariants[policy.status.state]}>
+                  {statusLabels[policy.status.state]}
                 </Badge>
                 {checked && selected.length > 1 ? (
                   <div className="flex shrink-0 gap-1">

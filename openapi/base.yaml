@@ -5020,8 +5020,7 @@ paths:
       parameters:
       - {name: action, in: query, schema: {type: string, enum: [allow, failOpen, audit, mask, reject]}}
       - {name: phase, in: query, schema: {type: string, enum: [request, response]}}
-      - {name: policy_id, in: query, schema: {type: string}}
-      - {name: reference_id, in: query, schema: {type: string}}
+      - {name: trace_id, in: query, schema: {type: string}}
       - {name: session_id, in: query, schema: {type: string}}
       - {name: cursor, in: query, schema: {type: string}}
       - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 25}}
@@ -5672,19 +5671,6 @@ components:
             $ref: '#/components/schemas/Error'
 
   schemas:
-    GuardrailOutcome:
-      x-go-type: agentzv1alpha1.GuardrailOutcome
-      x-go-type-import: {path: github.com/accuknox/agentz/pkg/apis/agentz/v1alpha1, name: agentzv1alpha1}
-      type: object
-      additionalProperties: false
-      properties:
-        code: {type: string, enum: [guardrail_denied, guardrail_unavailable]}
-        phase: {type: string, enum: [input, output]}
-        safeLabel: {type: string}
-        explanation: {type: string}
-        referenceId: {type: string}
-        partialOutput: {type: boolean}
-      required: [code, phase, safeLabel, explanation, referenceId, partialOutput]
     GuardrailCredentials:
       type: object
       additionalProperties: false
@@ -5718,7 +5704,6 @@ components:
       x-go-type-import: {path: github.com/accuknox/agentz/pkg/apis/agentz/v1alpha1, name: agentzv1alpha1}
       properties:
         patterns: {type: array, minItems: 1, items: {type: string}}
-        replacement: {type: string}
       required: [patterns]
     GuardrailCheck:
       type: object
@@ -8479,8 +8464,6 @@ components:
       type: object
       additionalProperties: false
       properties:
-        guardrailOutcome:
-          $ref: '#/components/schemas/GuardrailOutcome'
         name:
           $ref: '#/components/schemas/WorkflowRunName'
         workflow_name:
@@ -8524,8 +8507,6 @@ components:
       type: object
       additionalProperties: false
       properties:
-        guardrailOutcome:
-          $ref: '#/components/schemas/GuardrailOutcome'
         name:
           $ref: '#/components/schemas/WorkflowRunName'
         agent_name:
@@ -12003,31 +11984,6 @@ components:
         private: {type: boolean}
       required: [id, name, private]
 
-    GuardrailEvaluationContext:
-      type: object
-      additionalProperties: false
-      properties:
-        version: {type: integer, enum: [1]}
-        eventId: {type: string}
-        referenceId: {type: string}
-        policyId: {type: string}
-        checkId: {type: string}
-        revision: {type: string}
-        connectionId: {type: string}
-        attachment: {type: string}
-        mandatory: {type: boolean}
-        safeLabel: {type: string}
-        explanation: {type: string}
-        durationMs: {type: number, format: double}
-        sequence: {type: integer}
-        scopes: {type: array, items: {type: string}}
-        startedAt: {type: integer, format: int64}
-        validationPass: {type: string, enum: [mandatoryFinal]}
-        retentionDays: {type: integer, minimum: 1, maximum: 3650}
-        errorCode: {type: string}
-        inspected: {type: array, items: {type: string}}
-        replacement: {type: array, items: {type: string}}
-      required: [version, eventId, referenceId, policyId, checkId, revision, connectionId, attachment, mandatory, safeLabel, explanation, durationMs, retentionDays, startedAt, sequence, scopes]
     GuardrailRuntimeEvaluation:
       type: object
       additionalProperties: false
@@ -12037,11 +11993,6 @@ components:
         action: {type: string, enum: [allow, failOpen, audit, mask, reject]}
         guardrailId: {type: string}
         guardrailVersion: {type: string}
-        actionReason: {type: string}
-        assessments:
-          type: array
-          items: {type: object, additionalProperties: true}
-        agentz: {$ref: '#/components/schemas/GuardrailEvaluationContext'}
       required: [phase, guard, action]
     GuardrailEvent:
       type: object

@@ -44,18 +44,16 @@ const verdicts = {
   }
 >
 
-export function GuardrailEvents({
-  data,
-  basePath,
-  action,
-  referenceId,
-}: {
+type GuardrailEventsProps = {
   data: ListGuardrailEventsResponse
   basePath: `/orgs/${string}/guardrails`
   action?: GuardrailEvent["evaluation"]["action"]
-  referenceId?: string
-}) {
+  traceId?: string
+}
+
+export function GuardrailEvents(props: GuardrailEventsProps) {
   "use no memo"
+  const { data, basePath, action, traceId } = props
 
   const router = useRouter()
   // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table is not React Compiler compatible yet.
@@ -121,11 +119,11 @@ export function GuardrailEvents({
   const next = new URLSearchParams()
   if (data.next_cursor) next.set("cursor", data.next_cursor)
   if (action) next.set("action", action)
-  if (referenceId) next.set("reference_id", referenceId)
+  if (traceId) next.set("trace_id", traceId)
 
   return (
     <>
-      <GuardrailEventFilters action={action} referenceId={referenceId} />
+      <GuardrailEventFilters action={action} traceId={traceId} />
       <AdminDataGrid
         ariaLabel="Guardrail evaluations"
         emptyState={
@@ -163,26 +161,18 @@ export function GuardrailEvents({
   )
 }
 
-export function GuardrailEventDetail({
-  event,
-  basePath,
-}: {
+type GuardrailEventDetailProps = {
   event: GuardrailEvent
   basePath: `/orgs/${string}/guardrails`
-}) {
+}
+
+export function GuardrailEventDetail(props: GuardrailEventDetailProps) {
+  const { event, basePath } = props
+
   const verdict = verdicts[event.evaluation.action]
   const subject = event.agent_name || event.client_id || event.sandbox_name
-  const legacy = event.evaluation.agentz
   const metadata = [
     ["Event ID", event.id],
-    ["Record format", legacy ? "Historical" : "Native"],
-    ["Policy", legacy?.policyId],
-    ["Check", legacy?.checkId],
-    ["Reference", legacy?.referenceId],
-    ["Explanation", legacy?.explanation],
-    ["Checker error", legacy?.errorCode],
-    ["Historical label", legacy?.safeLabel],
-    ["Historical provider reason", legacy ? event.evaluation.actionReason : undefined],
     ["Expires", formatTimestamp(event.expires_at)],
     ["Organization ID", event.organization_id],
     ["Workspace ID", event.workspace_id],
@@ -245,18 +235,6 @@ export function GuardrailEventDetail({
         ) : null}
       </section>
       <Accordion type="multiple">
-        {legacy?.inspected?.length ? (
-          <AccordionItem value="historical-content">
-            <AccordionTrigger>Historical inspected content</AccordionTrigger>
-            <AccordionContent>
-              {legacy.inspected.map((content, index) => (
-                <pre className="mb-3 text-xs break-words whitespace-pre-wrap" key={index}>
-                  {content}
-                </pre>
-              ))}
-            </AccordionContent>
-          </AccordionItem>
-        ) : null}
         <AccordionItem value="technical">
           <AccordionTrigger>Technical details</AccordionTrigger>
           <AccordionContent>

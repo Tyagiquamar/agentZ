@@ -5,7 +5,6 @@ import {
   queryOptions,
   useQuery,
 } from "@tanstack/react-query"
-import { GuardrailOutcome } from "@/components/guardrails/guardrail-outcome"
 import Workflow from "@/components/blocks/workflow/workflow"
 import {
   watchWorkflowRuns,
@@ -22,12 +21,9 @@ type WorkflowRunGraphProps = {
   workspaceId: string
 }
 
-export function WorkflowRunGraph({
-  agentName,
-  workflow,
-  workflowRun,
-  workspaceId,
-}: WorkflowRunGraphProps) {
+export function WorkflowRunGraph(props: WorkflowRunGraphProps) {
+  const { agentName, workflow, workflowRun, workspaceId } = props
+
   const query = useQuery(
     queryOptions({
       placeholderData: workflowRun,
@@ -37,9 +33,8 @@ export function WorkflowRunGraph({
         readonly ["watchWorkflowRunGraph", string, string, string, string]
       >({
         initialValue: workflowRun,
-        reducer: (current, event) => {
-          return event.workflow_runs.find((run) => run.name === workflowRun.name) ?? current
-        },
+        reducer: (current, event) =>
+          event.workflow_runs.find((run) => run.name === workflowRun.name) ?? current,
         refetchMode: "reset",
         streamFn: async ({ signal }) => {
           const result = await watchWorkflowRuns({
@@ -74,15 +69,5 @@ export function WorkflowRunGraph({
     })
   )
 
-  const run = query.data ?? workflowRun
-  return (
-    <>
-      {run.guardrailOutcome ? (
-        <div className="px-4 pb-4 md:px-6">
-          <GuardrailOutcome outcome={run.guardrailOutcome} />
-        </div>
-      ) : null}
-      <Workflow key={workflowRun.name} workflow={workflow} run={run} />
-    </>
-  )
+  return <Workflow key={workflowRun.name} workflow={workflow} run={query.data ?? workflowRun} />
 }

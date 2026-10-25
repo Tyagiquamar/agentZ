@@ -141,7 +141,10 @@ func (s *dbStore) insertBatch(ctx context.Context, b batch) error {
 		retention, ok := retentions[row.OrganizationID]
 		if !ok {
 			tenant := &api.Tenant{}
-			err := s.client.Get(ctx, ctrlclient.ObjectKey{Name: api.ScopeNamespace(api.ResourceScopeOrganisation, row.OrganizationID)}, tenant)
+			key := ctrlclient.ObjectKey{
+				Name: api.ScopeNamespace(api.ResourceScopeOrganisation, row.OrganizationID),
+			}
+			err := s.client.Get(ctx, key, tenant)
 			if apierrors.IsNotFound(err) {
 				slog.WarnContext(ctx, "discard guardrail event for deleted tenant")
 				continue
@@ -169,7 +172,9 @@ func (s *dbStore) insertBatch(ctx context.Context, b batch) error {
 			return fmt.Errorf("insert guardrail event: %w", err)
 		}
 		if inserted == 0 && !duplicateChanged {
-			duplicateChanged, err = q.GuardrailEventChanged(ctx, observerdb.GuardrailEventChangedParams{ID: row.ID, Evaluation: row.Evaluation, Revision: row.Revision})
+			duplicateChanged, err = q.GuardrailEventChanged(ctx, observerdb.GuardrailEventChangedParams{
+				ID: row.ID, Evaluation: row.Evaluation, Revision: row.Revision,
+			})
 			if err != nil {
 				return fmt.Errorf("compare duplicate guardrail event: %w", err)
 			}

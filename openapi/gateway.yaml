@@ -4334,81 +4334,6 @@ components:
       required:
       - assignment
       type: object
-    GuardrailEvaluationContext:
-      additionalProperties: false
-      properties:
-        attachment:
-          type: string
-        checkId:
-          type: string
-        connectionId:
-          type: string
-        durationMs:
-          format: double
-          type: number
-        errorCode:
-          type: string
-        eventId:
-          type: string
-        explanation:
-          type: string
-        inspected:
-          items:
-            type: string
-          type: array
-        mandatory:
-          type: boolean
-        policyId:
-          type: string
-        referenceId:
-          type: string
-        replacement:
-          items:
-            type: string
-          type: array
-        retentionDays:
-          maximum: 3650
-          minimum: 1
-          type: integer
-        revision:
-          type: string
-        safeLabel:
-          type: string
-        scopes:
-          items:
-            type: string
-          type: array
-        sequence:
-          type: integer
-        startedAt:
-          format: int64
-          type: integer
-        validationPass:
-          enum:
-          - mandatoryFinal
-          type: string
-        version:
-          enum:
-          - 1
-          type: integer
-      required:
-      - version
-      - eventId
-      - referenceId
-      - policyId
-      - checkId
-      - revision
-      - connectionId
-      - attachment
-      - mandatory
-      - safeLabel
-      - explanation
-      - durationMs
-      - retentionDays
-      - startedAt
-      - sequence
-      - scopes
-      type: object
     GuardrailEvent:
       additionalProperties: false
       properties:
@@ -4458,39 +4383,6 @@ components:
       - revision
       - evaluation
       type: object
-    GuardrailOutcome:
-      additionalProperties: false
-      properties:
-        code:
-          enum:
-          - guardrail_denied
-          - guardrail_unavailable
-          type: string
-        explanation:
-          type: string
-        partialOutput:
-          type: boolean
-        phase:
-          enum:
-          - input
-          - output
-          type: string
-        referenceId:
-          type: string
-        safeLabel:
-          type: string
-      required:
-      - code
-      - phase
-      - safeLabel
-      - explanation
-      - referenceId
-      - partialOutput
-      type: object
-      x-go-type: agentzv1alpha1.GuardrailOutcome
-      x-go-type-import:
-        name: agentzv1alpha1
-        path: github.com/accuknox/agentz/pkg/apis/agentz/v1alpha1
     GuardrailPolicy:
       additionalProperties: false
       properties:
@@ -4558,8 +4450,6 @@ components:
             type: string
           minItems: 1
           type: array
-        replacement:
-          type: string
       required:
       - patterns
       type: object
@@ -4640,15 +4530,6 @@ components:
           - mask
           - reject
           type: string
-        actionReason:
-          type: string
-        agentz:
-          $ref: '#/components/schemas/GuardrailEvaluationContext'
-        assessments:
-          items:
-            additionalProperties: true
-            type: object
-          type: array
         guard:
           type: string
         guardrailId:
@@ -27084,8 +26965,6 @@ components:
           format: int64
           minimum: 0
           type: integer
-        guardrailOutcome:
-          $ref: '#/components/schemas/GuardrailOutcome'
         inputs:
           $ref: '#/components/schemas/JSONValue'
         message:
@@ -27200,8 +27079,6 @@ components:
           format: int64
           minimum: 0
           type: integer
-        guardrailOutcome:
-          $ref: '#/components/schemas/GuardrailOutcome'
         name:
           $ref: '#/components/schemas/WorkflowRunName'
         reason:
@@ -29898,11 +29775,7 @@ paths:
           - response
           type: string
       - in: query
-        name: policy_id
-        schema:
-          type: string
-      - in: query
-        name: reference_id
+        name: trace_id
         schema:
           type: string
       - in: query

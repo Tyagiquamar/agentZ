@@ -6,16 +6,7 @@ import type { ResourceCapabilities } from "@/lib/gateway/client"
 import { GuardrailHeaderActions } from "./header-actions"
 import { NewGuardrailConnectionButton, NewGuardrailPolicyButton } from "./resource-list"
 
-export function GuardrailsLayout({
-  basePath,
-  canAdminister,
-  children,
-  connectionCapabilities,
-  eventCapabilities,
-  pageScope,
-  policyCapabilities,
-  workspaceId,
-}: {
+type GuardrailsLayoutProps = {
   basePath: `/orgs/${string}/guardrails`
   canAdminister: boolean
   children: ReactNode
@@ -24,7 +15,23 @@ export function GuardrailsLayout({
   pageScope: AdministrationPageScope
   policyCapabilities: ResourceCapabilities
   workspaceId?: string
-}) {
+}
+
+export function GuardrailsLayout(props: GuardrailsLayoutProps) {
+  const {
+    basePath,
+    canAdminister,
+    children,
+    connectionCapabilities,
+    eventCapabilities,
+    pageScope,
+    policyCapabilities,
+    workspaceId,
+  } = props
+
+  let defaultSection = "events"
+  if (connectionCapabilities.read) defaultSection = "connections"
+  if (policyCapabilities.read) defaultSection = "policies"
   const tabs = [
     ...(policyCapabilities.read
       ? [{ label: "Policies", href: `${basePath}/policies` as Route }]
@@ -43,13 +50,7 @@ export function GuardrailsLayout({
       <AdministrationPageHeader
         actions={
           <GuardrailHeaderActions
-            defaultSection={
-              policyCapabilities.read
-                ? "policies"
-                : connectionCapabilities.read
-                  ? "connections"
-                  : "events"
-            }
+            defaultSection={defaultSection}
             connectionAction={
               connectionCapabilities.create ? (
                 <NewGuardrailConnectionButton scope={{ workspaceId }} />

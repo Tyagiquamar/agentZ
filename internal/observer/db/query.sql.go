@@ -107,13 +107,13 @@ type InsertFileEventsParams struct {
 const insertGuardrailEvent = `-- name: InsertGuardrailEvent :execrows
 INSERT INTO observer_guardrail_events (
   id, organization_id, workspace_id, occurred_at, expires_at, sandbox_name, agent_name,
-  client_id, session_id, model, trace_id, span_id, evaluation_index, revision, phase, action, policy_id, reference_id, evaluation
+  client_id, session_id, model, trace_id, span_id, evaluation_index, revision, phase, action, evaluation
 ) VALUES (
   $1, $2, $3, $4,
   $5, $6, $7, $8,
   $9, $10, $11, $12,
   $13, $14, $15, $16,
-  $17, $18, $19
+  $17
 )
 ON CONFLICT (id) DO NOTHING
 `
@@ -135,8 +135,6 @@ type InsertGuardrailEventParams struct {
 	Revision        string    `json:"revision"`
 	Phase           string    `json:"phase"`
 	Action          string    `json:"action"`
-	PolicyID        string    `json:"policy_id"`
-	ReferenceID     string    `json:"reference_id"`
 	Evaluation      []byte    `json:"evaluation"`
 }
 
@@ -158,8 +156,6 @@ func (q *Queries) InsertGuardrailEvent(ctx context.Context, arg InsertGuardrailE
 		arg.Revision,
 		arg.Phase,
 		arg.Action,
-		arg.PolicyID,
-		arg.ReferenceID,
 		arg.Evaluation,
 	)
 	if err != nil {

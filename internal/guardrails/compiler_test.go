@@ -132,7 +132,8 @@ func TestMandatoryPolicyCannotBeReorderedOrWeakenedByAssignments(t *testing.T) {
 func TestOptionalOrganizationPoliciesRequireExplicitSelection(t *testing.T) {
 	reader, org, workspace := guardrailFixture(t)
 	policy := &api.GuardrailPolicy{}
-	if err := reader.Get(t.Context(), client.ObjectKey{Namespace: org, Name: "baseline"}, policy); err != nil {
+	err := reader.Get(t.Context(), client.ObjectKey{Namespace: org, Name: "baseline"}, policy)
+	if err != nil {
 		t.Fatal(err)
 	}
 	policy.ResourceVersion = ""
@@ -146,7 +147,8 @@ func TestOptionalOrganizationPoliciesRequireExplicitSelection(t *testing.T) {
 			{Scope: api.ResourceScopeOrganisation, Name: "unselected"},
 		},
 	}
-	if _, err := Resolve(t.Context(), reader, workspace, assignment); err == nil || !strings.Contains(err.Error(), "not selected") {
+	_, err = Resolve(t.Context(), reader, workspace, assignment)
+	if err == nil || !strings.Contains(err.Error(), "not selected") {
 		t.Fatalf("unselected organization policy was available: %v", err)
 	}
 	if _, err := Resolve(t.Context(), reader, workspace, api.GuardrailAssignment{}); err != nil {
@@ -190,7 +192,8 @@ func TestRevisionExcludesStatusAndPreservesInflightSnapshot(t *testing.T) {
 func TestCombinedPolicyLimitFailsWithoutDroppingMandatoryChecks(t *testing.T) {
 	reader, _, workspace := guardrailFixture(t)
 	policy := &api.GuardrailPolicy{}
-	if err := reader.Get(t.Context(), client.ObjectKey{Namespace: workspace, Name: "addition"}, policy); err != nil {
+	err := reader.Get(t.Context(), client.ObjectKey{Namespace: workspace, Name: "addition"}, policy)
+	if err != nil {
 		t.Fatal(err)
 	}
 	first := policy.Spec.Checks[0]
@@ -206,7 +209,8 @@ func TestCombinedPolicyLimitFailsWithoutDroppingMandatoryChecks(t *testing.T) {
 	assignment := api.GuardrailAssignment{
 		Policies: []api.ResourceReference{{Scope: api.ResourceScopeWorkspace, Name: "addition"}},
 	}
-	if _, err := Resolve(t.Context(), reader, workspace, assignment); err == nil || !strings.Contains(err.Error(), "eight checks") {
+	_, err = Resolve(t.Context(), reader, workspace, assignment)
+	if err == nil || !strings.Contains(err.Error(), "eight checks") {
 		t.Fatalf("over-limit composition silently omitted safeguards: %v", err)
 	}
 }
@@ -311,11 +315,14 @@ func TestMandatoryChecksRejectOptionalMutations(t *testing.T) {
 					if phase == "output" {
 						optional.Check.Scopes = []string{"conversation"}
 					}
-					if provider == "Regex" {
+					switch provider {
+					case "Regex":
 						optional.Check.Action = "mask"
 						optional.Check.Regex = &api.GuardrailRegex{Patterns: []string{"secret"}}
-					} else {
-						optional.Connection = &api.GuardrailConnection{Spec: api.GuardrailConnectionSpec{Provider: provider, Region: "region"}}
+					default:
+						optional.Connection = &api.GuardrailConnection{
+							Spec: api.GuardrailConnectionSpec{Provider: provider, Region: "region"},
+						}
 					}
 					bundle := &Bundle{Checks: []ResolvedCheck{mandatory, optional}}
 					err := bundle.compile("namespace")
@@ -337,9 +344,10 @@ func TestStreamingRejectsEnforcedMutations(t *testing.T) {
 					resolved := ResolvedCheck{Check: api.GuardrailCheck{
 						ID: "check", Phase: phase, Mode: mode, Action: "deny",
 					}}
-					if provider == "Regex" {
+					switch provider {
+					case "Regex":
 						resolved.Check.Action = "mask"
-					} else {
+					default:
 						resolved.Connection = &api.GuardrailConnection{Spec: api.GuardrailConnectionSpec{Provider: provider}}
 					}
 					bundle := &Bundle{Checks: []ResolvedCheck{resolved}}
@@ -356,7 +364,10 @@ func TestStreamingRejectsEnforcedMutations(t *testing.T) {
 func TestStreamingRegexNeedsBoundedContext(t *testing.T) {
 	for _, pattern := range []string{"SECRET", "[0-9]{3}", "^SECRET", "SECRET$", "a+", "a{257}", `\bsecret\b`} {
 		t.Run(pattern, func(t *testing.T) {
-			check := api.GuardrailCheck{ID: "check", Phase: "output", Mode: "enforce", Action: "deny", Regex: &api.GuardrailRegex{Patterns: []string{pattern}}}
+			check := api.GuardrailCheck{
+				ID: "check", Phase: "output", Mode: "enforce", Action: "deny",
+				Regex: &api.GuardrailRegex{Patterns: []string{pattern}},
+			}
 			bundle := &Bundle{Checks: []ResolvedCheck{{Check: check}}}
 			wantError := pattern != "SECRET" && pattern != "[0-9]{3}"
 			if err := bundle.ValidateStreaming(); (err != nil) != wantError {

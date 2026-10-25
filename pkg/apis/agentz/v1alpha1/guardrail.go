@@ -78,9 +78,6 @@ type GuardrailRegex struct {
 	// Patterns are RE2 regular expressions.
 	// +kubebuilder:validation:MinItems=1
 	Patterns []string `json:"patterns"`
-	// Replacement is the text substituted for matches when action is mask.
-	// +optional
-	Replacement string `json:"replacement,omitempty"`
 }
 
 // GuardrailCheck is one ordered input or output evaluation.
@@ -187,20 +184,4 @@ type GuardrailPolicyList struct {
 
 func init() {
 	SchemeBuilder.Register(&GuardrailConnection{}, &GuardrailConnectionList{}, &GuardrailPolicy{}, &GuardrailPolicyList{})
-}
-
-// GuardrailOutcome preserves feedback on previously completed workflow runs.
-type GuardrailOutcome struct {
-	// Code distinguishes a content denial from unavailable safeguards.
-	Code string `json:"code"`
-	// Phase identifies input or output evaluation.
-	Phase string `json:"phase"`
-	// SafeLabel identifies a policy without exposing detector evidence.
-	SafeLabel string `json:"safeLabel"`
-	// Explanation gives the user an actionable next step.
-	Explanation string `json:"explanation"`
-	// ReferenceID correlates the outcome with scoped audit evidence.
-	ReferenceID string `json:"referenceId"`
-	// PartialOutput marks delivered content as incomplete.
-	PartialOutput bool `json:"partialOutput"`
 }

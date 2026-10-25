@@ -23,10 +23,12 @@ type guardrailSettingsQueries struct {
 	superadmin bool
 }
 
+// GatewayIsActiveSuperadmin checks the configured administrator and caller identity.
 func (q *guardrailSettingsQueries) GatewayIsActiveSuperadmin(_ context.Context, arg gatewaydb.GatewayIsActiveSuperadminParams) (bool, error) {
 	return q.superadmin && arg.OrganizationID == testOrganizationID && arg.UserID == testUserID, nil
 }
 
+// GatewayUpdateGuardrailRetention accepts retention updates without a database.
 func (q *guardrailSettingsQueries) GatewayUpdateGuardrailRetention(context.Context, gatewaydb.GatewayUpdateGuardrailRetentionParams) (int64, error) {
 	return 0, nil
 }
@@ -76,7 +78,7 @@ func TestGuardrailHTTPHandlersUseAuthorizedClaimsForSettingsAndAudit(t *testing.
 	}
 	assignment := map[string]any{"policies": []any{}}
 	if err := spec.Components.Schemas["GuardrailAssignment"].Value.VisitJSON(assignment); err != nil {
-		t.Fatalf("the deployed API schema must accept explicit disabled content capture: %v", err)
+		t.Fatalf("the deployed API schema must accept an empty policy assignment: %v", err)
 	}
 	queries := &sandboxQueries{
 		workspace: gatewaydb.Workspace{
@@ -96,7 +98,9 @@ func TestGuardrailHTTPHandlersUseAuthorizedClaimsForSettingsAndAudit(t *testing.
 	}
 	service := sandboxTestService(t, queries)
 	tenant := &api.Tenant{}
-	key := ctrlclient.ObjectKey{Name: api.ScopeNamespace(api.ResourceScopeOrganisation, testOrganizationID)}
+	key := ctrlclient.ObjectKey{
+		Name: api.ScopeNamespace(api.ResourceScopeOrganisation, testOrganizationID),
+	}
 	if err := service.k8sClient.Get(t.Context(), key, tenant); err != nil {
 		t.Fatal(err)
 	}

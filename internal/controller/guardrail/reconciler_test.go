@@ -50,7 +50,8 @@ func TestConnectionDeletionRemovesAllProjectionsBeforeCredentials(t *testing.T) 
 			t.Fatal(err)
 		}
 		external := &eso.ExternalSecret{}
-		if err := c.Get(t.Context(), client.ObjectKey{Namespace: namespace, Name: name}, external); err != nil {
+		err := c.Get(t.Context(), client.ObjectKey{Namespace: namespace, Name: name}, external)
+		if err != nil {
 			t.Fatal(err)
 		}
 		if len(external.OwnerReferences) != 0 || external.Spec.Target.Template.Metadata.Labels[guardrails.ConnectionUIDLabel] != string(connection.UID) {
@@ -117,7 +118,8 @@ func TestConnectionDeletionRemovesAllProjectionsBeforeCredentials(t *testing.T) 
 	if credentialDeletes != 1 {
 		t.Fatalf("expected one credential cleanup, got %d", credentialDeletes)
 	}
-	if err := c.Get(t.Context(), request.NamespacedName, &api.GuardrailConnection{}); !apierrors.IsNotFound(err) {
+	err = c.Get(t.Context(), request.NamespacedName, &api.GuardrailConnection{})
+	if !apierrors.IsNotFound(err) {
 		t.Fatalf("connection finalizer was not released: %v", err)
 	}
 	if err := c.Get(t.Context(), client.ObjectKeyFromObject(foreign), &corev1.Secret{}); err != nil {

@@ -67,7 +67,7 @@ func guardrailEventsFromSpan(sp *tracepb.Span, resourceAttrs map[string]*commonp
 		if evaluation.Guard == "" {
 			return nil, errors.New("guardrail evaluation has no guard kind")
 		}
-		// Neither arbitrary provider strings nor legacy captured content enter new events.
+		// Only the native verdict and provider resource identifiers enter audit storage.
 		metadata := gatewayapi.GuardrailRuntimeEvaluation{
 			Phase: evaluation.Phase, Guard: evaluation.Guard, Action: evaluation.Action,
 			GuardrailId: evaluation.GuardrailId, GuardrailVersion: evaluation.GuardrailVersion,

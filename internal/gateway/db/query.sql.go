@@ -2367,7 +2367,7 @@ func (q *Queries) GatewayGetGuardrailClientAccess(ctx context.Context, arg Gatew
 }
 
 const gatewayGetGuardrailEvent = `-- name: GatewayGetGuardrailEvent :one
-SELECT id, organization_id, workspace_id, occurred_at, expires_at, sandbox_name, agent_name, client_id, session_id, model, trace_id, span_id, evaluation_index, revision, phase, action, policy_id, reference_id, evaluation, ingested_at FROM observer_guardrail_events
+SELECT id, organization_id, workspace_id, occurred_at, expires_at, sandbox_name, agent_name, client_id, session_id, model, trace_id, span_id, evaluation_index, revision, phase, action, evaluation, ingested_at FROM observer_guardrail_events
 WHERE id = $1
   AND organization_id = $2
   AND ($3::text = '' OR workspace_id = $3)
@@ -2400,8 +2400,6 @@ func (q *Queries) GatewayGetGuardrailEvent(ctx context.Context, arg GatewayGetGu
 		&i.Revision,
 		&i.Phase,
 		&i.Action,
-		&i.PolicyID,
-		&i.ReferenceID,
 		&i.Evaluation,
 		&i.IngestedAt,
 	)
@@ -5253,18 +5251,17 @@ func (q *Queries) GatewayListGuardrailClientAccess(ctx context.Context, arg Gate
 }
 
 const gatewayListGuardrailEvents = `-- name: GatewayListGuardrailEvents :many
-SELECT id, organization_id, workspace_id, occurred_at, expires_at, sandbox_name, agent_name, client_id, session_id, model, trace_id, span_id, evaluation_index, revision, phase, action, policy_id, reference_id, evaluation, ingested_at FROM observer_guardrail_events
+SELECT id, organization_id, workspace_id, occurred_at, expires_at, sandbox_name, agent_name, client_id, session_id, model, trace_id, span_id, evaluation_index, revision, phase, action, evaluation, ingested_at FROM observer_guardrail_events
 WHERE organization_id = $1
   AND ($2::text = '' OR workspace_id = $2)
   AND expires_at > now()
   AND ($3::text = '' OR action = $3)
   AND ($4::text = '' OR phase = $4)
-  AND ($5::text = '' OR policy_id = $5)
-  AND ($6::text = '' OR reference_id = $6 OR encode(trace_id, 'hex') = $6)
-  AND ($7::text = '' OR session_id = $7)
-  AND ($8::text = '' OR (occurred_at, id) < ($9, $8))
+  AND ($5::text = '' OR encode(trace_id, 'hex') = $5)
+  AND ($6::text = '' OR session_id = $6)
+  AND ($7::text = '' OR (occurred_at, id) < ($8, $7))
 ORDER BY occurred_at DESC, id DESC
-LIMIT $10
+LIMIT $9
 `
 
 type GatewayListGuardrailEventsParams struct {
@@ -5272,8 +5269,7 @@ type GatewayListGuardrailEventsParams struct {
 	WorkspaceID    string    `json:"workspace_id"`
 	Action         string    `json:"action"`
 	Phase          string    `json:"phase"`
-	PolicyID       string    `json:"policy_id"`
-	ReferenceID    string    `json:"reference_id"`
+	TraceID        string    `json:"trace_id"`
 	SessionID      string    `json:"session_id"`
 	CursorID       string    `json:"cursor_id"`
 	CursorAt       time.Time `json:"cursor_at"`
@@ -5286,8 +5282,7 @@ func (q *Queries) GatewayListGuardrailEvents(ctx context.Context, arg GatewayLis
 		arg.WorkspaceID,
 		arg.Action,
 		arg.Phase,
-		arg.PolicyID,
-		arg.ReferenceID,
+		arg.TraceID,
 		arg.SessionID,
 		arg.CursorID,
 		arg.CursorAt,
@@ -5317,8 +5312,6 @@ func (q *Queries) GatewayListGuardrailEvents(ctx context.Context, arg GatewayLis
 			&i.Revision,
 			&i.Phase,
 			&i.Action,
-			&i.PolicyID,
-			&i.ReferenceID,
 			&i.Evaluation,
 			&i.IngestedAt,
 		); err != nil {

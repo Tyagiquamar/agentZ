@@ -29,10 +29,7 @@ type OpenCodeClientError =
   | SessionRevertError
   | SessionUnrevertError
 
-export function opencodeErrorMessage(
-  error: OpenCodeClientError | undefined,
-  fallback: string
-): string {
+export function opencodeErrorMessage(error: OpenCodeClientError | undefined, fallback: string): string {
   if (!error) return fallback
   if ("message" in error) return error.message
   if ("data" in error) return error.data.message
@@ -89,14 +86,12 @@ export function describeMessageError(error: AssistantMessage["error"]): {
       }
     }
     case "APIError": {
+      let label = "Provider error"
+      if (error.data.statusCode) label = `Provider error ${error.data.statusCode}`
+      if (error.data.statusCode === 422) label = "Request rejected"
       return {
         body: error.data.message || "The provider rejected the request",
-        label:
-          error.data.statusCode === 422
-            ? "Request rejected"
-            : error.data.statusCode
-              ? `Provider error ${error.data.statusCode}`
-              : "Provider error",
+        label,
       }
     }
     case "UnknownError": {

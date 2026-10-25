@@ -433,7 +433,11 @@ func (r *ExtAuthRuntimeReconciler) reconcileExtAuthScopeReader(ctx context.Conte
 	_, err = ctrlutil.CreateOrPatch(ctx, r.Client, guardrailBinding, func() error {
 		guardrailBinding.Labels = maps.Clone(labels)
 		guardrailBinding.OwnerReferences = ownerRefs
-		guardrailBinding.RoleRef = rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "Role", Name: guardrailRole.Name}
+		guardrailBinding.RoleRef = rbacv1.RoleRef{
+			APIGroup: rbacv1.GroupName,
+			Kind:     "Role",
+			Name:     guardrailRole.Name,
+		}
 		guardrailBinding.Subjects = []rbacv1.Subject{{Kind: "ServiceAccount", Name: mcp.ExtAuthServiceName, Namespace: ns}}
 		return nil
 	})

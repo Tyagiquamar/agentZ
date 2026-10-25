@@ -17,7 +17,8 @@ import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import type { GuardrailEvent } from "@/lib/gateway/client"
 
-const fields = { action: "Outcome", reference_id: "Trace or reference" }
+const fields = { action: "Outcome", trace_id: "Trace ID" }
+const names = ["action", "trace_id"] as const
 type FilterField = keyof typeof fields
 
 const outcomes = [
@@ -28,18 +29,19 @@ const outcomes = [
   { value: "allow", label: "Allowed" },
 ] satisfies { value: GuardrailEvent["evaluation"]["action"]; label: string }[]
 
-export function GuardrailEventFilters({
-  action,
-  referenceId,
-}: {
+type GuardrailEventFiltersProps = {
   action?: GuardrailEvent["evaluation"]["action"]
-  referenceId?: string
-}) {
+  traceId?: string
+}
+
+export function GuardrailEventFilters(props: GuardrailEventFiltersProps) {
+  const { action, traceId } = props
+
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const [pending, startTransition] = useTransition()
-  const [current, setCurrent] = useOptimistic({ action, reference_id: referenceId })
+  const [current, setCurrent] = useOptimistic({ action, trace_id: traceId })
   const [activeField, setActiveField] = useState<FilterField>()
   const [editorOpen, setEditorOpen] = useState(false)
 
@@ -47,9 +49,13 @@ export function GuardrailEventFilters({
     const next = { ...current, [field]: value || undefined }
     const params = new URLSearchParams(searchParams)
     params.delete("cursor")
-    for (const name of Object.keys(fields) as FilterField[]) {
-      if (next[name]) params.set(name, next[name])
-      else params.delete(name)
+    for (const name of names) {
+      const value = next[name]
+      if (!value) {
+        params.delete(name)
+        continue
+      }
+      params.set(name, value)
     }
     startTransition(() => {
       setCurrent(next)
@@ -60,7 +66,6 @@ export function GuardrailEventFilters({
     setEditorOpen(false)
   }
 
-  const names = Object.keys(fields) as FilterField[]
   const visibleFields = names.filter((field) => current[field] || field === activeField)
   const availableFields = names.filter((field) => !current[field])
 
@@ -80,7 +85,7 @@ export function GuardrailEventFilters({
               size="sm"
               variant="outline"
             >
-              {field === "action" ? "Select outcome" : "Enter trace or reference"}
+              {field === "action" ? "Select outcome" : "Enter trace ID"}
               <ChevronDown data-icon="inline-end" />
             </Button>
           )
@@ -120,14 +125,16 @@ export function GuardrailEventFilters({
                       onSubmit={(event) => {
                         event.preventDefault()
                         const data = new FormData(event.currentTarget)
-                        setFilter(field, String(data.get("reference_id") ?? "").trim())
+                        const traceId = data.get("trace_id")
+                        if (typeof traceId !== "string") return
+                        setFilter(field, traceId.trim())
                       }}
                     >
                       <Input
-                        aria-label="Trace or reference"
+                        aria-label="Trace ID"
                         defaultValue={value}
-                        name="reference_id"
-                        placeholder="Trace ID or event reference"
+                        name="trace_id"
+                        placeholder="Trace ID"
                       />
                       <Button className="self-end" size="sm" type="submit">
                         Apply

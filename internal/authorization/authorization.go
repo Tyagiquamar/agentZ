@@ -534,9 +534,7 @@ func mapOperation(operation Operation) (gatewaydb.PermissionResource, gatewaydb.
 	switch operation {
 	case OperationListGuardrailEvents, OperationGetGuardrailEvent:
 		return gatewaydb.PermissionResourceGuardrailEvent, gatewaydb.PermissionActionRead, true
-	case OperationListGuardrailConnections, OperationDiscoverGuardrailConnectionResources:
-		return gatewaydb.PermissionResourceGuardrailConnection, gatewaydb.PermissionActionRead, true
-	case OperationGetGuardrailConnection:
+	case OperationListGuardrailConnections, OperationDiscoverGuardrailConnectionResources, OperationGetGuardrailConnection:
 		return gatewaydb.PermissionResourceGuardrailConnection, gatewaydb.PermissionActionRead, true
 	case OperationCreateGuardrailConnection:
 		return gatewaydb.PermissionResourceGuardrailConnection, gatewaydb.PermissionActionCreate, true
@@ -544,22 +542,14 @@ func mapOperation(operation Operation) (gatewaydb.PermissionResource, gatewaydb.
 		return gatewaydb.PermissionResourceGuardrailConnection, gatewaydb.PermissionActionModify, true
 	case OperationDeleteGuardrailConnection:
 		return gatewaydb.PermissionResourceGuardrailConnection, gatewaydb.PermissionActionDelete, true
-	case OperationListGuardrailPolicies:
-		return gatewaydb.PermissionResourceGuardrailPolicy, gatewaydb.PermissionActionRead, true
-	case OperationGetGuardrailPolicy:
+	case OperationListGuardrailPolicies, OperationGetGuardrailPolicy, OperationGetGuardrailSettings, OperationGetEffectiveGuardrails:
 		return gatewaydb.PermissionResourceGuardrailPolicy, gatewaydb.PermissionActionRead, true
 	case OperationCreateGuardrailPolicy:
 		return gatewaydb.PermissionResourceGuardrailPolicy, gatewaydb.PermissionActionCreate, true
-	case OperationUpdateGuardrailPolicy:
+	case OperationUpdateGuardrailPolicy, OperationUpdateGuardrailSettings:
 		return gatewaydb.PermissionResourceGuardrailPolicy, gatewaydb.PermissionActionModify, true
 	case OperationDeleteGuardrailPolicy:
 		return gatewaydb.PermissionResourceGuardrailPolicy, gatewaydb.PermissionActionDelete, true
-	case OperationGetGuardrailSettings:
-		return gatewaydb.PermissionResourceGuardrailPolicy, gatewaydb.PermissionActionRead, true
-	case OperationGetEffectiveGuardrails:
-		return gatewaydb.PermissionResourceGuardrailPolicy, gatewaydb.PermissionActionRead, true
-	case OperationUpdateGuardrailSettings:
-		return gatewaydb.PermissionResourceGuardrailPolicy, gatewaydb.PermissionActionModify, true
 
 	case OperationListSkills:
 		return gatewaydb.PermissionResourceSkill, gatewaydb.PermissionActionRead, true

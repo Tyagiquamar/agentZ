@@ -1488,8 +1488,6 @@ type ObserverGuardrailEvent struct {
 	Revision        string    `json:"revision"`
 	Phase           string    `json:"phase"`
 	Action          string    `json:"action"`
-	PolicyID        string    `json:"policy_id"`
-	ReferenceID     string    `json:"reference_id"`
 	Evaluation      []byte    `json:"evaluation"`
 	IngestedAt      time.Time `json:"ingested_at"`
 }

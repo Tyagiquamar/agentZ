@@ -4,15 +4,6 @@ export type ClientOptions = {
   baseUrl: `${string}://${string}` | (string & {})
 }
 
-export type GuardrailOutcome = {
-  code: "guardrail_denied" | "guardrail_unavailable"
-  phase: "input" | "output"
-  safeLabel: string
-  explanation: string
-  referenceId: string
-  partialOutput: boolean
-}
-
 export type GuardrailCredentials = {
   apiKey?: string
   accessKeyId?: string
@@ -36,7 +27,6 @@ export type GuardrailSettings = {
 
 export type GuardrailRegex = {
   patterns: Array<string>
-  replacement?: string
 }
 
 export type GuardrailCheck = {
@@ -1277,7 +1267,6 @@ export type WorkflowRunInputs = JsonValue
 export type WorkflowRunTriggerType = "Schedule" | "Webhook"
 
 export type WorkflowRunSummary = {
-  guardrailOutcome?: GuardrailOutcome
   name: WorkflowRunName
   workflow_name: WorkflowName
   trigger_type: WorkflowRunTriggerType
@@ -1292,7 +1281,6 @@ export type WorkflowRunSummary = {
 }
 
 export type WorkflowRunDetail = {
-  guardrailOutcome?: GuardrailOutcome
   name: WorkflowRunName
   agent_name: AgentName
   workflow_name: WorkflowName
@@ -2973,40 +2961,12 @@ export type CodingRepositoryItem = {
   private: boolean
 }
 
-export type GuardrailEvaluationContext = {
-  version: 1
-  eventId: string
-  referenceId: string
-  policyId: string
-  checkId: string
-  revision: string
-  connectionId: string
-  attachment: string
-  mandatory: boolean
-  safeLabel: string
-  explanation: string
-  durationMs: number
-  sequence: number
-  scopes: Array<string>
-  startedAt: number
-  validationPass?: "mandatoryFinal"
-  retentionDays: number
-  errorCode?: string
-  inspected?: Array<string>
-  replacement?: Array<string>
-}
-
 export type GuardrailRuntimeEvaluation = {
   phase: "request" | "response"
   guard: string
   action: "allow" | "failOpen" | "audit" | "mask" | "reject"
   guardrailId?: string
   guardrailVersion?: string
-  actionReason?: string
-  assessments?: Array<{
-    [key: string]: unknown
-  }>
-  agentz?: GuardrailEvaluationContext
 }
 
 export type GuardrailEvent = {
@@ -12332,8 +12292,7 @@ export type ListGuardrailEventsData = {
   query?: {
     action?: "allow" | "failOpen" | "audit" | "mask" | "reject"
     phase?: "request" | "response"
-    policy_id?: string
-    reference_id?: string
+    trace_id?: string
     session_id?: string
     cursor?: string
     limit?: number

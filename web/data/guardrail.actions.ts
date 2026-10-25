@@ -37,11 +37,7 @@ import { sandboxesTag } from "@/data/cache"
 
 export type GuardrailActionScope = { workspaceId?: string }
 
-export async function discoverGuardrailResourcesAction(
-  scope: GuardrailActionScope,
-  name: string,
-  body: GuardrailResourceDiscoveryInput
-) {
+export async function discoverGuardrailResourcesAction(scope: GuardrailActionScope, name: string, body: GuardrailResourceDiscoveryInput) {
   const parsed = zGuardrailResourceDiscoveryInput.safeParse(body)
   if (!parsed.success)
     return { error: { code: "INVALID_FORM", message: "Select a valid resource discovery target" } }
@@ -55,11 +51,7 @@ export async function discoverGuardrailResourcesAction(
   return { data: result.data }
 }
 
-export async function saveGuardrailConnectionAction(
-  scope: GuardrailActionScope,
-  body: CreateGuardrailConnectionData["body"],
-  existing = false
-) {
+export async function saveGuardrailConnectionAction(scope: GuardrailActionScope, body: CreateGuardrailConnectionData["body"], existing = false) {
   const parsed = zGuardrailConnectionInputWritable.safeParse(body)
   if (!parsed.success)
     return {
@@ -90,11 +82,7 @@ export async function deleteGuardrailConnectionAction(scope: GuardrailActionScop
   return { success: true }
 }
 
-export async function saveGuardrailPolicyAction(
-  scope: GuardrailActionScope,
-  body: GuardrailPolicyInput,
-  existing = false
-) {
+export async function saveGuardrailPolicyAction(scope: GuardrailActionScope, body: GuardrailPolicyInput, existing = false) {
   const parsed = zGuardrailPolicyInput.safeParse(body)
   if (!parsed.success)
     return {
@@ -144,10 +132,7 @@ export async function saveGuardrailSettingsAction(settings: GuardrailSettings) {
   return { data: result.data }
 }
 
-export async function resolveGuardrailsAction(
-  scope: GuardrailActionScope,
-  body: GuardrailEffectiveInput
-) {
+export async function resolveGuardrailsAction(scope: GuardrailActionScope, body: GuardrailEffectiveInput) {
   const parsed = zGuardrailEffectiveInput.safeParse(body)
   if (!parsed.success)
     return { error: { code: "INVALID_FORM", message: "Select a valid protected context" } }
@@ -160,12 +145,7 @@ export async function resolveGuardrailsAction(
   return { data: result.data }
 }
 
-export async function saveGuardrailClientAccessAction(
-  orgSlug: string,
-  workspaceSlug: string,
-  clientId: string,
-  input: GuardrailAssignment
-) {
+export async function saveGuardrailClientAccessAction(orgSlug: string, workspaceSlug: string, clientId: string, input: GuardrailAssignment) {
   const parsed = zGuardrailAssignment.safeParse(input)
   if (!parsed.success) return { error: "Check policy assignments." }
   const [access, session] = await Promise.all([
@@ -216,11 +196,7 @@ export async function saveGuardrailClientAccessAction(
   return { success: true }
 }
 
-export async function loadClientGuardrailsAction(
-  orgSlug: string,
-  workspaceSlug: string,
-  clientId: string
-) {
+export async function loadClientGuardrailsAction(orgSlug: string, workspaceSlug: string, clientId: string) {
   const access = await listGuardrailClientAccess(orgSlug, workspaceSlug)
   const subject = access?.clients.find((client) => client.clientId === clientId)
   if (!access || !subject)
@@ -229,7 +205,7 @@ export async function loadClientGuardrailsAction(
     listGuardrailPoliciesQuery(access.workspace.id),
     getGuardrailSettingsQuery(access.workspace.id),
   ])
-  if (policies.error || settings.error || !policies.data || !settings.data)
+  if (policies.error || settings.error)
     return {
       error: policies.error?.message ?? settings.error?.message ?? "Could not load guardrails.",
     }

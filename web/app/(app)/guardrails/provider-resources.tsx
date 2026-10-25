@@ -28,21 +28,18 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Spinner } from "@/components/ui/spinner"
 import { authClient } from "@/lib/auth-client"
 
-export function GuardrailProviderResources({
-  check,
-  connection,
-  disabled,
-  scope,
-  validationVisible,
-  onChange,
-}: {
+type GuardrailProviderResourcesProps = {
   check: GuardrailCheck
   connection: GuardrailConnection
   disabled: boolean
   scope: GuardrailActionScope
   validationVisible: boolean
   onChange: (check: GuardrailCheck) => void
-}) {
+}
+
+export function GuardrailProviderResources(props: GuardrailProviderResourcesProps) {
+  const { check, connection, disabled, scope, validationVisible, onChange } = props
+
   const [project, setProject] = useState(() =>
     check.template ? check.template.split("/").slice(0, 2).join("/") : ""
   )
@@ -168,17 +165,7 @@ export function GuardrailProviderResources({
   return null
 }
 
-function ResourcePicker({
-  connection,
-  disabled,
-  kind,
-  label,
-  parent,
-  scope,
-  value,
-  validationVisible,
-  onSelect,
-}: {
+type ResourcePickerProps = {
   connection: GuardrailConnection
   disabled: boolean
   kind: GuardrailResourceDiscoveryInput["kind"]
@@ -188,7 +175,12 @@ function ResourcePicker({
   value: string
   validationVisible: boolean
   onSelect: (resource: GuardrailDiscoveredResource) => void
-}) {
+}
+
+function ResourcePicker(props: ResourcePickerProps) {
+  const { connection, disabled, kind, label, parent, scope, value, validationVisible, onSelect } =
+    props
+
   const id = useId()
   const { orgSlug } = useParams<{ orgSlug: string }>()
   const { data: actor } = authClient.useSession()

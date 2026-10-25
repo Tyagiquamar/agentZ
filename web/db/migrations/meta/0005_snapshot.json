@@ -1,5 +1,5 @@
 {
-  "id": "7f51c87a-8235-4511-aaaf-32b3693841ae",
+  "id": "0d63f0ae-097f-4325-9348-63d1846cd8d2",
   "prevId": "428eaef8-61ea-4b56-9de8-188ef099f277",
   "version": "7",
   "dialect": "postgresql",
@@ -1811,14 +1811,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'[]'::jsonb"
-        },
-        "capture_mode": {
-          "name": "capture_mode",
-          "type": "guardrail_capture_mode",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'off'"
         },
         "updated_at": {
           "name": "updated_at",
@@ -6007,11 +5999,6 @@
       "name": "external_agent_kind",
       "schema": "public",
       "values": ["claude", "codex"]
-    },
-    "public.guardrail_capture_mode": {
-      "name": "guardrail_capture_mode",
-      "schema": "public",
-      "values": ["off", "findings", "all"]
     },
     "public.permission_action": {
       "name": "permission_action",

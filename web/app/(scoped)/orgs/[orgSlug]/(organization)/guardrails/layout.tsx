@@ -8,9 +8,7 @@ import { getGatewayServerClient } from "@/lib/gateway/server-client"
 
 export const metadata = { title: "Guardrails" }
 
-export default function OrganizationGuardrailsLayout(
-  props: LayoutProps<"/orgs/[orgSlug]/guardrails">
-) {
+export default function OrganizationGuardrailsLayout(props: LayoutProps<"/orgs/[orgSlug]/guardrails">) {
   return (
     <Suspense fallback={<AdministrationLoadingState />}>
       <OrganizationGuardrails {...props} />
@@ -18,10 +16,9 @@ export default function OrganizationGuardrailsLayout(
   )
 }
 
-async function OrganizationGuardrails({
-  params,
-  children,
-}: LayoutProps<"/orgs/[orgSlug]/guardrails">) {
+async function OrganizationGuardrails(props: LayoutProps<"/orgs/[orgSlug]/guardrails">) {
+  const { params, children } = props
+
   await connection()
   const { orgSlug } = await params
   const result = await resolveOrganizationSlug(orgSlug)

@@ -4,7 +4,6 @@ import { HoldToConfirm } from "@/components/interior/hold-to-confirm"
 
 import * as React from "react"
 import { toast } from "sonner"
-import type { GuardrailOutcome } from "@/lib/gateway/client"
 import type { Route } from "next"
 import Link from "next/link"
 import { useRouter } from "@bprogress/next/app"
@@ -107,16 +106,7 @@ const runStatusMeta = {
   }
 >
 
-export function RunsTable({
-  agentName,
-  basePath,
-  workflowName,
-  workflowRuns,
-  hasNextPage,
-  nextPageToken,
-  deleteWorkflowRunAction,
-  workspaceId,
-}: {
+type RunsTableProps = {
   agentName: string
   basePath: string
   workflowName: string
@@ -130,8 +120,20 @@ export function RunsTable({
     formData: FormData
   ) => Promise<DeleteWorkflowRunActionState>
   workspaceId: string
-}) {
+}
+
+export function RunsTable(props: RunsTableProps) {
   "use no memo"
+  const {
+    agentName,
+    basePath,
+    workflowName,
+    workflowRuns,
+    hasNextPage,
+    nextPageToken,
+    deleteWorkflowRunAction,
+    workspaceId,
+  } = props
 
   const query = useQuery(
     queryOptions({
@@ -239,16 +241,7 @@ export function RunsTable({
   )
 }
 
-function createColumns({
-  agentName,
-  basePath,
-  canGoPrevious,
-  deleteWorkflowRunAction,
-  goPrevious,
-  pageRowCount,
-  workflowName,
-  workspaceId,
-}: {
+type createColumnsProps = {
   agentName: string
   basePath: string
   canGoPrevious: boolean
@@ -262,7 +255,20 @@ function createColumns({
   pageRowCount: number
   workflowName: string
   workspaceId: string
-}): ColumnDef<WorkflowRunSummary>[] {
+}
+
+function createColumns(props: createColumnsProps): ColumnDef<WorkflowRunSummary>[] {
+  const {
+    agentName,
+    basePath,
+    canGoPrevious,
+    deleteWorkflowRunAction,
+    goPrevious,
+    pageRowCount,
+    workflowName,
+    workspaceId,
+  } = props
+
   return [
     {
       accessorKey: "name",
@@ -278,11 +284,7 @@ function createColumns({
       accessorKey: "status",
       header: "Status",
       cell: ({ row }) => (
-        <RunStatusBadge
-          outcome={row.original.guardrailOutcome}
-          reason={row.original.reason}
-          status={row.original.status}
-        />
+        <RunStatusBadge reason={row.original.reason} status={row.original.status} />
       ),
     },
     {
@@ -323,15 +325,14 @@ function createColumns({
   ]
 }
 
-function RunStatusBadge({
-  reason,
-  status,
-  outcome,
-}: {
+type RunStatusBadgeProps = {
   reason: string
   status: WorkflowRunStatus
-  outcome?: GuardrailOutcome
-}) {
+}
+
+function RunStatusBadge(props: RunStatusBadgeProps) {
+  const { reason, status } = props
+
   const meta = runStatusMeta[status]
   const icon = <meta.icon data-icon="inline-start" />
   const badge = (
@@ -340,18 +341,6 @@ function RunStatusBadge({
       {meta.label}
     </Badge>
   )
-
-  if (outcome)
-    return (
-      <div className="flex flex-col gap-1">
-        {badge}
-        <span className="text-xs text-muted-foreground">
-          {outcome.code === "guardrail_denied"
-            ? "Blocked by guardrail"
-            : "Guardrail service unavailable"}
-        </span>
-      </div>
-    )
 
   if (reason.length === 0) {
     return badge
@@ -365,17 +354,7 @@ function RunStatusBadge({
   )
 }
 
-function RunActions({
-  agentName,
-  basePath,
-  canGoPrevious,
-  deleteWorkflowRunAction,
-  goPrevious,
-  isOnlyRow,
-  item,
-  workflowName,
-  workspaceId,
-}: {
+type RunActionsProps = {
   agentName: string
   basePath: string
   canGoPrevious: boolean
@@ -390,7 +369,21 @@ function RunActions({
   item: WorkflowRunSummary
   workflowName: string
   workspaceId: string
-}) {
+}
+
+function RunActions(props: RunActionsProps) {
+  const {
+    agentName,
+    basePath,
+    canGoPrevious,
+    deleteWorkflowRunAction,
+    goPrevious,
+    isOnlyRow,
+    item,
+    workflowName,
+    workspaceId,
+  } = props
+
   const [deleteOpen, setDeleteOpen] = React.useState(false)
   const [menuOpen, setMenuOpen] = React.useState(false)
   const detailQuery = useQuery(
@@ -475,12 +468,7 @@ function RunActions({
   )
 }
 
-function runGraphHref(
-  basePath: string,
-  agentName: string,
-  workflowName: string,
-  runName: string
-): Route {
+function runGraphHref(basePath: string, agentName: string, workflowName: string, runName: string): Route {
   const params = new URLSearchParams()
   params.set("agent_name", agentName)
   params.set("workflow_name", workflowName)
@@ -488,17 +476,16 @@ function runGraphHref(
   return `${basePath}/workflows/triggers/runs/graph?${params.toString()}` as Route
 }
 
-function OpenSessionMenuItem({
-  agentName,
-  basePath,
-  detail,
-  isFetching,
-}: {
+type OpenSessionMenuItemProps = {
   agentName: string
   basePath: string
   detail?: WorkflowRunDetail
   isFetching: boolean
-}) {
+}
+
+function OpenSessionMenuItem(props: OpenSessionMenuItemProps) {
+  const { agentName, basePath, detail, isFetching } = props
+
   if (isFetching) {
     return (
       <DropdownMenuItem disabled>
@@ -530,17 +517,7 @@ function OpenSessionMenuItem({
   )
 }
 
-function DeleteRunDialog({
-  agentName,
-  canGoPrevious,
-  deleteWorkflowRunAction,
-  goPrevious,
-  isOnlyRow,
-  item,
-  open,
-  setOpen,
-  workflowName,
-}: {
+type DeleteRunDialogProps = {
   agentName: string
   canGoPrevious: boolean
   deleteWorkflowRunAction: (
@@ -555,7 +532,21 @@ function DeleteRunDialog({
   open: boolean
   setOpen: React.Dispatch<React.SetStateAction<boolean>>
   workflowName: string
-}) {
+}
+
+function DeleteRunDialog(props: DeleteRunDialogProps) {
+  const {
+    agentName,
+    canGoPrevious,
+    deleteWorkflowRunAction,
+    goPrevious,
+    isOnlyRow,
+    item,
+    open,
+    setOpen,
+    workflowName,
+  } = props
+
   const router = useRouter()
   const [state, formAction, pending] = React.useActionState(
     deleteWorkflowRunAction.bind(null, agentName, workflowName),

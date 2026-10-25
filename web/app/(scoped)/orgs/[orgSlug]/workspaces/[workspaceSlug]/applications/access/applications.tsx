@@ -21,16 +21,15 @@ type AccessClient = NonNullable<
 >["clients"][number]
 const column = createColumnHelper<AccessClient>()
 
-export function ApplicationGuardrailAccess({
-  clients,
-  orgSlug,
-  workspaceSlug,
-}: {
+type ApplicationGuardrailAccessProps = {
   clients: AccessClient[]
   orgSlug: string
   workspaceSlug: string
-}) {
+}
+
+export function ApplicationGuardrailAccess(props: ApplicationGuardrailAccessProps) {
   "use no memo"
+  const { clients, orgSlug, workspaceSlug } = props
 
   const [selected, setSelected] = useState<AccessClient>()
   // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table is not React Compiler compatible yet.

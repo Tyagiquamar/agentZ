@@ -64,12 +64,13 @@ function groupTools(parts: ToolPart[]): ToolEntry[] {
 
   const flush = () => {
     if (group.length === 0) return
-    if (group.length === 1) {
-      const [part] = group
-      if (part) result.push({ type: "tool", part })
-    } else {
-      result.push({ type: "context", parts: group })
+    const [part] = group
+    if (group.length === 1 && part) {
+      result.push({ type: "tool", part })
+      group = []
+      return
     }
+    result.push({ type: "context", parts: group })
     group = []
   }
 
@@ -106,13 +107,13 @@ function renderParts(parts: Part[], textByPart: Record<string, string>): RenderE
     for (const entry of groupTools(toolBuffer)) {
       if (entry.type === "tool") {
         entries.push({ key: entry.part.id, toolEntries: [entry], type: "tool" })
-      } else {
-        entries.push({
-          key: entry.parts.map((part) => part.id).join(":"),
-          toolEntries: [entry],
-          type: "tool",
-        })
+        continue
       }
+      entries.push({
+        key: entry.parts.map((part) => part.id).join(":"),
+        toolEntries: [entry],
+        type: "tool",
+      })
     }
     toolBuffer = []
   }
@@ -176,7 +177,6 @@ function projectTurn(input: {
   partsByMessage: Record<string, Part[]>
   textByPart: Record<string, string>
   turnKey: string
-  userMessageID: string
   isActive: boolean
 }): void {
   const { assistants, compacted, out, partsByMessage, textByPart, turnKey, isActive } = input
@@ -214,8 +214,7 @@ function projectTurn(input: {
     }
 
     if (assistant.error && assistant.error.name !== "MessageAbortedError") {
-      const outcome = describeMessageError(assistant.error)
-      error ??= outcome
+      error ??= describeMessageError(assistant.error)
     }
   }
 
@@ -338,7 +337,6 @@ export function projectTimeline(input: ProjectInput): {
       partsByMessage: input.partsByMessage,
       textByPart: input.textByPart,
       turnKey: `assistant:${turn.user.id}`,
-      userMessageID: turn.user.id,
     })
   })
 

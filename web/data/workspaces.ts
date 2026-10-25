@@ -115,10 +115,7 @@ export const getWorkspaceScope = cache(async (orgSlug: string, workspaceSlug: st
   }
 })
 
-export async function resolveWorkspaceDestination(
-  orgSlug: string,
-  workspaceSlug: string
-): Promise<Route | undefined> {
+export async function resolveWorkspaceDestination(orgSlug: string, workspaceSlug: string): Promise<Route | undefined> {
   const scope = await getWorkspaceScope(orgSlug, workspaceSlug)
   if (scope.kind !== "ready") {
     return
@@ -197,15 +194,13 @@ export async function getWorkspaceCreation(orgSlug: string) {
   return {
     candidates: members.data.members,
     resources: {
-      guardrail_connections:
-        guardrailConnections.data?.items.map((item) => ({
-          name: item.name,
-          displayName: item.displayName,
-        })) ?? [],
-      guardrail_policies:
-        guardrailPolicies.data?.items
-          .filter((item) => !item.mandatory)
-          .map((item) => ({ name: item.name, displayName: item.displayName })) ?? [],
+      guardrail_connections: guardrailConnections.data.items.map(({ name, displayName }) => ({
+        name,
+        displayName,
+      })),
+      guardrail_policies: guardrailPolicies.data.items
+        .filter((item) => !item.mandatory)
+        .map(({ name, displayName }) => ({ name, displayName })),
       skills: skills.skills.map(({ name }) => name),
       sandboxes: sandboxes.data,
       mcp_connections: mcps.data.map(({ endpoint_url, name }) => ({ endpoint_url, name })),
@@ -219,13 +214,7 @@ export async function getWorkspaceCreation(orgSlug: string) {
   }
 }
 
-export async function getWorkspaceInheritedResources(
-  orgSlug: string,
-  workspaceSlug: string,
-  resourceType: InheritedResourceType,
-  sortBy: InheritedResourceSortByQuery,
-  sortOrder: InheritedResourceSortOrderQuery
-) {
+export async function getWorkspaceInheritedResources(orgSlug: string, workspaceSlug: string, resourceType: InheritedResourceType, sortBy: InheritedResourceSortByQuery, sortOrder: InheritedResourceSortOrderQuery) {
   const scope = await getWorkspaceScope(orgSlug, workspaceSlug)
   if (
     scope.scope.kind !== "ready" ||
@@ -245,12 +234,7 @@ export async function getWorkspaceInheritedResources(
   return { ...scope, resources: result.data.resources }
 }
 
-export async function replaceWorkspaceInheritedResourceSelection(
-  orgSlug: string,
-  workspaceSlug: string,
-  resourceType: InheritedResourceType,
-  names: string[]
-) {
+export async function replaceWorkspaceInheritedResourceSelection(orgSlug: string, workspaceSlug: string, resourceType: InheritedResourceType, names: string[]) {
   const scope = await getWorkspaceScope(orgSlug, workspaceSlug)
   if (
     scope.scope.kind !== "ready" ||

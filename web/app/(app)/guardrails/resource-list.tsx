@@ -71,15 +71,15 @@ const statusMeta = {
   }
 >
 
-export function NewGuardrailPolicyButton({
-  scope,
-  canReadConnections,
-  canCreateConnection,
-}: {
+type NewGuardrailPolicyButtonProps = {
   scope: GuardrailActionScope
   canReadConnections: boolean
   canCreateConnection: boolean
-}) {
+}
+
+export function NewGuardrailPolicyButton(props: NewGuardrailPolicyButtonProps) {
+  const { scope, canReadConnections, canCreateConnection } = props
+
   const [connections, setConnections] = useState<GuardrailConnection[]>()
   const [pending, startTransition] = useTransition()
 
@@ -135,16 +135,16 @@ export function NewGuardrailConnectionButton({ scope }: { scope: GuardrailAction
   )
 }
 
-export function GuardrailPolicyList({
-  policies,
-  scope,
-  basePath,
-}: {
+type GuardrailPolicyListProps = {
   policies: GuardrailPolicy[]
   scope: GuardrailActionScope
   basePath: `/orgs/${string}/guardrails`
-}) {
+}
+
+export function GuardrailPolicyList(props: GuardrailPolicyListProps) {
   "use no memo"
+  const { policies, scope, basePath } = props
+
   const router = useRouter()
   const [deleting, setDeleting] = useState<GuardrailPolicy>()
   // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table is not React Compiler compatible yet.
@@ -277,14 +277,15 @@ export function GuardrailPolicyList({
   )
 }
 
-export function GuardrailConnectionList({
-  connections,
-  scope,
-}: {
+type GuardrailConnectionListProps = {
   connections: GuardrailConnection[]
   scope: GuardrailActionScope
-}) {
+}
+
+export function GuardrailConnectionList(props: GuardrailConnectionListProps) {
   "use no memo"
+  const { connections, scope } = props
+
   const [editing, setEditing] = useState<GuardrailConnection>()
   const [deleting, setDeleting] = useState<GuardrailConnection>()
   // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table is not React Compiler compatible yet.
@@ -427,19 +428,17 @@ function GuardrailStatusLabel({ status }: { status: GuardrailStatus }) {
   )
 }
 
-function DeleteGuardrail({
-  kind,
-  name,
-  label,
-  scope,
-  onClose,
-}: {
+type DeleteGuardrailProps = {
   kind: "connection" | "policy"
   name: string
   label: string
   scope: GuardrailActionScope
   onClose: () => void
-}) {
+}
+
+function DeleteGuardrail(props: DeleteGuardrailProps) {
+  const { kind, name, label, scope, onClose } = props
+
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState("")

@@ -7,11 +7,8 @@ import type { GuardrailAssignment } from "@/lib/gateway/client"
 
 export async function listGuardrailClientAccess(orgSlug: string, workspaceSlug: string) {
   const scope = await getWorkspaceScope(orgSlug, workspaceSlug)
-  if (
-    scope.kind !== "ready" ||
-    (!scope.scope.organization.superadmin && !scope.workspace.capabilities.administer)
-  )
-    return
+  if (scope.kind !== "ready") return
+  if (!scope.scope.organization.superadmin && !scope.workspace.capabilities.administer) return
   const db = getDB()
   const [grants, saved] = await Promise.all([
     db

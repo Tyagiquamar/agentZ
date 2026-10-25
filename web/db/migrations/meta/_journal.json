@@ -40,15 +40,8 @@
     {
       "idx": 5,
       "version": "7",
-      "when": 1792692282484,
+      "when": 1792918833189,
       "tag": "0005_guardrails",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "7",
-      "when": 1792908704192,
-      "tag": "0006_native_guardrail_metadata",
       "breakpoints": true
     }
   ]

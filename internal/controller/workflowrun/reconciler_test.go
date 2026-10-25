@@ -17,7 +17,9 @@ func TestAssistantFailurePreservesNativeErrorWithoutTrustingProviderMarkers(t *t
 			failure.Data.StatusCode = &status
 			failure.Data.ResponseBody = &body
 			failure.Data.ResponseHeaders = &map[string]string{"x-agentz-guardrail-outcome": "1"}
-			assistant := gatewayapi.OpencodeAssistantMessage{Error: &gatewayapi.OpencodeAssistantMessage_Error{}}
+			assistant := gatewayapi.OpencodeAssistantMessage{
+				Error: &gatewayapi.OpencodeAssistantMessage_Error{},
+			}
 			if err := assistant.Error.FromOpencodeAPIError(failure); err != nil {
 				t.Fatal(err)
 			}

@@ -31,6 +31,7 @@ type guardrailDiscoveryHTTP struct {
 	respond func(*http.Request) (*http.Response, error)
 }
 
+// RoundTrip records provider calls before returning the configured response.
 func (u *guardrailDiscoveryHTTP) RoundTrip(request *http.Request) (*http.Response, error) {
 	u.calls = append(u.calls, request)
 	return u.respond(request)
@@ -229,7 +230,8 @@ func TestGuardrailDiscoveryBedrockPagesUseSavedRegionAndCredentials(t *testing.T
 				if request.URL.Host != "bedrock.us-east-1.amazonaws.com" || request.Method != http.MethodGet {
 					t.Fatal("unexpected provider destination or method")
 				}
-				if !strings.Contains(request.Header.Get("Authorization"), "Credential=saved-key/") || request.Header.Get("X-Amz-Security-Token") != "saved-session" {
+				signedWithSavedKey := strings.Contains(request.Header.Get("Authorization"), "Credential=saved-key/")
+				if !signedWithSavedKey || request.Header.Get("X-Amz-Security-Token") != "saved-session" {
 					t.Fatal("request did not use the saved AWS key and session token")
 				}
 				query := request.URL.Query()
@@ -239,10 +241,11 @@ func TestGuardrailDiscoveryBedrockPagesUseSavedRegionAndCredentials(t *testing.T
 				if kind == "versions" && query.Get("guardrailIdentifier") != "abc123" {
 					t.Fatal("version request did not use selected guardrail")
 				}
+				payload := `{"guardrails":[{"id":"abc123","arn":"arn:aws:bedrock:us-east-1:123456789012:guardrail/abc123","name":"Company safety","description":"Published safety controls","version":"2","status":"READY"}],"nextToken":"next-page"}`
 				return &http.Response{
 					StatusCode: http.StatusOK,
 					Header:     http.Header{},
-					Body:       io.NopCloser(strings.NewReader(`{"guardrails":[{"id":"abc123","arn":"arn:aws:bedrock:us-east-1:123456789012:guardrail/abc123","name":"Company safety","description":"Published safety controls","version":"2","status":"READY"}],"nextToken":"next-page"}`)),
+					Body:       io.NopCloser(strings.NewReader(payload)),
 				}, nil
 			}
 			body := `{"scope":"Workspace","kind":"guardrails","pageSize":3,"pageToken":"opaque+page"}`
@@ -250,7 +253,8 @@ func TestGuardrailDiscoveryBedrockPagesUseSavedRegionAndCredentials(t *testing.T
 				body = `{"scope":"Workspace","kind":"versions","parent":"abc123","pageSize":3,"pageToken":"opaque+page"}`
 			}
 			response, result := fixture.request(t, body)
-			if response.Code != http.StatusOK || len(result.Items) != 1 || result.NextPageToken == nil || *result.NextPageToken != "next-page" || len(fixture.upstream.calls) != 1 {
+			nextPage := result.NextPageToken != nil && *result.NextPageToken == "next-page"
+			if response.Code != http.StatusOK || len(result.Items) != 1 || !nextPage || len(fixture.upstream.calls) != 1 {
 				t.Fatalf("provider page was not preserved: HTTP %d, items=%d, calls=%d", response.Code, len(result.Items), len(fixture.upstream.calls))
 			}
 			wantID := "abc123"
@@ -307,7 +311,8 @@ func TestGuardrailDiscoveryGoogleRefreshAndOnePage(t *testing.T) {
 			resourceCalls := 0
 			fixture.upstream.respond = func(request *http.Request) (*http.Response, error) {
 				payload := test.payload
-				if request.URL.Host == "oauth2.googleapis.com" {
+				switch request.URL.Host {
+				case "oauth2.googleapis.com":
 					tokenCalls++
 					if request.URL.Path != "/token" || request.Method != http.MethodPost || request.Header.Get("Authorization") != "" {
 						t.Fatal("token exchange used the wrong destination, method, or recursive authorization")
@@ -316,9 +321,10 @@ func TestGuardrailDiscoveryGoogleRefreshAndOnePage(t *testing.T) {
 						t.Fatal("token exchange did not use saved authorized-user credentials")
 					}
 					payload = `{"access_token":"resource-token","token_type":"Bearer","expires_in":3600}`
-				} else {
+				default:
 					resourceCalls++
-					if request.URL.Host != test.host || request.URL.Path != test.path || request.Method != http.MethodGet || request.Header.Get("Authorization") != "Bearer resource-token" {
+					canonicalEndpoint := request.URL.Host == test.host && request.URL.Path == test.path
+					if !canonicalEndpoint || request.Method != http.MethodGet || request.Header.Get("Authorization") != "Bearer resource-token" {
 						t.Fatal("resource request did not use the canonical provider endpoint and refreshed saved credentials")
 					}
 					if request.URL.Query().Get("pageSize") != "3" || request.URL.Query().Get("pageToken") != "opaque+page" {
@@ -339,7 +345,8 @@ func TestGuardrailDiscoveryGoogleRefreshAndOnePage(t *testing.T) {
 				"pageToken": "opaque+page",
 			})
 			response, result := fixture.request(t, string(body))
-			if response.Code != http.StatusOK || tokenCalls != 1 || resourceCalls != 1 || result.NextPageToken == nil || *result.NextPageToken != "next" {
+			nextPage := result.NextPageToken != nil && *result.NextPageToken == "next"
+			if response.Code != http.StatusOK || tokenCalls != 1 || resourceCalls != 1 || !nextPage {
 				t.Fatalf(
 					"one authenticated provider page failed: HTTP %d, tokenCalls=%d, resourceCalls=%d: %s",
 					response.Code,
@@ -371,7 +378,8 @@ func TestGuardrailDiscoveryRejectsUnsafeCredentialConfigurations(t *testing.T) {
 		fixture := newGuardrailDiscoveryFixture(t, "ModelArmor", false, false, true)
 		fixture.credentials = map[string]any{"credentials.json": payload}
 		response, _ := fixture.request(t, `{"scope":"Workspace","kind":"projects"}`)
-		if response.Code != http.StatusServiceUnavailable || len(fixture.upstream.calls) != 0 || !strings.Contains(response.Body.String(), "unsupported_credentials") {
+		unsupported := strings.Contains(response.Body.String(), "unsupported_credentials")
+		if response.Code != http.StatusServiceUnavailable || len(fixture.upstream.calls) != 0 || !unsupported {
 			t.Fatal("unsafe credentials were not rejected before network access")
 		}
 		if strings.Contains(response.Body.String(), "steal") || strings.Contains(response.Body.String(), "private_key") {
@@ -418,7 +426,9 @@ func TestGuardrailDiscoveryErrorsAreSanitizedAndNeverRetried(t *testing.T) {
 		}, nil
 	}
 	response, _ := fixture.request(t, `{"scope":"Workspace","kind":"projects"}`)
-	if response.Code != http.StatusUnauthorized || len(fixture.upstream.calls) != 1 || !strings.Contains(response.Body.String(), "provider_authentication_failed") || strings.Contains(response.Body.String(), "RAW_PROVIDER_SECRET") {
+	authenticationFailed := strings.Contains(response.Body.String(), "provider_authentication_failed")
+	leaked := strings.Contains(response.Body.String(), "RAW_PROVIDER_SECRET")
+	if response.Code != http.StatusUnauthorized || len(fixture.upstream.calls) != 1 || !authenticationFailed || leaked {
 		t.Fatalf("revoked OAuth credential was not safely identified: HTTP %d calls=%d", response.Code, len(fixture.upstream.calls))
 	}
 }
@@ -469,14 +479,16 @@ func TestGuardrailDiscoveryServiceAccountSignsTokenBeforeResourceRequest(t *test
 	tokenCalls, resourceCalls := 0, 0
 	fixture.upstream.respond = func(request *http.Request) (*http.Response, error) {
 		body := `{"locations":[]}`
-		if request.URL.Host == "oauth2.googleapis.com" {
+		switch request.URL.Host {
+		case "oauth2.googleapis.com":
 			tokenCalls++
 			err := request.ParseForm()
-			if err != nil || request.PostForm.Get("grant_type") != "urn:ietf:params:oauth:grant-type:jwt-bearer" || request.PostForm.Get("assertion") == "" {
+			grantType := request.PostForm.Get("grant_type")
+			if err != nil || grantType != "urn:ietf:params:oauth:grant-type:jwt-bearer" || request.PostForm.Get("assertion") == "" {
 				t.Fatal("service account did not produce a signed JWT exchange")
 			}
 			body = `{"access_token":"service-token","token_type":"Bearer","expires_in":3600}`
-		} else {
+		default:
 			resourceCalls++
 			if request.URL.Host != "modelarmor.googleapis.com" || request.Header.Get("Authorization") != "Bearer service-token" {
 				t.Fatal("service account resource request used the wrong endpoint or token")
@@ -518,7 +530,8 @@ func TestGuardrailDiscoveryMissingAWSKeysNeverUsesAmbientIdentity(t *testing.T) 
 	fixture := newGuardrailDiscoveryFixture(t, "Bedrock", false, false, true)
 	fixture.credentials = map[string]any{}
 	response, _ := fixture.request(t, `{"scope":"Workspace","kind":"guardrails"}`)
-	if response.Code != http.StatusServiceUnavailable || len(fixture.upstream.calls) != 0 || !strings.Contains(response.Body.String(), "credentials_unavailable") {
+	missingCredentials := strings.Contains(response.Body.String(), "credentials_unavailable")
+	if response.Code != http.StatusServiceUnavailable || len(fixture.upstream.calls) != 0 || !missingCredentials {
 		t.Fatal("missing saved AWS credentials did not stop before ambient discovery")
 	}
 }

@@ -13,10 +13,10 @@ import (
 	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
 )
 
-func TestGuardrailEvidenceHasSeparateRetentionAndTrustBoundary(t *testing.T) {
+func TestGuardrailEvidenceTrustBoundary(t *testing.T) {
 	t.Parallel()
 	span := appSpanFixture(0)
-	evidence := `[{"phase":"request","guard":"webhook","action":"reject","actionReason":"private detector response","agentz":{"version":1,"eventId":"event-1","referenceId":"reference-1","policyId":"policy-1","checkId":"check-1","revision":"revision-1","connectionId":"connection-1","attachment":"client/test","mandatory":true,"safeLabel":"Personal information","explanation":"Remove personal details and try again.","durationMs":2.5,"retentionDays":30,"startedAt":1792692000000,"sequence":0,"scopes":["conversation"],"inspected":["private inspected message"]}}]`
+	evidence := `[{"phase":"request","guard":"webhook","action":"reject","actionReason":"private detector response","agentz":{"retentionDays":3650,"inspected":["private inspected message"]}}]`
 	span.Attributes = append(span.Attributes, &commonpb.KeyValue{
 		Key: attrGuardrailEvaluations, Value: &commonpb.AnyValue{Value: &commonpb.AnyValue_StringValue{StringValue: evidence}},
 	})
@@ -37,11 +37,11 @@ func TestGuardrailEvidenceHasSeparateRetentionAndTrustBoundary(t *testing.T) {
 		t.Fatal("gateway listener did not retain both evaluation and app operation")
 	}
 	row := events[0].guardrail.row
-	if row.ReferenceID != "" || row.PolicyID != "" || !row.ExpiresAt.IsZero() {
-		t.Fatal("native evaluation invented provenance or trusted exporter retention")
+	if !row.ExpiresAt.IsZero() {
+		t.Fatal("native evaluation trusted exporter retention")
 	}
 	if bytes.Contains(row.Evaluation, []byte("private")) || bytes.Contains(row.Evaluation, []byte("agentz")) {
-		t.Fatal("native evaluation retained arbitrary provider text or legacy captured content")
+		t.Fatal("native evaluation retained arbitrary provider text or captured content")
 	}
 
 	_, attrs := extractSpanPayload(spanClassLLM, attrsMap(span.Attributes))

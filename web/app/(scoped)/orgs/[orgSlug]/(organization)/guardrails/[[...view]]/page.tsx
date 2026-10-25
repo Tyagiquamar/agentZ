@@ -7,9 +7,7 @@ import { activateOrganization, resolveOrganizationSlug } from "@/data/organizati
 import { ensureTenant } from "@/lib/gateway/client"
 import { getGatewayServerClient } from "@/lib/gateway/server-client"
 
-export default function OrganizationGuardrailsPage(
-  props: PageProps<"/orgs/[orgSlug]/guardrails/[[...view]]">
-) {
+export default function OrganizationGuardrailsPage(props: PageProps<"/orgs/[orgSlug]/guardrails/[[...view]]">) {
   return (
     <Suspense fallback={<AdministrationLoadingState />}>
       <OrganizationGuardrails {...props} />
@@ -17,10 +15,9 @@ export default function OrganizationGuardrailsPage(
   )
 }
 
-async function OrganizationGuardrails({
-  params,
-  searchParams,
-}: PageProps<"/orgs/[orgSlug]/guardrails/[[...view]]">) {
+async function OrganizationGuardrails(props: PageProps<"/orgs/[orgSlug]/guardrails/[[...view]]">) {
+  const { params, searchParams } = props
+
   await connection()
   const { orgSlug, view } = await params
   const result = await resolveOrganizationSlug(orgSlug)

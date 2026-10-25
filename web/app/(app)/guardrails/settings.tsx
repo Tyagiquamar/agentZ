@@ -13,15 +13,15 @@ import { MultiSelectDropdown } from "@/components/ui/multi-select-dropdown"
 import { Field, FieldDescription, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 
-export function GuardrailOrganizationSettings({
-  initial,
-  policies,
-  canModify,
-}: {
+type GuardrailOrganizationSettingsProps = {
   initial: GuardrailSettings
   policies: GuardrailPolicy[]
   canModify: boolean
-}) {
+}
+
+export function GuardrailOrganizationSettings(props: GuardrailOrganizationSettingsProps) {
+  const { initial, policies, canModify } = props
+
   const idPrefix = useId()
   const router = useRouter()
   const [settings, setSettings] = useState(initial)

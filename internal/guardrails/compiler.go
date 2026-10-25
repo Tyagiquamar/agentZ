@@ -122,9 +122,6 @@ func ValidatePolicy(spec api.GuardrailPolicySpec) error {
 			if len(check.Regex.Patterns) == 0 {
 				return fmt.Errorf("check %q needs a regex pattern", check.ID)
 			}
-			if check.Regex.Replacement != "" {
-				return errors.New("custom regex replacements are unsupported; masking uses the gateway's redaction marker")
-			}
 			for _, pattern := range check.Regex.Patterns {
 				if _, err := regexp.Compile(pattern); err != nil {
 					return fmt.Errorf("check %q has an invalid regular expression: %w", check.ID, err)
@@ -186,7 +183,8 @@ func Resolve(ctx context.Context, reader client.Reader, namespace string, assign
 		}
 		seen[key] = mandatory
 		policy := &api.GuardrailPolicy{}
-		if err := reader.Get(ctx, client.ObjectKey{Namespace: policyNamespace, Name: ref.Name}, policy); err != nil {
+		err = reader.Get(ctx, client.ObjectKey{Namespace: policyNamespace, Name: ref.Name}, policy)
+		if err != nil {
 			return nil, fmt.Errorf("get guardrail policy %q: %w", ref.Name, err)
 		}
 		if !policy.DeletionTimestamp.IsZero() {
@@ -257,8 +255,12 @@ func (b *Bundle) compile(namespace string) error {
 			explanation = "Edit your request to comply with this policy and try again."
 		}
 		message := check.Name + ": " + explanation
-		request := agw.PromptguardRequest{CustomResponse: &agw.CustomResponse{StatusCode: 422, Message: &message}}
-		response := agw.PromptguardResponse{CustomResponse: &agw.CustomResponse{StatusCode: 422, Message: &message}}
+		request := agw.PromptguardRequest{
+			CustomResponse: &agw.CustomResponse{StatusCode: 422, Message: &message},
+		}
+		response := agw.PromptguardResponse{
+			CustomResponse: &agw.CustomResponse{StatusCode: 422, Message: &message},
+		}
 		for _, value := range check.Scopes {
 			switch value {
 			case "instructions":
@@ -348,9 +350,9 @@ func (b *Bundle) compile(namespace string) error {
 		}
 		if check.Phase == "input" {
 			guard.Request = append(guard.Request, request)
-		} else {
-			guard.Response = append(guard.Response, response)
+			continue
 		}
+		guard.Response = append(guard.Response, response)
 	}
 	if len(guard.Request) > 8 || len(guard.Response) > 8 {
 		return errors.New("effective guardrails exceed the gateway limit of eight checks per phase")
@@ -484,23 +486,6 @@ func (b *Bundle) resolveConnection(ctx context.Context, reader client.Reader, na
 	}
 	b.Connections = append(b.Connections, connection)
 	return connection, nil
-}
-
-// Rebind moves detector transport references into the gateway's runtime namespace.
-func (b *Bundle) Rebind(namespace string) {
-	if b.Guard == nil {
-		return
-	}
-	for i := range b.Guard.Request {
-		if b.Guard.Request[i].Webhook != nil {
-			b.Guard.Request[i].Webhook.BackendRef.Namespace = new(gwv1.Namespace(namespace))
-		}
-	}
-	for i := range b.Guard.Response {
-		if b.Guard.Response[i].Webhook != nil {
-			b.Guard.Response[i].Webhook.BackendRef.Namespace = new(gwv1.Namespace(namespace))
-		}
-	}
 }
 
 type checkRevision struct {

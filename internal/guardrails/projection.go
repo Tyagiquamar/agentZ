@@ -24,6 +24,23 @@ import (
 // ConnectionUIDLabel identifies projections belonging to one immutable detector connection.
 const ConnectionUIDLabel = "agentz.accuknox.com/guardrail-connection-uid"
 
+// Rebind moves detector transport references into the gateway's runtime namespace.
+func (b *Bundle) Rebind(namespace string) {
+	if b.Guard == nil {
+		return
+	}
+	for i := range b.Guard.Request {
+		if b.Guard.Request[i].Webhook != nil {
+			b.Guard.Request[i].Webhook.BackendRef.Namespace = new(gwv1.Namespace(namespace))
+		}
+	}
+	for i := range b.Guard.Response {
+		if b.Guard.Response[i].Webhook != nil {
+			b.Guard.Response[i].Webhook.BackendRef.Namespace = new(gwv1.Namespace(namespace))
+		}
+	}
+}
+
 // ProjectConnections materializes detector transports and scoped credential projections.
 func (b *Bundle) ProjectConnections(ctx context.Context, c client.Client, namespace, storeName string) ([]networkpolicy.Target, error) {
 	targets := []networkpolicy.Target{}

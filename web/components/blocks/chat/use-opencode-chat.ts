@@ -83,11 +83,7 @@ type UseOpencodeChatResult = {
 }
 
 const idleSessionStatus: SessionStatus = { type: "idle" }
-function deriveSessionIsBusy(
-  messages: Message[],
-  sessionStatus: SessionStatus | undefined,
-  session: Session | undefined
-): boolean {
+function deriveSessionIsBusy(messages: Message[], sessionStatus: SessionStatus | undefined, session: Session | undefined): boolean {
   // OpenCode owns the lifecycle. Message state only bridges bootstrap before
   // the first status snapshot arrives.
   if (sessionStatus) return sessionStatus.type !== "idle"
@@ -144,11 +140,7 @@ export function buildStore(sessionID: string, records: SessionMessageRecord[]) {
   return store
 }
 
-function mergeHistoryPage(
-  store: OpencodeChatStore,
-  sessionID: string,
-  records: SessionMessageRecord[]
-) {
+function mergeHistoryPage(store: OpencodeChatStore, sessionID: string, records: SessionMessageRecord[]) {
   const known = new Set((store.message[sessionID] ?? []).map((message) => message.id))
   const messages = [...(store.message[sessionID] ?? [])]
   const part = { ...store.part }
@@ -222,11 +214,7 @@ function visibleSessionIDs(sessions: Session[], sessionID: string) {
   return result
 }
 
-function firstVisibleRequest<T extends { sessionID: string }>(
-  requests: Record<string, T[]>,
-  sessions: Session[],
-  sessionID?: string
-) {
+function firstVisibleRequest<T extends { sessionID: string }>(requests: Record<string, T[]>, sessions: Session[], sessionID?: string) {
   if (!sessionID) return undefined
 
   for (const id of visibleSessionIDs(sessions, sessionID)) {
@@ -317,11 +305,8 @@ export function applyEvent(store: OpencodeChatStore, event: StreamEvent): Openco
       // Empty todos means the agent finished; drop the key so the dock unmounts.
       const sessionID = event.properties.sessionID
       const nextTodos = { ...store.todos }
-      if (event.properties.todos.length === 0) {
-        delete nextTodos[sessionID]
-      } else {
-        nextTodos[sessionID] = event.properties.todos
-      }
+      nextTodos[sessionID] = event.properties.todos
+      if (event.properties.todos.length === 0) delete nextTodos[sessionID]
       return { ...store, todos: nextTodos }
     }
 
@@ -450,12 +435,7 @@ export function sessionInfoQueryOptions(agentName: string, workspaceId: string, 
 }
 
 // Creation, stream events and revert responses all publish the same metadata.
-export async function updateSessionInfo(
-  queryClient: QueryClient,
-  agentName: string,
-  workspaceId: string,
-  info: Session
-) {
+export async function updateSessionInfo(queryClient: QueryClient, agentName: string, workspaceId: string, info: Session) {
   const { queryKey } = sessionInfoQueryOptions(agentName, workspaceId, info.id)
   await queryClient.cancelQueries({ queryKey, exact: true })
   queryClient.setQueryData(queryKey, (current) => {
@@ -517,12 +497,7 @@ export function sessionDiffQueryOptions(agentName: string, workspaceId: string, 
   })
 }
 
-function sessionMessagesQueryOptions(
-  agentName: string,
-  workspaceId: string,
-  sessionID: string,
-  directory: string
-) {
+function sessionMessagesQueryOptions(agentName: string, workspaceId: string, sessionID: string, directory: string) {
   return infiniteQueryOptions({
     initialPageParam: { limit: 20 } satisfies SessionMessagePageParam,
     queryFn: async ({
@@ -638,11 +613,7 @@ function sessionStatusQueryOptions(agentName: string, workspaceId: string, direc
   })
 }
 
-export function useOpencodeChat(
-  agentName: string,
-  workspaceId: string,
-  sessionID?: string
-): UseOpencodeChatResult {
+export function useOpencodeChat(agentName: string, workspaceId: string, sessionID?: string): UseOpencodeChatResult {
   const queryClient = useQueryClient()
   const [liveStore, setLiveStore] = useState<{
     store: OpencodeChatStore

@@ -37,19 +37,7 @@ const contentScopes = [
   ["toolArguments", "Tool arguments"],
 ] as const
 
-export function CheckEditor({
-  check,
-  connections,
-  disabled,
-  reorderable,
-  expanded,
-  index,
-  scope,
-  validationVisible,
-  onChange,
-  onExpandedChange,
-  onRemove,
-}: {
+type CheckEditorProps = {
   check: GuardrailCheck
   connections: GuardrailConnection[]
   disabled: boolean
@@ -61,7 +49,23 @@ export function CheckEditor({
   onChange: (check: GuardrailCheck) => void
   onExpandedChange: (open: boolean) => void
   onRemove: () => void
-}) {
+}
+
+export function CheckEditor(props: CheckEditorProps) {
+  const {
+    check,
+    connections,
+    disabled,
+    reorderable,
+    expanded,
+    index,
+    scope,
+    validationVisible,
+    onChange,
+    onExpandedChange,
+    onRemove,
+  } = props
+
   const { setNodeRef, setActivatorNodeRef, transform, transition, attributes, listeners } =
     useSortable({ id: check.id, disabled: disabled || !reorderable })
   const [advanced, setAdvanced] = useState(false)
@@ -74,6 +78,19 @@ export function CheckEditor({
     check.scopes.length !== defaultScopes.length ||
     check.scopes.some((scope) => !defaultScopes.includes(scope))
   const id = useId()
+  let detector = ""
+  if (check.connection) detector = `${check.connection.scope}/${check.connection.name}`
+  if (check.regex) detector = "regex"
+  let action = check.action === "mask" ? "mask" : "enforce"
+  if (check.mode === "audit") action = "audit"
+  let actionDescription = ""
+  if (!check.regex)
+    actionDescription =
+      "The provider controls detection and may modify content as part of enforcement."
+  if (check.regex && check.action === "mask")
+    actionDescription = "Matched text uses the gateway's standard redaction."
+  if (check.mode === "audit")
+    actionDescription = "Records findings without blocking or changing content."
 
   return (
     <div
@@ -240,13 +257,7 @@ export function CheckEditor({
                               : ["instructions", "conversation"],
                         })
                     }}
-                    value={
-                      check.regex
-                        ? "regex"
-                        : check.connection
-                          ? `${check.connection.scope}/${check.connection.name}`
-                          : ""
-                    }
+                    value={detector}
                   >
                     <SelectTrigger id={`${id}-detector`} className="w-full">
                       <SelectValue placeholder="Select a checker connection" />
@@ -326,17 +337,11 @@ export function CheckEditor({
                 <Select
                   disabled={disabled}
                   onValueChange={(value) => {
-                    if (value === "input" || value === "output")
-                      onChange({
-                        ...check,
-                        phase: value,
-                        scopes:
-                          value === "output"
-                            ? ["conversation"]
-                            : !check.regex
-                              ? ["instructions", "conversation"]
-                              : check.scopes,
-                      })
+                    if (value !== "input" && value !== "output") return
+                    let scopes = check.scopes
+                    if (!check.regex) scopes = ["instructions", "conversation"]
+                    if (value === "output") scopes = ["conversation"]
+                    onChange({ ...check, phase: value, scopes })
                   }}
                   value={check.phase}
                 >
@@ -364,9 +369,7 @@ export function CheckEditor({
                     if (value === "audit") onChange({ ...check, mode: "audit" })
                     if (value === "enforce") onChange({ ...check, mode: "enforce", action: "deny" })
                   }}
-                  value={
-                    check.mode === "audit" ? "audit" : check.action === "mask" ? "mask" : "enforce"
-                  }
+                  value={action}
                 >
                   <SelectTrigger id={`${id}-action`} className="w-full">
                     <SelectValue />
@@ -383,18 +386,8 @@ export function CheckEditor({
                     </SelectGroup>
                   </SelectContent>
                 </Select>
-                {check.mode === "audit" ? (
-                  <FieldDescription>
-                    Records findings without blocking or changing content.
-                  </FieldDescription>
-                ) : check.regex && check.action === "mask" ? (
-                  <FieldDescription>
-                    Matched text uses the gateway&apos;s standard redaction.
-                  </FieldDescription>
-                ) : !check.regex ? (
-                  <FieldDescription>
-                    The provider controls detection and may modify content as part of enforcement.
-                  </FieldDescription>
+                {actionDescription ? (
+                  <FieldDescription>{actionDescription}</FieldDescription>
                 ) : null}
               </Field>
             </div>

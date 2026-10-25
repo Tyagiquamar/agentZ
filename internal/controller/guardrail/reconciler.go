@@ -162,11 +162,12 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		State:              "Ready",
 		Message:            "Configuration accepted; workloads report enforcement rollout separately.",
 	}
-	if err != nil {
+	switch err {
+	case nil:
+		status.Revision = bundle.Revision
+	default:
 		status.State = "Error"
 		status.Message = err.Error()
-	} else {
-		status.Revision = bundle.Revision
 	}
 	if !reflect.DeepEqual(policy.Status, status) {
 		patch := client.MergeFrom(policy.DeepCopy())

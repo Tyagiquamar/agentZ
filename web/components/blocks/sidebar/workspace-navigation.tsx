@@ -41,16 +41,7 @@ import { SidebarNavigationLink } from "./navigation-link"
 import type { SidebarScope } from "./sidebar"
 import { WorkspaceSwitcher } from "./workspace-switcher"
 
-export function WorkspaceNavigation({
-  children,
-  headerActions,
-  scope,
-  showAgents,
-  showSecrets,
-  showTourButton,
-  showWorkflows,
-  userMenu,
-}: {
+type WorkspaceNavigationProps = {
   children: ReactNode
   headerActions: ReactNode
   scope: Extract<SidebarScope, { kind: "workspace" }>
@@ -59,7 +50,20 @@ export function WorkspaceNavigation({
   showTourButton: boolean
   showWorkflows: boolean
   userMenu: ReactNode
-}) {
+}
+
+export function WorkspaceNavigation(props: WorkspaceNavigationProps) {
+  const {
+    children,
+    headerActions,
+    scope,
+    showAgents,
+    showSecrets,
+    showTourButton,
+    showWorkflows,
+    userMenu,
+  } = props
+
   const pathname = usePathname()
   const { setOpenMobile } = useSidebar()
   const { organization, workspace } = scope
@@ -69,11 +73,9 @@ export function WorkspaceNavigation({
     workspace.capabilities.guardrail_policies.read ||
     workspace.capabilities.guardrail_connections.read ||
     workspace.capabilities.guardrail_events.read
-  const guardrailsView = workspace.capabilities.guardrail_policies.read
-    ? "policies"
-    : workspace.capabilities.guardrail_connections.read
-      ? "connections"
-      : "events"
+  let guardrailsView = "events"
+  if (workspace.capabilities.guardrail_connections.read) guardrailsView = "connections"
+  if (workspace.capabilities.guardrail_policies.read) guardrailsView = "policies"
   const resources = [
     {
       href: `${root}/guardrails/${guardrailsView}`,

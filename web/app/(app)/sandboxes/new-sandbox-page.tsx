@@ -14,19 +14,23 @@ import { listInferenceProvidersCachedQuery } from "@/data/inference-provider.que
 import { listInferencePoolsCachedQuery } from "@/data/inference-pool.queries"
 import { SandboxWizard } from "./wizard"
 
-export default function NewSandboxPage({
-  canCreateGuardrailPolicy,
-  canCreateGuardrailConnection,
-  basePath,
-  providersHref,
-  workspaceId,
-}: {
+type NewSandboxPageProps = {
   canCreateGuardrailPolicy: boolean
   canCreateGuardrailConnection: boolean
   basePath: string
   providersHref: UrlObject
   workspaceId?: string
-}) {
+}
+
+export default function NewSandboxPage(props: NewSandboxPageProps) {
+  const {
+    canCreateGuardrailPolicy,
+    canCreateGuardrailConnection,
+    basePath,
+    providersHref,
+    workspaceId,
+  } = props
+
   return (
     <main className="flex min-h-0 flex-1 flex-col gap-6 pb-4 sm:pb-6">
       <AdministrationPageHeader title="New sandbox" />
@@ -43,19 +47,23 @@ export default function NewSandboxPage({
   )
 }
 
-async function NewSandboxWizard({
-  canCreateGuardrailPolicy,
-  canCreateGuardrailConnection,
-  basePath,
-  providersHref,
-  workspaceId,
-}: {
+type NewSandboxWizardProps = {
   canCreateGuardrailPolicy: boolean
   canCreateGuardrailConnection: boolean
   basePath: string
   providersHref: UrlObject
   workspaceId?: string
-}) {
+}
+
+async function NewSandboxWizard(props: NewSandboxWizardProps) {
+  const {
+    canCreateGuardrailPolicy,
+    canCreateGuardrailConnection,
+    basePath,
+    providersHref,
+    workspaceId,
+  } = props
+
   const [result, skills, providers, pools, policies, guardrailSettings, guardrailConnections] =
     await Promise.all([
       listMcpConnectionsCachedQuery(
@@ -77,14 +85,7 @@ async function NewSandboxWizard({
         ? listGuardrailConnectionsQuery(workspaceId)
         : Promise.resolve({ data: { items: [] }, error: undefined }),
     ])
-  if (
-    policies.error ||
-    guardrailSettings.error ||
-    guardrailConnections.error ||
-    !policies.data ||
-    !guardrailSettings.data ||
-    !guardrailConnections.data
-  )
+  if (policies.error || guardrailSettings.error || guardrailConnections.error)
     return (
       <AdministrationState
         description={

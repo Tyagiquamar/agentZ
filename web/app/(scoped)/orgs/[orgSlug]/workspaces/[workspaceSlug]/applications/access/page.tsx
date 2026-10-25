@@ -11,9 +11,7 @@ import { ApplicationGuardrailAccess } from "./applications"
 
 export const metadata = { title: "Application access guardrails" }
 
-export default function ApplicationAccessPage(
-  props: PageProps<"/orgs/[orgSlug]/workspaces/[workspaceSlug]/applications/access">
-) {
+export default function ApplicationAccessPage(props: PageProps<"/orgs/[orgSlug]/workspaces/[workspaceSlug]/applications/access">) {
   return (
     <Suspense fallback={<AdministrationLoadingState />}>
       <ApplicationAccessContent {...props} />
@@ -21,9 +19,9 @@ export default function ApplicationAccessPage(
   )
 }
 
-async function ApplicationAccessContent({
-  params,
-}: PageProps<"/orgs/[orgSlug]/workspaces/[workspaceSlug]/applications/access">) {
+async function ApplicationAccessContent(props: PageProps<"/orgs/[orgSlug]/workspaces/[workspaceSlug]/applications/access">) {
+  const { params } = props
+
   await connection()
   const { orgSlug, workspaceSlug } = await params
   const result = await listGuardrailClientAccess(orgSlug, workspaceSlug)

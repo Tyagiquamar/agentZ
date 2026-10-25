@@ -29,11 +29,13 @@ type UpdateSandboxPageProps = {
   workspaceId?: string
 }
 
-export async function generateMetadata({
-  params,
-}: {
+type generateMetadataProps = {
   params: Promise<{ name: string }>
-}): Promise<Metadata> {
+}
+
+export async function generateMetadata(props: generateMetadataProps): Promise<Metadata> {
+  const { params } = props
+
   const { name } = await params
 
   return {
@@ -41,14 +43,16 @@ export async function generateMetadata({
   }
 }
 
-export default async function UpdateSandboxPage({
-  canCreateGuardrailPolicy,
-  canCreateGuardrailConnection,
-  basePath,
-  params,
-  providersHref,
-  workspaceId,
-}: UpdateSandboxPageProps) {
+export default async function UpdateSandboxPage(props: UpdateSandboxPageProps) {
+  const {
+    canCreateGuardrailPolicy,
+    canCreateGuardrailConnection,
+    basePath,
+    params,
+    providersHref,
+    workspaceId,
+  } = props
+
   const { name } = await params
 
   return (
@@ -65,21 +69,25 @@ export default async function UpdateSandboxPage({
   )
 }
 
-async function UpdateSandboxContent({
-  canCreateGuardrailPolicy,
-  canCreateGuardrailConnection,
-  basePath,
-  name,
-  providersHref,
-  workspaceId,
-}: {
+type UpdateSandboxContentProps = {
   canCreateGuardrailPolicy: boolean
   canCreateGuardrailConnection: boolean
   basePath: string
   name: string
   providersHref: UrlObject
   workspaceId?: string
-}) {
+}
+
+async function UpdateSandboxContent(props: UpdateSandboxContentProps) {
+  const {
+    canCreateGuardrailPolicy,
+    canCreateGuardrailConnection,
+    basePath,
+    name,
+    providersHref,
+    workspaceId,
+  } = props
+
   const sandboxResult = listSandboxesCachedQuery({ limit: 200 }, workspaceId)
   const mcpResult = listMcpConnectionsCachedQuery(
     { limit: 50, sort_by: "created_at", sort_order: "desc" },
@@ -125,14 +133,7 @@ async function UpdateSandboxContent({
     )
   }
 
-  if (
-    policies.error ||
-    guardrailSettings.error ||
-    guardrailConnections.error ||
-    !policies.data ||
-    !guardrailSettings.data ||
-    !guardrailConnections.data
-  )
+  if (policies.error || guardrailSettings.error || guardrailConnections.error)
     return (
       <AdministrationState
         description={

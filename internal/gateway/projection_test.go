@@ -25,6 +25,7 @@ type guardrailProjectionClient struct {
 	ctrlclient.Client
 }
 
+// Patch emulates server-side apply for the fake Kubernetes client.
 func (c *guardrailProjectionClient) Patch(ctx context.Context, object ctrlclient.Object, patch ctrlclient.Patch, options ...ctrlclient.PatchOption) error {
 	if patch.Type() != types.ApplyPatchType {
 		return c.Client.Patch(ctx, object, patch, options...)

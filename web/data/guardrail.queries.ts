@@ -7,26 +7,23 @@ import {
 } from "@/lib/gateway/client"
 import { getGatewayServerClient } from "@/lib/gateway/server-client"
 
-export async function listGuardrailConnectionsQuery(workspaceId?: string) {
-  const { data, error } = await listGuardrailConnections({
+export function listGuardrailConnectionsQuery(workspaceId?: string) {
+  return listGuardrailConnections({
     client: getGatewayServerClient(workspaceId),
     headers: workspaceId ? { "X-AgentZ-Workspace-ID": workspaceId } : undefined,
   })
-  return { data, error }
 }
 
-export async function listGuardrailPoliciesQuery(workspaceId?: string) {
-  const { data, error } = await listGuardrailPolicies({
+export function listGuardrailPoliciesQuery(workspaceId?: string) {
+  return listGuardrailPolicies({
     client: getGatewayServerClient(workspaceId),
     headers: workspaceId ? { "X-AgentZ-Workspace-ID": workspaceId } : undefined,
   })
-  return { data, error }
 }
 
-export async function getGuardrailSettingsQuery(workspaceId?: string) {
-  const { data, error } = await getGuardrailSettings({
+export function getGuardrailSettingsQuery(workspaceId?: string) {
+  return getGuardrailSettings({
     client: getGatewayServerClient(workspaceId),
     headers: workspaceId ? { "X-AgentZ-Workspace-ID": workspaceId } : undefined,
   })
-  return { data, error }
 }

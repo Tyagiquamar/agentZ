@@ -55,15 +55,7 @@ import {
 import { ConnectionSheet } from "./connection-sheet"
 import { CheckEditor } from "./check-editor"
 
-export function PolicyEditor({
-  policy,
-  connections: initialConnections,
-  scope,
-  basePath,
-  canCreateConnection,
-  onSaved,
-  onCancel,
-}: {
+type PolicyEditorProps = {
   policy?: GuardrailPolicy
   connections: GuardrailConnection[]
   scope: GuardrailActionScope
@@ -71,7 +63,19 @@ export function PolicyEditor({
   onSaved?: (policy: GuardrailPolicy) => void
   onCancel?: () => void
   canCreateConnection: boolean
-}) {
+}
+
+export function PolicyEditor(props: PolicyEditorProps) {
+  const {
+    policy,
+    connections: initialConnections,
+    scope,
+    basePath,
+    canCreateConnection,
+    onSaved,
+    onCancel,
+  } = props
+
   const id = useId()
   const router = useRouter()
   const [draft, setDraft] = useState<GuardrailPolicyInput>(() => ({
@@ -87,6 +91,9 @@ export function PolicyEditor({
   const [error, setError] = useState("")
   const [validationVisible, setValidationVisible] = useState(false)
   const readOnly = policy !== undefined && !policy.canModify
+  let description = "Configure checks for model input and output."
+  if (policy?.mandatory) description = "Required by the organization."
+  if (readOnly) description = "Read only."
 
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
@@ -106,8 +113,11 @@ export function PolicyEditor({
 
   function close() {
     if (pending) return
-    if (onCancel) onCancel()
-    else if (basePath) router.push(`${basePath}/policies`)
+    if (onCancel) {
+      onCancel()
+      return
+    }
+    if (basePath) router.push(`${basePath}/policies`)
   }
 
   function addCheck(connection?: GuardrailConnection) {
@@ -144,11 +154,7 @@ export function PolicyEditor({
             </span>
           </SheetTitle>
           <SheetDescription className={policy?.mandatory || readOnly ? undefined : "sr-only"}>
-            {readOnly
-              ? "Read only."
-              : policy?.mandatory
-                ? "Required by the organization."
-                : "Configure checks for model input and output."}
+            {description}
           </SheetDescription>
         </SheetHeader>
         <form
@@ -289,11 +295,11 @@ export function PolicyEditor({
                         validationVisible={validationVisible}
                         key={check.id}
                         onExpandedChange={(open) => {
-                          if (open) setEditingCheck(check.id)
-                          else
-                            setEditingCheck((current) =>
-                              current === check.id ? undefined : current
-                            )
+                          if (open) {
+                            setEditingCheck(check.id)
+                            return
+                          }
+                          setEditingCheck((current) => (current === check.id ? undefined : current))
                         }}
                         onChange={(value) => {
                           setDraft({

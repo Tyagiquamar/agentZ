@@ -84,17 +84,16 @@ const awsRegions = [
   ["us-gov-west-1", "AWS GovCloud (US-West)"],
 ] as const
 
-export function ConnectionSheet({
-  connection,
-  scope,
-  onClose,
-  onSaved,
-}: {
+type ConnectionSheetProps = {
   connection?: GuardrailConnection
   scope: GuardrailActionScope
   onClose: () => void
   onSaved?: (connection: GuardrailConnection) => void
-}) {
+}
+
+export function ConnectionSheet(props: ConnectionSheetProps) {
+  const { connection, scope, onClose, onSaved } = props
+
   const idPrefix = useId()
   const router = useRouter()
   const queryClient = useQueryClient()
@@ -108,6 +107,29 @@ export function ConnectionSheet({
   const [region, setRegion] = useState(connection?.region || "us-east-1")
   const [regionOpen, setRegionOpen] = useState(false)
   const readOnly = connection !== undefined && !connection.canModify
+  let title = "Add guardrail connection"
+  if (connection) title = "Edit guardrail connection"
+  if (readOnly) title = "Guardrail connection"
+  const providerDescriptions = {
+    Bedrock: "Choose an existing guardrail after connecting. Detection rules stay in AWS.",
+    ModelArmor:
+      "Browse your Google Cloud projects and choose a Model Armor template after connecting.",
+    OpenAI: "Uses OpenAI moderation. No cloud policy or resource ID is needed.",
+    Webhook: "",
+  }
+  const credentialLabels = {
+    ModelArmor: "Google credential JSON",
+    Webhook: "Bearer token",
+    OpenAI: "API key",
+    Bedrock: "",
+  }
+  let credentialStatus = ""
+  if (connection?.credentialsConfigured) {
+    credentialStatus = "Leave credentials blank to keep the saved values."
+    if (readOnly) credentialStatus = "Credentials configured."
+  }
+  if (readOnly && !connection?.credentialsConfigured)
+    credentialStatus = "No credentials configured."
 
   return (
     <Sheet
@@ -120,11 +142,7 @@ export function ConnectionSheet({
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
             <Cable aria-hidden className="size-4 text-muted-foreground" />
-            {readOnly
-              ? "Guardrail connection"
-              : connection
-                ? "Edit guardrail connection"
-                : "Add guardrail connection"}
+            {title}
           </SheetTitle>
           <SheetDescription className="sr-only">
             Connect a checker service to use in policies.
@@ -138,21 +156,20 @@ export function ConnectionSheet({
             setError("")
             const credentials: NonNullable<CreateGuardrailConnectionData["body"]["credentials"]> =
               {}
-            for (const field of [
+            const credentialFields = [
               "apiKey",
               "accessKeyId",
               "secretAccessKey",
               "sessionToken",
               "googleCredentialsJson",
-            ] as const) {
+            ] as const
+            for (const field of credentialFields) {
               const value = formData.get(field)
               if (typeof value === "string" && value.length > 0) credentials[field] = value
             }
-            if (
-              provider === "Bedrock" &&
-              Object.keys(credentials).length > 0 &&
-              (!credentials.accessKeyId || !credentials.secretAccessKey)
-            ) {
+            const replacingCredentials = Object.keys(credentials).length > 0
+            const incompleteAWSKeys = !credentials.accessKeyId || !credentials.secretAccessKey
+            if (provider === "Bedrock" && replacingCredentials && incompleteAWSKeys) {
               setError(
                 "Provide both the AWS access key ID and secret access key when replacing credentials."
               )
@@ -165,7 +182,7 @@ export function ConnectionSheet({
               provider,
               endpoint: formData.get("endpoint") ?? undefined,
               region: formData.get("region") ?? undefined,
-              credentials: Object.keys(credentials).length ? credentials : undefined,
+              credentials: replacingCredentials ? credentials : undefined,
             })
             if (!parsed.success) {
               setError(parsed.error.issues[0]?.message ?? "Check connection fields")
@@ -226,13 +243,12 @@ export function ConnectionSheet({
                 disabled={readOnly || pending || connection !== undefined}
                 value={provider}
                 onValueChange={(value) => {
-                  if (
-                    value === "OpenAI" ||
-                    value === "Bedrock" ||
-                    value === "ModelArmor" ||
-                    value === "Webhook"
-                  ) {
-                    setProvider(value)
+                  switch (value) {
+                    case "OpenAI":
+                    case "Bedrock":
+                    case "ModelArmor":
+                    case "Webhook":
+                      setProvider(value)
                   }
                 }}
               >
@@ -262,11 +278,7 @@ export function ConnectionSheet({
               </Select>
               {provider !== "Webhook" ? (
                 <FieldDescription className="text-xs">
-                  {provider === "Bedrock"
-                    ? "Choose an existing guardrail after connecting. Detection rules stay in AWS."
-                    : provider === "ModelArmor"
-                      ? "Browse your Google Cloud projects and choose a Model Armor template after connecting."
-                      : "Uses OpenAI moderation. No cloud policy or resource ID is needed."}
+                  {providerDescriptions[provider]}
                 </FieldDescription>
               ) : null}
             </Field>
@@ -346,14 +358,8 @@ export function ConnectionSheet({
               </Field>
             ) : null}
             <div className="flex flex-col gap-4" key={provider}>
-              {connection?.credentialsConfigured ? (
-                <p className="text-xs text-muted-foreground">
-                  {readOnly
-                    ? "Credentials configured."
-                    : "Leave credentials blank to keep the saved values."}
-                </p>
-              ) : readOnly ? (
-                <p className="text-xs text-muted-foreground">No credentials configured.</p>
+              {credentialStatus ? (
+                <p className="text-xs text-muted-foreground">{credentialStatus}</p>
               ) : null}
               {!readOnly ? (
                 <>
@@ -413,11 +419,7 @@ export function ConnectionSheet({
                         htmlFor={`${idPrefix}-guardrail-connection-secret`}
                         required={provider !== "Webhook" && !connection?.credentialsConfigured}
                       >
-                        {provider === "ModelArmor"
-                          ? "Google credential JSON"
-                          : provider === "Webhook"
-                            ? "Bearer token"
-                            : "API key"}
+                        {credentialLabels[provider]}
                       </FieldLabel>
                       {provider === "ModelArmor" ? (
                         <Textarea

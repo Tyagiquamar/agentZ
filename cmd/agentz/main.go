@@ -1275,8 +1275,10 @@ var managerCmd = &cli.Command{
 		}
 
 		guardrailConnectionReconciler := &guardrailcontroller.ConnectionReconciler{
-			Client: mgr.GetClient(), StoreName: inferenceSecretStoreName,
-			Bao: baoClient, OpenBaoSecretMountPath: openBaoSecretMountPath,
+			Client:                 mgr.GetClient(),
+			StoreName:              inferenceSecretStoreName,
+			Bao:                    baoClient,
+			OpenBaoSecretMountPath: openBaoSecretMountPath,
 		}
 		if err := guardrailConnectionReconciler.SetupWithManager(mgr); err != nil {
 			return err

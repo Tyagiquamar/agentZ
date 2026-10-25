@@ -83,14 +83,16 @@ type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {
   showTourButton?: boolean
 }
 
-export function AppSidebar({
-  activeOrganizationId,
-  organizations = [],
-  scope,
-  showTourButton = false,
-  user,
-  ...sidebarProps
-}: AppSidebarProps) {
+export function AppSidebar(props: AppSidebarProps) {
+  const {
+    activeOrganizationId,
+    organizations = [],
+    scope,
+    showTourButton = false,
+    user,
+    ...sidebarProps
+  } = props
+
   const userMenu = user ? (
     <NavUser
       activeOrganizationId={activeOrganizationId}
@@ -200,15 +202,15 @@ function SettingsNavigation() {
   )
 }
 
-async function WorkspaceSidebar({
-  scope,
-  showTourButton,
-  userMenu,
-}: {
+type WorkspaceSidebarProps = {
   scope: Extract<SidebarScope, { kind: "workspace" }>
   showTourButton: boolean
   userMenu: React.ReactNode
-}) {
+}
+
+async function WorkspaceSidebar(props: WorkspaceSidebarProps) {
+  const { scope, showTourButton, userMenu } = props
+
   const { organization, workspace } = scope
   const workspacePath: WorkspacePath = `/orgs/${organization.slug}/workspaces/${workspace.slug}`
   const agents = await listAllAgentsCachedQuery(workspace.id)
@@ -267,19 +269,17 @@ async function WorkspaceSidebar({
   )
 }
 
-async function WorkspaceChatSessions({
-  agents,
-  preferences,
-  workspaceId,
-  workspaceType,
-  workspacePath,
-}: {
+type WorkspaceChatSessionsProps = {
   agents: ListAgentActionResponse
   preferences: ChatSessionPreference
   workspaceType: Workspace["type"]
   workspaceId: string
   workspacePath: WorkspacePath
-}) {
+}
+
+async function WorkspaceChatSessions(props: WorkspaceChatSessionsProps) {
+  const { agents, preferences, workspaceId, workspaceType, workspacePath } = props
+
   const [sessions, actor] = await Promise.all([
     listChatSessions({
       client: getGatewayServerClient(workspaceId),
@@ -314,17 +314,7 @@ async function WorkspaceChatSessions({
   )
 }
 
-function OrganizationNavigation({
-  guardrailPolicyCapabilities,
-  guardrailConnectionCapabilities,
-  guardrailEventCapabilities,
-  canEnterOrganization,
-  mcpConnectionCapabilities,
-  inferenceProviderCapabilities,
-  organization,
-  skillCapabilities,
-  sandboxCapabilities,
-}: {
+type OrganizationNavigationProps = {
   canEnterOrganization: boolean
   mcpConnectionCapabilities: ResourceCapabilities
   inferenceProviderCapabilities: ResourceCapabilities
@@ -334,17 +324,29 @@ function OrganizationNavigation({
   organization: OrganizationSummary
   skillCapabilities: ResourceCapabilities
   sandboxCapabilities: ResourceCapabilities
-}) {
+}
+
+function OrganizationNavigation(props: OrganizationNavigationProps) {
+  const {
+    guardrailPolicyCapabilities,
+    guardrailConnectionCapabilities,
+    guardrailEventCapabilities,
+    canEnterOrganization,
+    mcpConnectionCapabilities,
+    inferenceProviderCapabilities,
+    organization,
+    skillCapabilities,
+    sandboxCapabilities,
+  } = props
+
   const root = `/orgs/${organization.slug}` as const
   const canReadGuardrails =
     guardrailPolicyCapabilities.read ||
     guardrailConnectionCapabilities.read ||
     guardrailEventCapabilities.read
-  const guardrailsView = guardrailPolicyCapabilities.read
-    ? "policies"
-    : guardrailConnectionCapabilities.read
-      ? "connections"
-      : "events"
+  let guardrailsView = "events"
+  if (guardrailConnectionCapabilities.read) guardrailsView = "connections"
+  if (guardrailPolicyCapabilities.read) guardrailsView = "policies"
   const hasResources =
     canReadGuardrails ||
     skillCapabilities.read ||

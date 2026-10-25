@@ -135,7 +135,10 @@ func (s *Service) serveGuardrailConnections(w http.ResponseWriter, r *http.Reque
 					return
 				}
 				if ns == item.Namespace {
-					apiutil.WriteError(w, r, apiutil.NewError(http.StatusConflict, "resource_in_use", "connection is referenced by policy "+policy.Name, errors.New("referenced guardrail connection")))
+					apiutil.WriteError(w, r, apiutil.NewError(
+						http.StatusConflict, "resource_in_use",
+						"connection is referenced by policy "+policy.Name, errors.New("referenced guardrail connection"),
+					))
 					return
 				}
 			}
@@ -152,7 +155,10 @@ func (s *Service) serveGuardrailConnections(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	if len(validation.IsDNS1123Label(input.Name)) > 0 || (name != "" && input.Name != name) {
-		apiutil.WriteError(w, r, apiutil.NewError(http.StatusBadRequest, "invalid_request", "name must be a valid immutable resource name", errBadRequest))
+		apiutil.WriteError(w, r, apiutil.NewError(
+			http.StatusBadRequest, "invalid_request",
+			"name must be a valid immutable resource name", errBadRequest,
+		))
 		return
 	}
 	spec := api.GuardrailConnectionSpec{
@@ -201,7 +207,10 @@ func (s *Service) serveGuardrailConnections(w http.ResponseWriter, r *http.Reque
 			missingAccessKey := credentials.AccessKeyId == nil || strings.TrimSpace(*credentials.AccessKeyId) == ""
 			missingSecretKey := credentials.SecretAccessKey == nil || strings.TrimSpace(*credentials.SecretAccessKey) == ""
 			if missingAccessKey || missingSecretKey {
-				apiutil.WriteError(w, r, apiutil.NewError(http.StatusBadRequest, "invalid_request", "AWS credentials require both an access key ID and secret access key", errBadRequest))
+				apiutil.WriteError(w, r, apiutil.NewError(
+					http.StatusBadRequest, "invalid_request",
+					"AWS credentials require both an access key ID and secret access key", errBadRequest,
+				))
 				return
 			}
 		}
@@ -213,7 +222,10 @@ func (s *Service) serveGuardrailConnections(w http.ResponseWriter, r *http.Reque
 		}
 		if credentials.GoogleCredentialsJson != nil {
 			if spec.Provider != "ModelArmor" || !json.Valid([]byte(*credentials.GoogleCredentialsJson)) {
-				apiutil.WriteError(w, r, apiutil.NewError(http.StatusBadRequest, "invalid_request", "Google credentials must be valid ADC credential JSON on a Model Armor connection", errBadRequest))
+				apiutil.WriteError(w, r, apiutil.NewError(
+					http.StatusBadRequest, "invalid_request",
+					"Google credentials must be valid ADC credential JSON on a Model Armor connection", errBadRequest,
+				))
 				return
 			}
 			data["credentials.json"] = *credentials.GoogleCredentialsJson
@@ -232,13 +244,12 @@ func (s *Service) serveGuardrailConnections(w http.ResponseWriter, r *http.Reque
 			apiutil.WriteError(w, r, apiutil.NewError(http.StatusBadRequest, "invalid_request", "credentials cannot be empty", errBadRequest))
 			return
 		}
-		var err error
-		path := access.namespace + "/guardrail-connections/" + input.Name
+		var options []baoapi.KVOption
 		if r.Method == http.MethodPost {
-			_, err = s.baoKV.Put(r.Context(), path, data, baoapi.WithCheckAndSet(0))
-		} else {
-			_, err = s.baoKV.Put(r.Context(), path, data)
+			options = append(options, baoapi.WithCheckAndSet(0))
 		}
+		path := access.namespace + "/guardrail-connections/" + input.Name
+		_, err := s.baoKV.Put(r.Context(), path, data, options...)
 		if err != nil {
 			apiutil.WriteInternalError(w, r, err)
 			return
@@ -248,7 +259,10 @@ func (s *Service) serveGuardrailConnections(w http.ResponseWriter, r *http.Reque
 		})
 	}
 	if spec.Provider == "OpenAI" && spec.SecretName == "" {
-		apiutil.WriteError(w, r, apiutil.NewError(http.StatusBadRequest, "invalid_request", "OpenAI moderation requires an API key", errBadRequest))
+		apiutil.WriteError(w, r, apiutil.NewError(
+			http.StatusBadRequest, "invalid_request",
+			"OpenAI moderation requires an API key", errBadRequest,
+		))
 		return
 	}
 	spec.LastModifiedByUserID = access.claims.UserID
@@ -265,9 +279,10 @@ func (s *Service) serveGuardrailConnections(w http.ResponseWriter, r *http.Reque
 	}
 	item.Spec = spec
 	var err error
-	if r.Method == http.MethodPost {
+	switch r.Method {
+	case http.MethodPost:
 		err = s.k8sClient.Create(r.Context(), item)
-	} else {
+	default:
 		err = s.k8sClient.Update(r.Context(), item)
 	}
 	if err != nil {
@@ -414,7 +429,10 @@ func (s *Service) serveGuardrailPolicies(w http.ResponseWriter, r *http.Request,
 	}
 	if r.Method == http.MethodDelete {
 		if item.Namespace == org && slices.Contains(tenant.Spec.Guardrails.MandatoryPolicies, item.Name) {
-			apiutil.WriteError(w, r, apiutil.NewError(http.StatusConflict, "resource_in_use", "policy is in the mandatory organization baseline", errBadRequest))
+			apiutil.WriteError(w, r, apiutil.NewError(
+				http.StatusConflict, "resource_in_use",
+				"policy is in the mandatory organization baseline", errBadRequest,
+			))
 			return
 		}
 		sandboxes := &api.SandboxList{}
@@ -433,7 +451,10 @@ func (s *Service) serveGuardrailPolicies(w http.ResponseWriter, r *http.Request,
 					return
 				}
 				if ns == item.Namespace {
-					apiutil.WriteError(w, r, apiutil.NewError(http.StatusConflict, "resource_in_use", "policy is assigned to Sandbox "+sandbox.Name, errBadRequest))
+					apiutil.WriteError(w, r, apiutil.NewError(
+						http.StatusConflict, "resource_in_use",
+						"policy is assigned to Sandbox "+sandbox.Name, errBadRequest,
+					))
 					return
 				}
 			}
@@ -458,7 +479,10 @@ func (s *Service) serveGuardrailPolicies(w http.ResponseWriter, r *http.Request,
 					ns = api.ScopeNamespace(api.ResourceScopeWorkspace, assignment.WorkspaceID)
 				}
 				if ns == item.Namespace {
-					apiutil.WriteError(w, r, apiutil.NewError(http.StatusConflict, "resource_in_use", "policy is assigned to an external client", errBadRequest))
+					apiutil.WriteError(w, r, apiutil.NewError(
+						http.StatusConflict, "resource_in_use",
+						"policy is assigned to an external client", errBadRequest,
+					))
 					return
 				}
 			}
@@ -475,7 +499,10 @@ func (s *Service) serveGuardrailPolicies(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	if len(validation.IsDNS1123Label(input.Name)) > 0 || (name != "" && input.Name != name) {
-		apiutil.WriteError(w, r, apiutil.NewError(http.StatusBadRequest, "invalid_request", "name must be a valid immutable resource name", errBadRequest))
+		apiutil.WriteError(w, r, apiutil.NewError(
+			http.StatusBadRequest, "invalid_request",
+			"name must be a valid immutable resource name", errBadRequest,
+		))
 		return
 	}
 	spec := api.GuardrailPolicySpec{
@@ -511,9 +538,10 @@ func (s *Service) serveGuardrailPolicies(w http.ResponseWriter, r *http.Request,
 		status = http.StatusCreated
 	}
 	item.Spec = spec
-	if r.Method == http.MethodPost {
+	switch r.Method {
+	case http.MethodPost:
 		err = s.k8sClient.Create(r.Context(), item)
-	} else {
+	default:
 		err = s.k8sClient.Update(r.Context(), item)
 	}
 	if err != nil {
@@ -560,6 +588,7 @@ func (s *Service) GetGuardrailSettings(w http.ResponseWriter, r *http.Request, _
 func (s *Service) UpdateGuardrailSettings(w http.ResponseWriter, r *http.Request, _ gatewayapi.UpdateGuardrailSettingsParams) {
 	s.serveGuardrailSettings(w, r)
 }
+
 func (s *Service) serveGuardrailSettings(w http.ResponseWriter, r *http.Request) {
 	operation := authorization.OperationGetGuardrailSettings
 	if r.Method == http.MethodPut {
@@ -610,7 +639,10 @@ func (s *Service) serveGuardrailSettings(w http.ResponseWriter, r *http.Request)
 		seen := make(map[string]bool, len(input.MandatoryPolicies))
 		for _, name := range input.MandatoryPolicies {
 			if seen[name] {
-				apiutil.WriteError(w, r, apiutil.NewError(http.StatusBadRequest, "invalid_request", "mandatory policy references must be unique", errBadRequest))
+				apiutil.WriteError(w, r, apiutil.NewError(
+					http.StatusBadRequest, "invalid_request",
+					"mandatory policy references must be unique", errBadRequest,
+				))
 				return
 			}
 			seen[name] = true
@@ -669,7 +701,10 @@ func (s *Service) GetEffectiveGuardrails(w http.ResponseWriter, r *http.Request,
 	assignment := input.Assignment
 	contextNamespace := access.namespace
 	if input.Sandbox != nil && input.ClientId != nil {
-		apiutil.WriteError(w, r, apiutil.NewError(http.StatusBadRequest, "invalid_request", "select one Sandbox or external client context", errBadRequest))
+		apiutil.WriteError(w, r, apiutil.NewError(
+			http.StatusBadRequest, "invalid_request",
+			"select one Sandbox or external client context", errBadRequest,
+		))
 		return
 	}
 	if input.Sandbox != nil {
@@ -723,10 +758,7 @@ func (s *Service) GetEffectiveGuardrails(w http.ResponseWriter, r *http.Request,
 			PolicyName: resolved.Policy.Spec.DisplayName,
 		})
 	}
-	apiutil.WriteJSON(w, http.StatusOK, gatewayapi.GuardrailEffective{
-		Revision: bundle.Revision,
-		Checks:   checks,
-	})
+	apiutil.WriteJSON(w, http.StatusOK, gatewayapi.GuardrailEffective{Revision: bundle.Revision, Checks: checks})
 }
 
 // resolveGuardrailAssignment reads client policy additions independently of grant snapshots.
@@ -746,7 +778,5 @@ func (s *Service) resolveGuardrailAssignment(ctx context.Context, organizationID
 	if err := json.Unmarshal(row.Policies, &refs); err != nil {
 		return api.GuardrailAssignment{}, err
 	}
-	return api.GuardrailAssignment{
-		Policies: refs,
-	}, nil
+	return api.GuardrailAssignment{Policies: refs}, nil
 }

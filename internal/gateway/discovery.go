@@ -110,7 +110,10 @@ func (s *Service) DiscoverGuardrailConnectionResources(w http.ResponseWriter, r 
 		return
 	}
 	if !connection.DeletionTimestamp.IsZero() {
-		apiutil.WriteError(w, r, apiutil.NewError(http.StatusServiceUnavailable, "connection_unavailable", "The connection is being deleted.", nil))
+		apiutil.WriteError(w, r, apiutil.NewError(
+			http.StatusServiceUnavailable, "connection_unavailable",
+			"The connection is being deleted.", nil,
+		))
 		return
 	}
 	parent := ""
@@ -148,7 +151,10 @@ func (s *Service) DiscoverGuardrailConnectionResources(w http.ResponseWriter, r 
 		apiutil.WriteError(
 			w,
 			r,
-			apiutil.NewError(http.StatusServiceUnavailable, "credentials_unavailable", "Save connection credentials before browsing resources.", nil),
+			apiutil.NewError(
+				http.StatusServiceUnavailable, "credentials_unavailable",
+				"Save connection credentials before browsing resources.", nil,
+			),
 		)
 		return
 	}
@@ -233,7 +239,10 @@ func discoverBedrockGuardrailResources(ctx context.Context, client *bedrock.Clie
 			}
 		}
 		if id == "" || label == "" {
-			return apiutil.NewError(http.StatusBadGateway, "provider_response_invalid", "The provider returned incomplete resource information.", nil)
+			return apiutil.NewError(
+				http.StatusBadGateway, "provider_response_invalid",
+				"The provider returned incomplete resource information.", nil,
+			)
 		}
 		result.Items = append(result.Items, gatewayapi.GuardrailDiscoveredResource{
 			Id:          id,
@@ -278,7 +287,9 @@ func guardrailGoogleCredentials(ctx context.Context, payload string, client *htt
 }
 
 func discoverGoogleProjects(ctx context.Context, client *http.Client, input gatewayapi.GuardrailResourceDiscoveryInput, pageSize int, result *gatewayapi.GuardrailResourceDiscovery) *apiutil.APIError {
-	service, err := cloudresourcemanager.NewService(ctx, option.WithHTTPClient(client), option.WithEndpoint("https://cloudresourcemanager.googleapis.com/"))
+	service, err := cloudresourcemanager.NewService(
+		ctx, option.WithHTTPClient(client), option.WithEndpoint("https://cloudresourcemanager.googleapis.com/"),
+	)
 	if err != nil {
 		return guardrailDiscoveryError(err)
 	}
@@ -400,7 +411,10 @@ func discoverGoogleGuardrailResources(ctx context.Context, client *http.Client, 
 		return guardrailDiscoveryError(err)
 	}
 	if len(body) > maxBytes {
-		return apiutil.NewError(http.StatusBadGateway, "provider_response_invalid", "The provider resource response exceeded the size limit.", nil)
+		return apiutil.NewError(
+			http.StatusBadGateway, "provider_response_invalid",
+			"The provider resource response exceeded the size limit.", nil,
+		)
 	}
 	decoder := protojson.UnmarshalOptions{DiscardUnknown: true}
 	if input.Kind == gatewayapi.GuardrailResourceDiscoveryInputKindLocations {
@@ -410,7 +424,10 @@ func discoverGoogleGuardrailResources(ctx context.Context, client *http.Client, 
 		}
 		for _, location := range page.Locations {
 			if location == nil || !guardrailGoogleLocation.MatchString(location.Name) || !strings.HasPrefix(location.Name, parent+"/locations/") {
-				return apiutil.NewError(http.StatusBadGateway, "provider_response_invalid", "The provider returned an invalid location identifier.", nil)
+				return apiutil.NewError(
+					http.StatusBadGateway, "provider_response_invalid",
+					"The provider returned an invalid location identifier.", nil,
+				)
 			}
 			label := location.DisplayName
 			if label == "" {

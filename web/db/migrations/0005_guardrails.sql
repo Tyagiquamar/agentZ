@@ -1,4 +1,3 @@
-CREATE TYPE "public"."guardrail_capture_mode" AS ENUM('off', 'findings', 'all');--> statement-breakpoint
 ALTER TYPE "public"."event_trail_target" ADD VALUE 'guardrail_connection';--> statement-breakpoint
 ALTER TYPE "public"."event_trail_target" ADD VALUE 'guardrail_policy';--> statement-breakpoint
 ALTER TYPE "public"."event_trail_target" ADD VALUE 'guardrail_settings';--> statement-breakpoint
@@ -11,7 +10,6 @@ CREATE TABLE "guardrail_client_access" (
 	"workspace_id" text NOT NULL,
 	"client_id" text NOT NULL,
 	"policies" jsonb DEFAULT '[]'::jsonb NOT NULL,
-	"capture_mode" "guardrail_capture_mode" DEFAULT 'off' NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_by" text,
 	CONSTRAINT "guardrail_client_access_organization_id_workspace_id_client_id_pk" PRIMARY KEY("organization_id","workspace_id","client_id")

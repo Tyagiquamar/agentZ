@@ -2,15 +2,6 @@
 
 import * as z from "zod"
 
-export const zGuardrailOutcome = z.object({
-  code: z.enum(["guardrail_denied", "guardrail_unavailable"]),
-  phase: z.enum(["input", "output"]),
-  safeLabel: z.string(),
-  explanation: z.string(),
-  referenceId: z.string(),
-  partialOutput: z.boolean(),
-})
-
 export const zGuardrailCredentials = z.object({
   apiKey: z.string().optional(),
   accessKeyId: z.string().optional(),
@@ -27,7 +18,6 @@ export const zGuardrailSettings = z.object({
 
 export const zGuardrailRegex = z.object({
   patterns: z.array(z.string()).min(1),
-  replacement: z.string().optional(),
 })
 
 export const zGuardrailStatus = z.object({
@@ -1234,7 +1224,6 @@ export const zEvaluationJudgment = z.object({
 export const zWorkflowRunTriggerType = z.enum(["Schedule", "Webhook"])
 
 export const zWorkflowRunSummary = z.object({
-  guardrailOutcome: zGuardrailOutcome.optional(),
   name: zWorkflowRunName,
   workflow_name: zWorkflowName,
   trigger_type: zWorkflowRunTriggerType,
@@ -1787,7 +1776,6 @@ export const zWorkflowEvaluationRequest = z.object({
 export const zWorkflowRunInputs = zJsonValue
 
 export const zWorkflowRunDetail = z.object({
-  guardrailOutcome: zGuardrailOutcome.optional(),
   name: zWorkflowRunName,
   agent_name: zAgentName,
   workflow_name: zWorkflowName,
@@ -3288,45 +3276,12 @@ export const zCodingRepositoryPage = z.object({
   next_page: z.int().optional(),
 })
 
-export const zGuardrailEvaluationContext = z.object({
-  version: z.literal(1),
-  eventId: z.string(),
-  referenceId: z.string(),
-  policyId: z.string(),
-  checkId: z.string(),
-  revision: z.string(),
-  connectionId: z.string(),
-  attachment: z.string(),
-  mandatory: z.boolean(),
-  safeLabel: z.string(),
-  explanation: z.string(),
-  durationMs: z.number(),
-  sequence: z.int(),
-  scopes: z.array(z.string()),
-  startedAt: z.coerce
-    .bigint()
-    .min(BigInt("-9223372036854775808"), {
-      error: "Invalid value: Expected int64 to be >= -9223372036854775808",
-    })
-    .max(BigInt("9223372036854775807"), {
-      error: "Invalid value: Expected int64 to be <= 9223372036854775807",
-    }),
-  validationPass: z.enum(["mandatoryFinal"]).optional(),
-  retentionDays: z.int().gte(1).lte(3650),
-  errorCode: z.string().optional(),
-  inspected: z.array(z.string()).optional(),
-  replacement: z.array(z.string()).optional(),
-})
-
 export const zGuardrailRuntimeEvaluation = z.object({
   phase: z.enum(["request", "response"]),
   guard: z.string(),
   action: z.enum(["allow", "failOpen", "audit", "mask", "reject"]),
   guardrailId: z.string().optional(),
   guardrailVersion: z.string().optional(),
-  actionReason: z.string().optional(),
-  assessments: z.array(z.record(z.string(), z.unknown())).optional(),
-  agentz: zGuardrailEvaluationContext.optional(),
 })
 
 export const zGuardrailEvent = z.object({
@@ -6499,8 +6454,7 @@ export const zListGuardrailEventsHeaders = z.object({
 export const zListGuardrailEventsQuery = z.object({
   action: z.enum(["allow", "failOpen", "audit", "mask", "reject"]).optional(),
   phase: z.enum(["request", "response"]).optional(),
-  policy_id: z.string().optional(),
-  reference_id: z.string().optional(),
+  trace_id: z.string().optional(),
   session_id: z.string().optional(),
   cursor: z.string().optional(),
   limit: z.int().gte(1).lte(100).optional().default(25),

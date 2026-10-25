@@ -116,10 +116,6 @@ spec:
                             type: string
                           minItems: 1
                           type: array
-                        replacement:
-                          description: Replacement is the text substituted for matches
-                            when action is mask.
-                          type: string
                       required:
                       - patterns
                       type: object

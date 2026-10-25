@@ -20,15 +20,15 @@ type ClientGuardrailData = NonNullable<
   Awaited<ReturnType<typeof loadClientGuardrailsAction>>["data"]
 >
 
-export function ClientGuardrailsPanel({
-  orgSlug,
-  workspaceSlug,
-  clientId,
-}: {
+type ClientGuardrailsPanelProps = {
   orgSlug: string
   workspaceSlug: string
   clientId: string
-}) {
+}
+
+export function ClientGuardrailsPanel(props: ClientGuardrailsPanelProps) {
+  const { orgSlug, workspaceSlug, clientId } = props
+
   const { data: actor } = authClient.useSession()
   const query = useQuery(
     queryOptions({
@@ -73,17 +73,16 @@ export function ClientGuardrailsPanel({
   )
 }
 
-function ClientGuardrailsForm({
-  data,
-  orgSlug,
-  workspaceSlug,
-  onSaved,
-}: {
+type ClientGuardrailsFormProps = {
   data: ClientGuardrailData
   orgSlug: string
   workspaceSlug: string
   onSaved: () => void
-}) {
+}
+
+function ClientGuardrailsForm(props: ClientGuardrailsFormProps) {
+  const { data, orgSlug, workspaceSlug, onSaved } = props
+
   const router = useRouter()
   const [assignment, setAssignment] = useState<GuardrailAssignment>(data.subject.guardrails)
   const [error, setError] = useState("")

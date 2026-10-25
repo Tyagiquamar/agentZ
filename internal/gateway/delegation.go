@@ -41,10 +41,7 @@ var errDelegationLookup = errors.New("delegation lookup failed")
 // Empty grants have no upstream routes or MCP session state. The SDK still
 // handles initialization, empty discovery, and rejected execution requests.
 var emptyDelegationMCP = func() http.Handler {
-	server := mcpsdk.NewServer(&mcpsdk.Implementation{
-		Name:    "agentz",
-		Version: "v0.0.1",
-	}, &mcpsdk.ServerOptions{
+	server := mcpsdk.NewServer(&mcpsdk.Implementation{Name: "agentz", Version: "v0.0.1"}, &mcpsdk.ServerOptions{
 		Capabilities: &mcpsdk.ServerCapabilities{
 			Tools:     &mcpsdk.ToolCapabilities{},
 			Prompts:   &mcpsdk.PromptCapabilities{},
@@ -172,10 +169,7 @@ func (s *Service) delegationCatalog(ctx context.Context, userID, organizationID,
 	if workspace.DeletedAt.Valid || workspace.State != gatewaydb.WorkspaceStateReady {
 		return catalog, errors.New("workspace is unavailable")
 	}
-	effective, err := authorization.New(s.queries).Resolve(ctx, authorization.Subject{
-		UserID:         userID,
-		OrganizationID: organizationID,
-	})
+	effective, err := authorization.New(s.queries).Resolve(ctx, authorization.Subject{UserID: userID, OrganizationID: organizationID})
 	if err != nil {
 		return catalog, err
 	}
@@ -296,10 +290,7 @@ func (s *Service) resolveDelegation(ctx context.Context, grant gatewaydb.Delegat
 	if agentErr == nil {
 		organizationID = agent.OrganizationID
 	}
-	effective, err := authorization.New(s.queries).Resolve(ctx, authorization.Subject{
-		UserID:         grant.UserID,
-		OrganizationID: organizationID,
-	})
+	effective, err := authorization.New(s.queries).Resolve(ctx, authorization.Subject{UserID: grant.UserID, OrganizationID: organizationID})
 	if err != nil {
 		return nil, errors.Join(errDelegationLookup, err)
 	}
@@ -511,10 +502,7 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 
 	claimedScopes := strings.Fields(claims.Scope)
 	if !slices.Contains(claimedScopes, requiredScope) {
-		w.Header().Set(
-			"WWW-Authenticate",
-			fmt.Sprintf(`Bearer error="insufficient_scope", scope=%q`, requiredScope),
-		)
+		w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer error="insufficient_scope", scope=%q`, requiredScope))
 		s.delegationError(w, r, http.StatusForbidden, "insufficient_scope", "The required scope was not granted.")
 		return
 	}
@@ -678,13 +666,7 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		selected := selection.Models[index]
-		resources, err := s.resolveDelegation(
-			r.Context(),
-			grant,
-			gatewayapi.DelegationCatalog{
-				Models: []gatewayapi.DelegationModel{selected},
-			},
-		)
+		resources, err := s.resolveDelegation(r.Context(), grant, gatewayapi.DelegationCatalog{Models: []gatewayapi.DelegationModel{selected}})
 		if err != nil {
 			deny(err, false)
 			return
@@ -882,12 +864,9 @@ func (s *Service) handleDelegatedRequest(w http.ResponseWriter, r *http.Request)
 				return nil
 			}
 			updated, err := s.queries.GatewaySaveDelegationMCPSession(ctx, gatewaydb.GatewaySaveDelegationMCPSessionParams{
-				ID:      session,
-				GrantID: grant.ID,
-				ExpiresAt: pgtype.Timestamptz{
-					Time:  time.Now().Add(24 * time.Hour),
-					Valid: true,
-				},
+				ID:        session,
+				GrantID:   grant.ID,
+				ExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(24 * time.Hour), Valid: true},
 			})
 			if err != nil {
 				return err
@@ -942,11 +921,7 @@ func (s *Service) delegationError(w http.ResponseWriter, r *http.Request, status
 		return
 	}
 	apiutil.WriteJSON(w, status, inferenceError{
-		Error: inferenceErrorDetail{
-			Message: message,
-			Type:    code,
-			Code:    code,
-		},
+		Error: inferenceErrorDetail{Message: message, Type: code, Code: code},
 	})
 }
 

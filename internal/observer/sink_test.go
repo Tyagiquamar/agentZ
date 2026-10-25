@@ -65,7 +65,9 @@ func TestSinkRetainsFailedBatch(t *testing.T) {
 	events <- event{app: &observerdb.InsertAppOperationParams{ClientID: "accepted"}}
 	close(events)
 	store := &retryStore{}
-	sink := &sink{store: store, stats: &stats{}, cfg: Config{BatchSize: 10, FlushInterval: time.Millisecond}, events: events}
+	sink := &sink{
+		store: store, stats: &stats{}, cfg: Config{BatchSize: 10, FlushInterval: time.Millisecond}, events: events,
+	}
 	sink.run(t.Context())
 	if store.attempts != 2 || store.rows != 1 {
 		t.Fatalf("failed batch was lost: attempts=%d rows=%d", store.attempts, store.rows)
@@ -79,7 +81,9 @@ func TestSinkStopsWithRetainedBatchOnShutdown(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	events := make(chan event, 1)
 	events <- event{app: &observerdb.InsertAppOperationParams{ClientID: "accepted"}}
-	sink := &sink{store: unavailableStore{}, stats: &stats{}, cfg: Config{BatchSize: 1, FlushInterval: time.Hour}, events: events}
+	sink := &sink{
+		store: unavailableStore{}, stats: &stats{}, cfg: Config{BatchSize: 1, FlushInterval: time.Hour}, events: events,
+	}
 	done := make(chan struct{})
 	go func() { sink.run(ctx); close(done) }()
 	cancel()
